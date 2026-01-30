@@ -156,9 +156,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     }
 }
 
-$pendingUsers = $pdo->query("SELECT id, fullname, email, phone, role, created_at FROM users WHERE status = 'pending' ORDER BY created_at DESC")
-    ->fetchAll();
-
 $pendingShops = $pdo->query("
     SELECT s.id, s.shop_name, s.owner_id, s.address, s.phone, s.created_at, u.fullname as owner_name, u.email as owner_email
     FROM shops s
@@ -185,7 +182,7 @@ $pendingShops = $pdo->query("
         }
 
         .approval-card {
-            grid-column: span 6;
+            grid-column: span 12;
         }
 
         .approval-actions {
@@ -221,58 +218,6 @@ $pendingShops = $pdo->query("
         <?php endif; ?>
 
         <div class="approval-grid">
-            <div class="card approval-card">
-                <div class="card-header">
-                    <h3><i class="fas fa-user-clock text-primary"></i> Pending Users</h3>
-                    <p class="text-muted">Approve or reject new account requests.</p>
-                </div>
-                <?php if (empty($pendingUsers)): ?>
-                    <div class="empty-state">
-                        <i class="fas fa-user-check fa-2x mb-2"></i>
-                        <p class="mb-0">No pending users at the moment.</p>
-                    </div>
-                <?php else: ?>
-                    <table class="table">
-                        <thead>
-                            <tr>
-                                <th>Name</th>
-                                <th>Role</th>
-                                <th>Contact</th>
-                                <th>Requested</th>
-                                <th>Action</th>
-                            </tr>
-                        </thead>
-                        <tbody>
-                            <?php foreach ($pendingUsers as $user): ?>
-                                <tr>
-                                    <td><?php echo htmlspecialchars($user['fullname']); ?></td>
-                                    <td><span class="badge badge-info"><?php echo ucfirst($user['role']); ?></span></td>
-                                    <td>
-                                        <div><?php echo htmlspecialchars($user['email']); ?></div>
-                                        <small class="text-muted"><?php echo htmlspecialchars($user['phone'] ?? 'N/A'); ?></small>
-                                    </td>
-                                    <td><?php echo $user['created_at'] ? date('M d, Y', strtotime($user['created_at'])) : '—'; ?></td>
-                                    <td>
-                                        <div class="approval-actions">
-                                            <form method="POST">
-                                                <input type="hidden" name="action" value="approve_user">
-                                                <input type="hidden" name="id" value="<?php echo (int) $user['id']; ?>">
-                                                <button class="btn btn-sm btn-success" type="submit">Approve</button>
-                                            </form>
-                                            <form method="POST">
-                                                <input type="hidden" name="action" value="reject_user">
-                                                <input type="hidden" name="id" value="<?php echo (int) $user['id']; ?>">
-                                                <button class="btn btn-sm btn-outline-danger" type="submit">Reject</button>
-                                            </form>
-                                        </div>
-                                    </td>
-                                </tr>
-                            <?php endforeach; ?>
-                        </tbody>
-                    </table>
-                <?php endif; ?>
-            </div>
-
             <div class="card approval-card">
                 <div class="card-header">
                     <h3><i class="fas fa-store-alt text-success"></i> Pending Shops</h3>

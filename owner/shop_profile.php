@@ -68,8 +68,17 @@ if($_SERVER['REQUEST_METHOD'] === 'POST') {
                 <li><a href="shop_profile.php" class="nav-link active">Shop Profile</a></li>
                 <li><a href="manage_staff.php" class="nav-link">Staff</a></li>
                 <li><a href="shop_orders.php" class="nav-link">Orders</a></li>
+                <li><a href="payment_verifications.php" class="nav-link">Payments</a></li>
                 <li><a href="earnings.php" class="nav-link">Earnings</a></li>
-                <li><a href="../auth/logout.php" class="nav-link">Logout</a></li>
+                <li class="dropdown">
+                    <a href="#" class="nav-link dropdown-toggle">
+                        <i class="fas fa-user"></i> <?php echo htmlspecialchars($_SESSION['user']['fullname']); ?>
+                    </a>
+                    <div class="dropdown-menu">
+                        <a href="profile.php" class="dropdown-item"><i class="fas fa-user-cog"></i> Profile</a>
+                        <a href="../auth/logout.php" class="dropdown-item"><i class="fas fa-sign-out-alt"></i> Logout</a>
+                    </div>
+                </li>
             </ul>
         </div>
     </nav>

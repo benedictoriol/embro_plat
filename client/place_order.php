@@ -22,7 +22,6 @@ if(isset($_POST['place_order'])) {
     $service_type = sanitize($_POST['service_type']);
     $design_description = sanitize($_POST['design_description']);
     $quantity = $_POST['quantity'];
-    $price = $_POST['price'];
     $client_notes = sanitize($_POST['client_notes']);
     
     // Generate order number
@@ -36,7 +35,7 @@ if(isset($_POST['place_order'])) {
         $order_stmt = $pdo->prepare("
             INSERT INTO orders (order_number, client_id, shop_id, service_type, design_description, 
                                 quantity, price, client_notes, status) 
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'pending')
+            VALUES (?, ?, ?, ?, ?, ?, NULL, ?, 'pending')
         ");
         
         $order_stmt->execute([
@@ -46,7 +45,6 @@ if(isset($_POST['place_order'])) {
             $service_type,
             $design_description,
             $quantity,
-            $price,
             $client_notes
         ]);
         
@@ -129,12 +127,6 @@ if(isset($_POST['place_order'])) {
         .service-option.selected {
             border-color: #4361ee;
             background: #f8f9ff;
-        }
-        .price-calculator {
-            background: #f8f9fa;
-            padding: 20px;
-            border-radius: 10px;
-            margin-top: 20px;
         }
     </style>
 </head>
@@ -291,46 +283,14 @@ if(isset($_POST['place_order'])) {
                 </div>
             </div>
 
-            <!-- Step 4: Price & Submit -->
+            <!-- Step 4: Submit -->
             <div class="card mb-4">
-                <h3>Step 4: Price & Submit</h3>
-                <div class="price-calculator">
-                    <div class="row" style="display: flex; gap: 20px;">
-                        <div style="flex: 1;">
-                            <div class="form-group">
-                                <label>Estimated Price (₱) *</label>
-                                <input type="number" name="price" class="form-control" required 
-                                       min="1" step="0.01" placeholder="Enter estimated price">
-                            </div>
-                        </div>
-                        
-                        <div style="flex: 1;">
-                            <h5>Price Breakdown</h5>
-                            <div class="d-flex justify-between mb-2">
-                                <span>Base Price:</span>
-                                <span id="basePrice">₱0.00</span>
-                            </div>
-                            <div class="d-flex justify-between mb-2">
-                                <span>Quantity:</span>
-                                <span id="quantityDisplay">1</span>
-                            </div>
-                            <div class="d-flex justify-between mb-2">
-                                <span>Service Fee:</span>
-                                <span>₱50.00</span>
-                            </div>
-                            <hr>
-                            <div class="d-flex justify-between">
-                                <strong>Total:</strong>
-                                <strong id="totalPrice">₱0.00</strong>
-                            </div>
-                        </div>
-                    </div>
-                </div>
+                <h3>Step 4: Submit</h3>
                 
                 <div class="alert alert-info mt-3">
                     <h6><i class="fas fa-info-circle"></i> Important Notes:</h6>
                     <ul class="mb-0">
-                        <li>Price is subject to change after design review</li>
+                        <li>Shop owner will set the estimated price after reviewing your order</li>
                         <li>You'll receive a confirmation email</li>
                         <li>Shop owner may contact you for clarifications</li>
                         <li>Payment details will be provided after order acceptance</li>
@@ -383,28 +343,6 @@ if(isset($_POST['place_order'])) {
             document.querySelector('input[name="custom_service"]').value = service;
         }
         
-        // Price calculation
-        function calculatePrice() {
-            const basePrice = parseFloat(document.querySelector('input[name="price"]').value) || 0;
-            const quantity = parseInt(document.querySelector('input[name="quantity"]').value) || 1;
-            const serviceFee = 50;
-            
-            document.getElementById('basePrice').textContent = '₱' + basePrice.toFixed(2);
-            document.getElementById('quantityDisplay').textContent = quantity;
-            
-            const total = (basePrice * quantity) + serviceFee;
-            document.getElementById('totalPrice').textContent = '₱' + total.toFixed(2);
-        }
-        
-        // Initialize
-        document.addEventListener('DOMContentLoaded', function() {
-            // Attach event listeners
-            document.querySelector('input[name="price"]').addEventListener('input', calculatePrice);
-            document.querySelector('input[name="quantity"]').addEventListener('input', calculatePrice);
-            
-            // Initial calculation
-            calculatePrice();
-        });
     </script>
 </body>
 </html>
