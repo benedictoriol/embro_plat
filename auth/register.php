@@ -1,0 +1,196 @@
+<?php
+session_start();
+require_once '../config/db.php';
+
+$error = '';
+$success = '';
+$type = isset($_GET['type']) ? $_GET['type'] : 'client';
+$registrationsOpen = true;
+
+$settingsStmt = $pdo->prepare("SELECT setting_value FROM system_settings WHERE setting_key = 'new_registrations' LIMIT 1");
+$settingsStmt->execute();
+$registrationsValue = $settingsStmt->fetchColumn();
+if ($registrationsValue !== false) {
+    $registrationsOpen = filter_var($registrationsValue, FILTER_VALIDATE_BOOLEAN, FILTER_NULL_ON_FAILURE);
+    if ($registrationsOpen === null) {
+        $registrationsOpen = (bool) $registrationsValue;
+    }
+}
+$registrationDisabled = !$registrationsOpen;
+
+if($_SERVER['REQUEST_METHOD'] == 'POST') {
+    if ($registrationDisabled) {
+        $error = "Registrations are currently disabled by system administrators.";
+    } else {
+    $fullname = sanitize($_POST['fullname']);
+    $email = sanitize($_POST['email']);
+    $password = $_POST['password'];
+    $confirm_password = $_POST['confirm_password'];
+    $phone = sanitize($_POST['phone']);
+    $user_type = sanitize($_POST['type']);
+    
+    // Validation
+    if($password !== $confirm_password) {
+        $error = "Passwords do not match!";
+    } elseif(strlen($password) < 8) {
+        $error = "Password must be at least 8 characters long!";
+    } else {
+        try {
+            // Check if email exists
+            $check_stmt = $pdo->prepare("SELECT id FROM users WHERE email = ?");
+            $check_stmt->execute([$email]);
+            
+            if($check_stmt->rowCount() > 0) {
+                $error = "Email already registered!";
+            } else {
+                // Hash password
+                $hashed_password = password_hash($password, PASSWORD_DEFAULT);
+                
+                // Insert user
+
+                 $user_status = $user_type === 'owner' ? 'pending' : 'active';
+                $stmt = $pdo->prepare("
+                    INSERT INTO users (fullname, email, password, phone, role, status) 
+                     VALUES (?, ?, ?, ?, ?, ?)
+
+               
+                ");
+                
+                $stmt->execute([
+                    $fullname, 
+                    $email, 
+                    $hashed_password, 
+                    $phone, 
+
+                    $user_type,
+                    $user_status
+
+
+                ]);
+                
+                $user_id = $pdo->lastInsertId();
+                
+                // If registering as owner, create shop entry
+                if($user_type == 'owner') {
+                    $shop_name = $fullname . "'s Shop";
+                    $shop_stmt = $pdo->prepare("
+                        INSERT INTO shops (owner_id, shop_name, status) 
+                        VALUES (?, ?, 'pending')
+                    ");
+                    $shop_stmt->execute([$user_id, $shop_name]);
+                }
+                
+
+                $success = $user_status === 'pending'
+                    ? "Registration successful! Your account is pending approval."
+                    : "Registration successful! You can now log in.";
+
+            }
+        } catch(PDOException $e) {
+            $error = "Registration failed: " . $e->getMessage();
+        }
+    }
+    }
+}
+?>
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Register - Embroidery Platform</title>
+    <link rel="stylesheet" href="../assets/css/style.css">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+</head>
+<body class="auth-container">
+    <div class="auth-card">
+        <div class="auth-logo">
+            <div class="auth-logo-icon">
+                <i class="fas fa-threads"></i>
+            </div>
+            <h3>Create Account</h3>
+            <p class="text-muted">
+                <?php echo $type == 'owner' ? 'Register as Shop Owner' : 'Register as Client'; ?>
+            </p>
+        </div>
+        
+        <div class="auth-body">
+            <?php if($error): ?>
+                <div class="alert alert-danger">
+                    <i class="fas fa-exclamation-circle"></i> <?php echo $error; ?>
+                </div>
+                
+                <?php endif; ?>
+            
+            <?php if($success): ?>
+                <div class="alert alert-success">
+                    <i class="fas fa-check-circle"></i> <?php echo $success; ?>
+                    <p class="mt-2"><a href="login.php" class="btn btn-sm btn-primary">Login Now</a></p>
+                </div>
+                
+                <?php else: ?>
+                    <?php if ($registrationDisabled): ?>
+                        <div class="alert alert-warning">
+                            <i class="fas fa-ban"></i> Registrations are currently disabled by system administrators.
+                        </div>
+                    <?php else: ?>
+                <form method="POST">
+                    <input type="hidden" name="type" value="<?php echo $type; ?>">
+                    
+                    <div class="form-group">
+                        <label class="form-label" for="fullname">Full Name *</label>
+                        <input type="text" name="fullname" class="form-control" required 
+                               placeholder="Enter your full name" id="fullname">
+                    </div>
+                    
+                    <div class="form-group">
+                        <label class="form-label" for="email">Email Address *</label>
+                        <input type="email" name="email" class="form-control" required 
+                               placeholder="Enter your email" id="email">
+                    </div>
+                    
+                    <div class="form-group">
+                        <label class="form-label" for="phone">Phone Number *</label>
+                        <input type="tel" name="phone" class="form-control" required 
+                               placeholder="Enter your phone number" id="phone">
+                </div>
+
+                <div class="form-group">
+                        <label class="form-label" for="password">Password *</label>
+                        <input type="password" name="password" class="form-control" required 
+                               placeholder="At least 8 characters" minlength="8" id="password">
+                    </div>
+
+                    <div class="form-group">
+                        <label class="form-label" for="confirm_password">Confirm Password *</label>
+                    <input type="password" name="confirm_password" class="form-control" required 
+                           placeholder="Confirm your password" id="confirm_password">
+                </div>
+                
+                <?php if($type == 'owner'): ?>
+                        <div class="alert alert-info">
+                            <h6><i class="fas fa-info-circle"></i> Shop Owner Registration</h6>
+                            <p class="mb-0">After registration, you'll need to provide business details and documents for verification.</p>
+                        </div>
+                    <?php endif; ?>
+                    <button type="submit" class="btn btn-primary btn-lg w-100">
+                        <i class="fas fa-user-plus"></i> Create Account
+                    </button>
+                </form>
+                    <?php endif; ?>
+            <?php endif; ?>
+            
+            <div class="auth-footer">
+                <p class="text-muted">Already have an account? <a href="login.php" class="text-primary">Login here</a></p>
+                <p>
+                    Register as: 
+                    <a href="register.php?type=client" class="btn btn-sm btn-outline-primary">Client</a>
+                    <a href="register.php?type=owner" class="btn btn-sm btn-outline-primary">Shop Owner</a>
+                </p>
+                <p><a href="../index.php" class="text-muted">Back to Home</a></p>
+            </div>
+        </div>
+    </div>
+</body>
+</html>

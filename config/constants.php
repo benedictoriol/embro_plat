@@ -1,0 +1,30 @@
+<?php
+// System Constants
+define('SITE_NAME', 'Embroidery Platform');
+define('SITE_URL', 'http://localhost/web-app/');
+define('UPLOAD_PATH', $_SERVER['DOCUMENT_ROOT'] . '/web-app/assets/uploads/');
+
+// User Roles
+define('ROLE_SYS_ADMIN', 'sys_admin');
+define('ROLE_OWNER', 'owner');
+define('ROLE_EMPLOYEE', 'employee');
+define('ROLE_CLIENT', 'client');
+
+// Order Statuses
+define('STATUS_PENDING', 'pending');
+define('STATUS_ACCEPTED', 'accepted');
+define('STATUS_REJECTED', 'rejected');
+define('STATUS_IN_PROGRESS', 'in_progress');
+define('STATUS_COMPLETED', 'completed');
+define('STATUS_CANCELLED', 'cancelled');
+
+// Shop Statuses
+define('SHOP_PENDING', 'pending');
+define('SHOP_ACTIVE', 'active');
+define('SHOP_SUSPENDED', 'suspended');
+
+// File upload settings
+define('MAX_FILE_SIZE', 5 * 1024 * 1024); // 5MB
+define('ALLOWED_IMAGE_TYPES', ['jpg', 'jpeg', 'png', 'gif']);
+define('ALLOWED_DOC_TYPES', ['pdf', 'doc', 'docx']);
+?>
