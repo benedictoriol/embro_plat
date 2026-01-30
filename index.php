@@ -123,24 +123,6 @@ require_once 'config/db.php';
                     <p class="text-muted">Manage your shop, staff, orders, and view earnings & performance.</p>
                     <a href="auth/register.php?type=owner" class="btn btn-outline-primary mt-3">Register as Owner</a>
                 </div>
-                
-                <div class="card text-center">
-                    <div class="card-icon">
-                        <i class="fas fa-user-tie"></i>
-                    </div>
-                    <h3>Employee</h3>
-                    <p class="text-muted">View assigned jobs, update status, upload photos, and view schedule.</p>
-                    <a href="auth/login.php" class="btn btn-outline-primary mt-3">Employee Login</a>
-                </div>
-                
-                <div class="card text-center">
-                    <div class="card-icon">
-                        <i class="fas fa-cogs"></i>
-                    </div>
-                    <h3>System Admin</h3>
-                    <p class="text-muted">Full system control, DSS configuration, approvals, and analytics.</p>
-                    <a href="auth/login.php" class="btn btn-outline-primary mt-3">Admin Login</a>
-                </div>
             </div>
         </div>
     </section>

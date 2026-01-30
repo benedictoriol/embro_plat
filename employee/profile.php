@@ -22,12 +22,19 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     if (!$fullname || !$email) {
         $message = 'Full name and email are required.';
         $messageType = 'danger';
-    } elseif ($password && strlen($password) < 8) {
-        $message = 'Password must be at least 8 characters.';
+    } elseif ($password && strlen($password) !== 8) {
+        $message = 'Password must be exactly 8 characters.';
         $messageType = 'danger';
-    } elseif ($password && $password !== $confirm) {
-        $message = 'Passwords do not match.';
-        $messageType = 'danger';
+        } elseif ($password) {
+        $hasLower = preg_match('/[a-z]/', $password);
+        $hasUpper = preg_match('/[A-Z]/', $password);
+        $hasDigit = preg_match('/[0-9]/', $password);
+        $hasSpecial = preg_match('/[^a-zA-Z0-9]/', $password);
+
+        if (!$hasLower || !$hasUpper || !$hasDigit || !$hasSpecial) {
+            $message = 'Password must include at least one uppercase letter, one lowercase letter, one number, and one special character.';
+            $messageType = 'danger';
+        }
     } else {
         try {
             $emailCheck = $pdo->prepare("SELECT id FROM users WHERE email = ? AND id != ?");
@@ -156,11 +163,14 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                     <div class="row" style="display: flex; gap: 1rem;">
                         <div class="form-group" style="flex: 1;">
                             <label>New Password</label>
-                            <input type="password" name="password" class="form-control" placeholder="********">
+                            <input type="password" name="password" class="form-control" placeholder="********"
+                                   minlength="8"
+                                   pattern="(?=.*[a-z])(?=.*[A-Z])(?=.*[0-9])(?=.*[^a-zA-Z0-9]).{8,}">
                         </div>
                         <div class="form-group" style="flex: 1;">
                             <label>Confirm Password</label>
-                            <input type="password" name="confirm_password" class="form-control" placeholder="********">
+                            <input type="password" name="confirm_password" class="form-control" placeholder="********"
+                                   minlength="8">
                         </div>
                     </div>
 

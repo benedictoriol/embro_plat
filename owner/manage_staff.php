@@ -19,52 +19,73 @@ $shop_id = $shop['id'];
 
 // Add new employee
 if(isset($_POST['add_employee'])) {
+    $fullname = sanitize($_POST['fullname']);
     $email = sanitize($_POST['email']);
+    $phone = sanitize($_POST['phone']);
+    $password = $_POST['password'];
+    $confirm_password = $_POST['confirm_password'];
     $position = sanitize($_POST['position']);
     $permissions = json_encode(['view_jobs' => true, 'update_status' => true, 'upload_photos' => true]);
     
     try {
-        // Check if user exists
-        $user_stmt = $pdo->prepare("SELECT id FROM users WHERE email = ?");
-        $user_stmt->execute([$email]);
-        $user = $user_stmt->fetch();
+        if($password !== $confirm_password) {
+            $error = "Passwords do not match!";
+        } elseif(strlen($password) < 8) {
+            $error = "Password must be at least 8 characters long!";
+        } else {
+            // Check if user exists
+            $user_stmt = $pdo->prepare("SELECT id, role FROM users WHERE email = ?");
+            $user_stmt->execute([$email]);
+            $user = $user_stmt->fetch();
         
         if($user) {
-            // Check if already an employee for this shop
-            $check_stmt = $pdo->prepare("SELECT id, status FROM shop_employees WHERE user_id = ? AND shop_id = ?");
-            $check_stmt->execute([$user['id'], $shop_id]);
-            $existing = $check_stmt->fetch();
-            
-            if(!$existing) {
-                // Add as employee
+                if($user['role'] !== 'employee') {
+                    $error = "Employee accounts must be created separately. Existing client or owner accounts cannot be promoted to employee.";
+                } else {
+                    // Check if already an employee for this shop
+                    $check_stmt = $pdo->prepare("SELECT id, status FROM shop_employees WHERE user_id = ? AND shop_id = ?");
+                    $check_stmt->execute([$user['id'], $shop_id]);
+                    $existing = $check_stmt->fetch();
+                    
+                    if(!$existing) {
+                        // Add as employee
+                        $add_stmt = $pdo->prepare("
+                            INSERT INTO shop_employees (shop_id, user_id, position, permissions, hired_date) 
+                            VALUES (?, ?, ?, ?, CURDATE())
+                        ");
+                        $add_stmt->execute([$shop_id, $user['id'], $position, $permissions]);
+                        
+                        $success = "Employee added successfully!";
+                    } elseif($existing['status'] === 'inactive') {
+                        $reactivate_stmt = $pdo->prepare("
+                            UPDATE shop_employees 
+                            SET status = 'active', position = ?, permissions = ?, hired_date = CURDATE() 
+                            WHERE id = ? AND shop_id = ?
+                        ");
+                        $reactivate_stmt->execute([$position, $permissions, $existing['id'], $shop_id]);
+                        
+                        $success = "Employee reactivated successfully!";
+                    } else {
+                        $error = "User is already an active employee for this shop!";
+                    }
+                }
+            } else {
+                $hashed_password = password_hash($password, PASSWORD_DEFAULT);
+                $user_stmt = $pdo->prepare("
+                    INSERT INTO users (fullname, email, password, phone, role, status) 
+                    VALUES (?, ?, ?, ?, 'employee', 'active')
+                ");
+                $user_stmt->execute([$fullname, $email, $hashed_password, $phone]);
+                $user_id = $pdo->lastInsertId();
+
                 $add_stmt = $pdo->prepare("
                     INSERT INTO shop_employees (shop_id, user_id, position, permissions, hired_date) 
                     VALUES (?, ?, ?, ?, CURDATE())
                 ");
-                $add_stmt->execute([$shop_id, $user['id'], $position, $permissions]);
-                
-                // Update user role to employee
-                $update_stmt = $pdo->prepare("UPDATE users SET role = 'employee' WHERE id = ?");
-                $update_stmt->execute([$user['id']]);
-                
-                $success = "Employee added successfully!";
-                } elseif($existing['status'] === 'inactive') {
-                $reactivate_stmt = $pdo->prepare("
-                    UPDATE shop_employees 
-                    SET status = 'active', position = ?, permissions = ?, hired_date = CURDATE() 
-                    WHERE id = ? AND shop_id = ?
-                ");
-                $reactivate_stmt->execute([$position, $permissions, $existing['id'], $shop_id]);
-                
-                $update_stmt = $pdo->prepare("UPDATE users SET role = 'employee' WHERE id = ?");
-                $update_stmt->execute([$user['id']]);
-                
-                $success = "Employee reactivated successfully!";
-            } else {
-                $error = "User is already an active employee for this shop!";
+                $add_stmt->execute([$shop_id, $user_id, $position, $permissions]);
+
+                $success = "Employee account created and added successfully!";
             }
-        } else {
-            $error = "User with this email not found!";
         }
     } catch(PDOException $e) {
         $error = "Failed to add employee: " . $e->getMessage();
@@ -264,7 +285,7 @@ $employees = $employees_stmt->fetchAll();
 
     <!-- Add Employee Modal -->
     <div id="addEmployeeModal" class="modal" style="display: none; position: fixed; z-index: 1000; left: 0; top: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.5);">
-        <div class="modal-content" style="background: white; margin: 10% auto; padding: 30px; width: 500px; border-radius: 10px;">
+        <div class="modal-content" style="background: white; margin: 5% auto; padding: 30px; width: 500px; border-radius: 10px; max-height: 90vh; overflow-y: auto;">
             <div class="modal-header d-flex justify-between align-center mb-3">
                 <h3>Add New Employee</h3>
                 <button onclick="document.getElementById('addEmployeeModal').style.display='none'" 
@@ -272,10 +293,34 @@ $employees = $employees_stmt->fetchAll();
             </div>
             <form method="POST">
                 <div class="form-group">
+                    <label>Employee Full Name *</label>
+                    <input type="text" name="fullname" class="form-control" required 
+                           placeholder="Enter employee's full name">
+                </div>
+
+                <div class="form-group">
                     <label>Employee Email *</label>
                     <input type="email" name="email" class="form-control" required 
-                           placeholder="Enter employee's registered email">
-                    <small class="text-muted">Employee must be registered on the platform</small>
+                           placeholder="Enter employee's email">
+                    <small class="text-muted">Employee accounts are created here and cannot reuse client or owner emails.</small>
+                </div>
+
+                <div class="form-group">
+                    <label>Phone Number *</label>
+                    <input type="tel" name="phone" class="form-control" required 
+                           placeholder="Enter employee's phone number">
+                </div>
+
+                <div class="form-group">
+                    <label>Password *</label>
+                    <input type="password" name="password" class="form-control" required minlength="8"
+                           placeholder="At least 8 characters">
+                </div>
+
+                <div class="form-group">
+                    <label>Confirm Password *</label>
+                    <input type="password" name="confirm_password" class="form-control" required minlength="8"
+                           placeholder="Confirm password">
                 </div>
                 
                 <div class="form-group">

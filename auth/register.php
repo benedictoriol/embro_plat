@@ -30,10 +30,17 @@ if($_SERVER['REQUEST_METHOD'] == 'POST') {
     $user_type = sanitize($_POST['type']);
     
     // Validation
-    if($password !== $confirm_password) {
+    $hasLower = preg_match('/[a-z]/', $password);
+    $hasUpper = preg_match('/[A-Z]/', $password);
+    $hasDigit = preg_match('/[0-9]/', $password);
+    $hasSpecial = preg_match('/[^a-zA-Z0-9]/', $password);
+
+    if (strlen($password) < 8) {
+        $error = "Password must be exactly 8 characters long!";
+    } elseif (!$hasLower || !$hasUpper || !$hasDigit || !$hasSpecial) {
+        $error = "Password must include at least one uppercase letter, one lowercase letter, one number, and one special character!";
+    } elseif($password !== $confirm_password) {
         $error = "Passwords do not match!";
-    } elseif(strlen($password) < 8) {
-        $error = "Password must be at least 8 characters long!";
     } else {
         try {
             // Check if email exists
@@ -159,13 +166,14 @@ if($_SERVER['REQUEST_METHOD'] == 'POST') {
                 <div class="form-group">
                         <label class="form-label" for="password">Password *</label>
                         <input type="password" name="password" class="form-control" required 
-                               placeholder="At least 8 characters" minlength="8" id="password">
+                               placeholder="At least 8 characters with upper/lower/number/special" minlength="8"
+                               pattern="(?=.*[a-z])(?=.*[A-Z])(?=.*[0-9])(?=.*[^a-zA-Z0-9]).{8,}" id="password">
                     </div>
 
                     <div class="form-group">
                         <label class="form-label" for="confirm_password">Confirm Password *</label>
                     <input type="password" name="confirm_password" class="form-control" required 
-                           placeholder="Confirm your password" id="confirm_password">
+                           placeholder="Confirm your password" minlength="8" id="confirm_password">
                 </div>
                 
                 <?php if($type == 'owner'): ?>

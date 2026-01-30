@@ -12,6 +12,7 @@ $actorRole = $_SESSION['user']['role'] ?? null;
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $action = $_POST['action'] ?? '';
     $id = isset($_POST['id']) ? (int) $_POST['id'] : 0;
+    $rejectionReason = sanitize($_POST['rejection_reason'] ?? '');
 
     if ($id <= 0) {
         $message = 'Invalid request received.';
@@ -95,23 +96,55 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
                 $message = 'Shop approved successfully.';
             } elseif ($action === 'reject_shop') {
-                $statusStmt = $pdo->prepare("SELECT status FROM shops WHERE id = ?");
-                $statusStmt->execute([$id]);
-                $previousStatus = $statusStmt->fetchColumn();
-                $stmt = $pdo->prepare("UPDATE shops SET status = 'rejected' WHERE id = ?");
-                $stmt->execute([$id]);
-                log_audit(
-                    $pdo,
-                    $actorId,
-                    $actorRole,
-                    'reject_shop',
-                    'shops',
-                    $id,
-                    ['status' => $previousStatus],
-                    ['status' => 'rejected']
-                );
-                $message = 'Shop rejected successfully.';
-                $messageType = 'warning';
+                if (empty($rejectionReason)) {
+                    $message = 'Please provide a rejection reason for this shop owner.';
+                    $messageType = 'danger';
+                } else {
+                    $shopStmt = $pdo->prepare("SELECT status, owner_id, rejection_reason FROM shops WHERE id = ?");
+                    $shopStmt->execute([$id]);
+                    $shopData = $shopStmt->fetch();
+                    $previousStatus = $shopData['status'] ?? null;
+                    $previousReason = $shopData['rejection_reason'] ?? null;
+                    $ownerId = $shopData['owner_id'] ?? null;
+
+                    $stmt = $pdo->prepare("
+                        UPDATE shops
+                        SET status = 'rejected', rejection_reason = ?, rejected_at = NOW()
+                        WHERE id = ?
+                    ");
+                    $stmt->execute([$rejectionReason, $id]);
+                    log_audit(
+                        $pdo,
+                        $actorId,
+                        $actorRole,
+                        'reject_shop',
+                        'shops',
+                        $id,
+                        ['status' => $previousStatus, 'rejection_reason' => $previousReason],
+                        ['status' => 'rejected', 'rejection_reason' => $rejectionReason]
+                    );
+
+                    if ($ownerId) {
+                        $ownerStatusStmt = $pdo->prepare("SELECT status FROM users WHERE id = ?");
+                        $ownerStatusStmt->execute([$ownerId]);
+                        $previousOwnerStatus = $ownerStatusStmt->fetchColumn();
+                        $ownerStmt = $pdo->prepare("UPDATE users SET status = 'rejected' WHERE id = ?");
+                        $ownerStmt->execute([$ownerId]);
+                        log_audit(
+                            $pdo,
+                            $actorId,
+                            $actorRole,
+                            'reject_shop_owner',
+                            'users',
+                            (int) $ownerId,
+                            ['status' => $previousOwnerStatus],
+                            ['status' => 'rejected']
+                        );
+                    }
+
+                    $message = 'Shop rejected successfully.';
+                    $messageType = 'warning';
+                }
             } else {
                 $message = 'Unsupported action requested.';
                 $messageType = 'danger';
@@ -284,6 +317,10 @@ $pendingShops = $pdo->query("
                                             <form method="POST">
                                                 <input type="hidden" name="action" value="reject_shop">
                                                 <input type="hidden" name="id" value="<?php echo (int) $shop['id']; ?>">
+                                                <div class="form-group mb-2">
+                                                    <label class="form-label text-muted">Rejection reason *</label>
+                                                    <textarea name="rejection_reason" class="form-control" rows="2" required placeholder="Explain why this owner was rejected..."></textarea>
+                                                </div>
                                                 <button class="btn btn-sm btn-outline-danger" type="submit">Reject</button>
                                             </form>
                                         </div>

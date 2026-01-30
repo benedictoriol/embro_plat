@@ -5,7 +5,7 @@ function sys_admin_nav(string $activePage): void {
         ['key' => 'dashboard', 'label' => 'Dashboard', 'icon' => 'fas fa-tachometer-alt', 'href' => 'dashboard.php'],
         ['key' => 'system_control', 'label' => 'Control', 'icon' => 'fas fa-sliders-h', 'href' => 'system_control.php'],
         ['key' => 'member_approval', 'label' => 'Approvals', 'icon' => 'fas fa-user-check', 'href' => 'member_approval.php'],
-        ['key' => 'analytics', 'label' => 'Analytics', 'icon' => 'fas fa-chart-line', 'href' => 'analytics.php'],
+        ['key' => 'accounts', 'label' => 'Accounts', 'icon' => 'fas fa-users', 'href' => 'accounts.php'],        ['key' => 'analytics', 'label' => 'Analytics', 'icon' => 'fas fa-chart-line', 'href' => 'analytics.php'],
         ['key' => 'dss_config', 'label' => 'Security', 'icon' => 'fas fa-shield-alt', 'href' => 'dss_config.php'],
     ];
     ?>
