@@ -5,14 +5,14 @@ require_role('owner');
 
 $owner_id = $_SESSION['user']['id'];
 $owner_role = $_SESSION['user']['role'] ?? null;
-$order_id = isset($_GET['id']) ? (int) $_GET['id'] : 0;
+$order_id = isset($_POST['order_id']) ? (int) $_POST['order_id'] : (int) ($_GET['id'] ?? 0);
 
 if($order_id <= 0) {
     header("Location: shop_orders.php");
     exit();
 }
 
-$shop_stmt = $pdo->prepare("SELECT id FROM shops WHERE owner_id = ?");
+$shop_stmt = $pdo->prepare("SELECT id, shop_name FROM shops WHERE owner_id = ?");
 $shop_stmt->execute([$owner_id]);
 $shop = $shop_stmt->fetch();
 
@@ -22,7 +22,7 @@ if(!$shop) {
 }
 
 $order_stmt = $pdo->prepare("
-    SELECT o.status, o.order_number, o.client_id, s.shop_name
+    SELECT o.status, o.order_number, o.client_id, o.cancellation_reason, s.shop_name
     FROM orders o
     JOIN shops s ON o.shop_id = s.id
     WHERE o.id = ? AND o.shop_id = ?
@@ -30,42 +30,116 @@ $order_stmt = $pdo->prepare("
 $order_stmt->execute([$order_id, $shop['id']]);
 $order = $order_stmt->fetch();
 
-if(!$order || $order['status'] !== 'pending') {
-    header("Location: shop_orders.php?filter=pending");
+if(!$order) {
+    header("Location: shop_orders.php");
     exit();
 }
 
-$update_stmt = $pdo->prepare("UPDATE orders SET status = 'cancelled' WHERE id = ? AND shop_id = ?");
-$update_stmt->execute([$order_id, $shop['id']]);
+if($_SERVER['REQUEST_METHOD'] === 'POST') {
+    $rejection_reason = sanitize($_POST['cancellation_reason'] ?? '');
 
-if($order) {
-    $message = sprintf(
-        'Your order #%s has been cancelled by %s.',
-        $order['order_number'],
-        $order['shop_name']
-    );
-    create_notification($pdo, (int) $order['client_id'], $order_id, 'order_status', $message);
-}
+if($order['status'] !== 'pending') {
+        $error = 'Only pending orders can be rejected.';
+    } elseif(empty($rejection_reason)) {
+        $error = 'Please provide a reason for rejecting this order.';
+    } else {
+        $update_stmt = $pdo->prepare("
+            UPDATE orders
+            SET status = 'cancelled',
+                cancellation_reason = ?,
+                cancelled_at = NOW(),
+                updated_at = NOW()
+            WHERE id = ? AND shop_id = ?
+        ");
+        $update_stmt->execute([$rejection_reason, $order_id, $shop['id']]);
+
+        $message = sprintf(
+            'Your order #%s has been cancelled by %s. Reason: %s',
+            $order['order_number'],
+            $order['shop_name'],
+            $rejection_reason
+        );
+        create_notification($pdo, (int) $order['client_id'], $order_id, 'order_status', $message);
 
 create_notification(
-    $pdo,
-    (int) $order['client_id'],
-    $order_id,
-    'warning',
-    'Your order #' . $order['order_number'] . ' was not accepted by the shop. Please place a new request or contact the shop.'
-);
+            $pdo,
+            (int) $order['client_id'],
+            $order_id,
+            'warning',
+            'Your order #' . $order['order_number'] . ' was not accepted by the shop. Reason: ' . $rejection_reason
+        );
+
+        log_audit(
+            $pdo,
+            $owner_id,
+            $owner_role,
+            'reject_order',
+            'orders',
+            $order_id,
+            ['status' => $order['status'] ?? null, 'cancellation_reason' => $order['cancellation_reason'] ?? null],
+            ['status' => 'cancelled', 'cancellation_reason' => $rejection_reason]
+        );
+
+        header("Location: shop_orders.php?filter=cancelled&action=rejected");
+        exit();
+    }
+}
+?>
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Reject Order #<?php echo htmlspecialchars($order['order_number']); ?></title>
+    <link rel="stylesheet" href="../assets/css/style.css">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+</head>
+<body>
+    <nav class="navbar">
+        <div class="container d-flex justify-between align-center">
+            <a href="dashboard.php" class="navbar-brand">
+                <i class="fas fa-store"></i> <?php echo htmlspecialchars($shop['shop_name']); ?>
+            </a>
+            <ul class="navbar-nav">
+                <li><a href="dashboard.php" class="nav-link">Dashboard</a></li>
+                <li><a href="shop_profile.php" class="nav-link">Shop Profile</a></li>
+                <li><a href="manage_staff.php" class="nav-link">Staff</a></li>
+                <li><a href="shop_orders.php" class="nav-link active">Orders</a></li>
+                <li><a href="payment_verifications.php" class="nav-link">Payments</a></li>
+                <li><a href="earnings.php" class="nav-link">Earnings</a></li>
+                <li class="dropdown">
+                    <a href="#" class="nav-link dropdown-toggle">
+                        <i class="fas fa-user"></i> <?php echo htmlspecialchars($_SESSION['user']['fullname']); ?>
+                    </a>
+                    <div class="dropdown-menu">
+                        <a href="profile.php" class="dropdown-item"><i class="fas fa-user-cog"></i> Profile</a>
+                        <a href="../auth/logout.php" class="dropdown-item"><i class="fas fa-sign-out-alt"></i> Logout</a>
+                    </div>
+                </li>
+            </ul>
+        </div>
+    </nav>
 
 
-log_audit(
-    $pdo,
-    $owner_id,
-    $owner_role,
-    'reject_order',
-    'orders',
-    $order_id,
-    ['status' => $order['status'] ?? null],
-    ['status' => 'cancelled']
-);
+<?php if(isset($error)): ?>
+            <div class="alert alert-danger"><?php echo $error; ?></div>
+        <?php endif; ?>
 
-header("Location: shop_orders.php?filter=cancelled&action=rejected");
-exit();
+<div class="card">
+            <form method="POST">
+                <input type="hidden" name="order_id" value="<?php echo $order_id; ?>">
+                <div class="form-group">
+                    <label for="cancellation_reason">Rejection reason</label>
+                    <textarea id="cancellation_reason" name="cancellation_reason" class="form-control" rows="4" required placeholder="Explain why this order is being rejected..."></textarea>
+                </div>
+                <div class="d-flex gap-2">
+                    <button type="submit" class="btn btn-danger">
+                        <i class="fas fa-times-circle"></i> Reject Order
+                    </button>
+                    <a href="shop_orders.php?filter=pending" class="btn btn-outline-primary">Cancel</a>
+                </div>
+            </form>
+        </div>
+    </div>
+</body>
+</html>
