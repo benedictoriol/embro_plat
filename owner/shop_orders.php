@@ -304,6 +304,9 @@ $orders = $orders_stmt->fetchAll();
                                 </td>
                                 <td><?php echo date('M d, Y', strtotime($order['created_at'])); ?></td>
                                 <td>
+                                    <a href="view_order.php?id=<?php echo $order['id']; ?>" class="btn btn-sm btn-outline-primary mb-2">
+                                        View
+                                    </a>
                                     <?php if(!in_array($order['status'], ['completed', 'cancelled'], true)): ?>
                                         <form method="POST" class="assignment-form">
                                             <input type="hidden" name="order_id" value="<?php echo $order['id']; ?>">

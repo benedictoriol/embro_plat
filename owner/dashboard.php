@@ -252,8 +252,8 @@ $recent_employees = $employees_stmt->fetchAll();
                                     <td>
                                         <?php if($order['status'] == 'pending'): ?>
                                             <div class="d-flex" style="gap: 5px;">
-                                                <a href="shop_orders.php?filter=pending" 
-                                                   class="btn btn-sm btn-primary">Set Price</a>
+                                                <a href="view_order.php?id=<?php echo $order['id']; ?>" 
+                                                   class="btn btn-sm btn-outline-primary">View</a>
                                                 <a href="reject_order.php?id=<?php echo $order['id']; ?>" 
                                                    class="btn btn-sm btn-danger">Reject</a>
                                             </div>

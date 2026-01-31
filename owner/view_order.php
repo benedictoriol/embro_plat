@@ -151,12 +151,10 @@ $is_design_image = $design_file_name && in_array($design_file_extension, ALLOWED
         </div>
 
         <div class="action-row mb-3">
-            <a href="shop_orders.php" class="btn btn-outline-primary">
+            <a href="dashboard.php" class="btn btn-outline-primary">
                 <i class="fas fa-arrow-left"></i> Back to Orders
             </a>
             <?php if($order['status'] === 'pending'): ?>
-                <a href="accept_order.php?id=<?php echo $order['id']; ?>" class="btn btn-success">Accept</a>
-                <a href="reject_order.php?id=<?php echo $order['id']; ?>" class="btn btn-danger">Reject</a>
             <?php endif; ?>
         </div>
 
@@ -211,13 +209,15 @@ $is_design_image = $design_file_name && in_array($design_file_extension, ALLOWED
                 <p class="mt-3">
                     <a class="file-link" href="<?php echo htmlspecialchars($design_file); ?>" target="_blank" rel="noopener noreferrer">
                         <i class="fas fa-file-download"></i> Download design file
-                        <?php if($is_design_image): ?>
+                        </a>
+                </p>
+                </a>
+                </p>
+                <?php if($is_design_image): ?>
                     <div class="design-preview">
                         <img src="<?php echo htmlspecialchars($design_file); ?>" alt="Client design upload">
                     </div>
                 <?php endif; ?>
-                    </a>
-                </p>
             <?php endif; ?>
         </div>
     </div>
