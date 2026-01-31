@@ -3,13 +3,20 @@ function sys_admin_nav(string $activePage): void {
     $userName = htmlspecialchars($_SESSION['user']['fullname'] ?? 'System Admin');
     $navItems = [
         ['key' => 'dashboard', 'label' => 'Dashboard', 'icon' => 'fas fa-tachometer-alt', 'href' => 'dashboard.php'],
-        ['key' => 'system_control', 'label' => 'Control', 'icon' => 'fas fa-sliders-h', 'href' => 'system_control.php'],
+        ['key' => 'analytics', 'label' => 'Analytics', 'icon' => 'fas fa-chart-line', 'href' => 'analytics.php'],
+    ];
+    $userItems = [
         ['key' => 'member_approval', 'label' => 'Approvals', 'icon' => 'fas fa-user-check', 'href' => 'member_approval.php'],
-        ['key' => 'accounts', 'label' => 'Accounts', 'icon' => 'fas fa-users', 'href' => 'accounts.php'],        ['key' => 'analytics', 'label' => 'Analytics', 'icon' => 'fas fa-chart-line', 'href' => 'analytics.php'],
+        ['key' => 'accounts', 'label' => 'Accounts', 'icon' => 'fas fa-users', 'href' => 'accounts.php'],
+    ];
+    $systemItems = [
+        ['key' => 'system_control', 'label' => 'Control', 'icon' => 'fas fa-sliders-h', 'href' => 'system_control.php'],
         ['key' => 'dss_config', 'label' => 'Security', 'icon' => 'fas fa-shield-alt', 'href' => 'dss_config.php'],
     ];
+    $userActive = in_array($activePage, array_column($userItems, 'key'), true);
+    $systemActive = in_array($activePage, array_column($systemItems, 'key'), true);
     ?>
-    <nav class="navbar">
+    <nav class="navbar navbar--compact">
         <div class="container d-flex justify-between align-center">
             <div class="d-flex align-center gap-4">
                 <a href="dashboard.php" class="navbar-brand">
@@ -30,6 +37,30 @@ function sys_admin_nav(string $activePage): void {
                         </a>
                     </li>
                 <?php endforeach; ?>
+                <li class="dropdown">
+                    <a href="#" class="nav-link dropdown-toggle <?php echo $userActive ? 'active' : ''; ?>">
+                        <i class="fas fa-users-cog"></i> Users
+                    </a>
+                    <div class="dropdown-menu">
+                        <?php foreach ($userItems as $item): ?>
+                            <a href="<?php echo $item['href']; ?>" class="dropdown-item <?php echo $activePage === $item['key'] ? 'active' : ''; ?>">
+                                <i class="<?php echo $item['icon']; ?>"></i> <?php echo $item['label']; ?>
+                            </a>
+                        <?php endforeach; ?>
+                    </div>
+                </li>
+                <li class="dropdown">
+                    <a href="#" class="nav-link dropdown-toggle <?php echo $systemActive ? 'active' : ''; ?>">
+                        <i class="fas fa-sliders-h"></i> System
+                    </a>
+                    <div class="dropdown-menu">
+                        <?php foreach ($systemItems as $item): ?>
+                            <a href="<?php echo $item['href']; ?>" class="dropdown-item <?php echo $activePage === $item['key'] ? 'active' : ''; ?>">
+                                <i class="<?php echo $item['icon']; ?>"></i> <?php echo $item['label']; ?>
+                            </a>
+                        <?php endforeach; ?>
+                    </div>
+                </li>
                 <li class="dropdown">
                     <a href="#" class="nav-link dropdown-toggle">
                         <i class="fas fa-user-circle"></i> <?php echo $userName; ?>

@@ -19,6 +19,9 @@ if(!$employee) {
     die("You are not assigned to any shop. Please contact your shop owner.");
 }
 
+$employee_permissions = fetch_employee_permissions($pdo, $employee_id);
+require_employee_permission($pdo, $employee_id, 'upload_photos');
+
 $jobs_stmt = $pdo->prepare("
     SELECT 
         o.id,
@@ -147,10 +150,16 @@ $recent_photos = $photos_stmt->fetchAll();
             </a>
             <ul class="navbar-nav">
                 <li><a href="dashboard.php" class="nav-link">Dashboard</a></li>
-                <li><a href="assigned_jobs.php" class="nav-link">My Jobs</a></li>
-                <li><a href="update_status.php" class="nav-link">Update Status</a></li>
-                <li><a href="upload_photos.php" class="nav-link active">Upload Photos</a></li>
-                <li><a href="schedule.php" class="nav-link">Schedule</a></li>
+                <?php if(!empty($employee_permissions['view_jobs'])): ?>
+                    <li><a href="assigned_jobs.php" class="nav-link">My Jobs</a></li>
+                    <li><a href="schedule.php" class="nav-link">Schedule</a></li>
+                <?php endif; ?>
+                <?php if(!empty($employee_permissions['update_status'])): ?>
+                    <li><a href="update_status.php" class="nav-link">Update Status</a></li>
+                <?php endif; ?>
+                <?php if(!empty($employee_permissions['upload_photos'])): ?>
+                    <li><a href="upload_photos.php" class="nav-link active">Upload Photos</a></li>
+                <?php endif; ?>
                 <li class="dropdown">
                     <a href="#" class="nav-link dropdown-toggle">
                         <i class="fas fa-user"></i> <?php echo $_SESSION['user']['fullname']; ?>

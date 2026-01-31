@@ -352,6 +352,27 @@ h6 {
     border-radius: var(--radius-full);
 }
 
+.navbar--compact {
+    padding: 0.5rem 0;
+}
+
+.navbar--compact .navbar-brand {
+    font-size: 1.1rem;
+}
+
+.navbar--compact .navbar-brand i {
+    font-size: 1.25rem;
+}
+
+.navbar--compact .navbar-nav {
+    gap: 1rem;
+}
+
+.navbar--compact .nav-link {
+    font-size: 0.9rem;
+    padding: 0.35rem 0.6rem;
+}
+
 /* Dropdown Menu */
 .dropdown {
     position: relative;
@@ -398,6 +419,11 @@ h6 {
 .dropdown-item:hover {
     background: var(--gray-100);
     color: var(--gray-900);
+}
+
+.dropdown-item.active {
+    background: var(--primary-50);
+    color: var(--primary-700);
 }
 
 /* ========== Modern Cards ========== */

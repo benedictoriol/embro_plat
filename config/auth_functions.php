@@ -58,4 +58,50 @@ function redirect_based_on_role($role, $base_path = '..') {
     }
     exit();
 }
+function employee_permission_defaults(): array {
+    return [
+        'view_jobs' => true,
+        'update_status' => true,
+        'upload_photos' => true,
+    ];
+}
+
+function fetch_employee_permissions(PDO $pdo, int $userId): array {
+    $defaults = employee_permission_defaults();
+    $stmt = $pdo->prepare("
+        SELECT permissions 
+        FROM shop_employees 
+        WHERE user_id = ? AND status = 'active'
+        ORDER BY created_at DESC
+        LIMIT 1
+    ");
+    $stmt->execute([$userId]);
+    $permissionsJson = $stmt->fetchColumn();
+
+    if (!$permissionsJson) {
+        return $defaults;
+    }
+
+    $decoded = json_decode($permissionsJson, true);
+    if (!is_array($decoded)) {
+        return $defaults;
+    }
+
+    $permissions = [];
+    foreach ($defaults as $key => $defaultValue) {
+        $permissions[$key] = array_key_exists($key, $decoded) ? (bool) $decoded[$key] : $defaultValue;
+    }
+
+    return $permissions;
+}
+
+function require_employee_permission(PDO $pdo, int $userId, string $permissionKey): void {
+    $permissions = fetch_employee_permissions($pdo, $userId);
+
+    if (empty($permissions[$permissionKey])) {
+        http_response_code(403);
+        echo "You do not have permission to access this page.";
+        exit();
+    }
+}
 ?>

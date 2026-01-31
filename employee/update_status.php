@@ -6,6 +6,22 @@ require_role('employee');
 $employee_id = $_SESSION['user']['id'];
 $employee_role = $_SESSION['user']['role'] ?? null;
 
+$emp_stmt = $pdo->prepare("
+    SELECT se.*, s.shop_name, s.logo 
+    FROM shop_employees se 
+    JOIN shops s ON se.shop_id = s.id 
+    WHERE se.user_id = ? AND se.status = 'active'
+");
+$emp_stmt->execute([$employee_id]);
+$employee = $emp_stmt->fetch();
+
+if(!$employee) {
+    die("You are not assigned to any shop. Please contact your shop owner.");
+}
+
+$employee_permissions = fetch_employee_permissions($pdo, $employee_id);
+require_employee_permission($pdo, $employee_id, 'update_status');
+
 // Get assigned jobs
 $jobs_stmt = $pdo->prepare("
     SELECT 
@@ -199,8 +215,16 @@ if(isset($_POST['update_status'])) {
             </a>
             <ul class="navbar-nav">
                 <li><a href="dashboard.php" class="nav-link">Dashboard</a></li>
-                <li><a href="update_status.php" class="nav-link active">Update Status</a></li>
-                <li><a href="upload_photos.php" class="nav-link">Upload Photos</a></li>
+                <?php if(!empty($employee_permissions['view_jobs'])): ?>
+                    <li><a href="assigned_jobs.php" class="nav-link">My Jobs</a></li>
+                    <li><a href="schedule.php" class="nav-link">Schedule</a></li>
+                <?php endif; ?>
+                <?php if(!empty($employee_permissions['update_status'])): ?>
+                    <li><a href="update_status.php" class="nav-link active">Update Status</a></li>
+                <?php endif; ?>
+                <?php if(!empty($employee_permissions['upload_photos'])): ?>
+                    <li><a href="upload_photos.php" class="nav-link">Upload Photos</a></li>
+                <?php endif; ?>
                 <li><a href="../auth/logout.php" class="nav-link">Logout</a></li>
             </ul>
         </div>

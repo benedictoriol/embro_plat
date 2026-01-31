@@ -22,55 +22,71 @@ if(!$employee) {
 
 $shop_id = $employee['shop_id'];
 
-// Get assigned jobs
-$jobs_stmt = $pdo->prepare("
-    SELECT 
-        o.*,
-        u.fullname as client_name,
-        COALESCE(js.scheduled_date, o.scheduled_date) as schedule_date,
-        js.scheduled_time as schedule_time 
-    FROM orders o 
-    JOIN users u ON o.client_id = u.id 
-    LEFT JOIN job_schedule js ON js.order_id = o.id AND js.employee_id = ?
-    WHERE (o.assigned_to = ? OR js.employee_id = ?)
-      AND o.status IN ('accepted', 'in_progress')
-    ORDER BY schedule_date ASC, js.scheduled_time ASC
-");
-$jobs_stmt->execute([$employee_id, $employee_id, $employee_id]);
-$assigned_jobs = $jobs_stmt->fetchAll();
+$employee_permissions = fetch_employee_permissions($pdo, $employee_id);
+$can_view_jobs = !empty($employee_permissions['view_jobs']);
+$can_update_status = !empty($employee_permissions['update_status']);
+$can_upload_photos = !empty($employee_permissions['upload_photos']);
 
-// Get today's schedule
-$schedule_stmt = $pdo->prepare("
-    SELECT 
-        o.id as order_id,
-        o.order_number,
-        o.service_type,
-        o.status as order_status,
-        u.fullname as client_name,
-        COALESCE(js.scheduled_date, o.scheduled_date) as schedule_date,
-        js.scheduled_time as schedule_time,
-        COALESCE(js.status, o.status) as schedule_status,
-        js.task_description
-    FROM orders o
-    JOIN users u ON o.client_id = u.id
-    LEFT JOIN job_schedule js ON js.order_id = o.id AND js.employee_id = ?
-    WHERE (o.assigned_to = ? OR js.employee_id = ?)
-      AND COALESCE(js.scheduled_date, o.scheduled_date) = CURDATE()
-    ORDER BY schedule_time ASC
-");
-$schedule_stmt->execute([$employee_id, $employee_id, $employee_id]);
-$today_schedule = $schedule_stmt->fetchAll();
+if ($can_view_jobs) {
+    // Get assigned jobs
+    $jobs_stmt = $pdo->prepare("
+        SELECT 
+            o.*,
+            u.fullname as client_name,
+            COALESCE(js.scheduled_date, o.scheduled_date) as schedule_date,
+            js.scheduled_time as schedule_time 
+        FROM orders o 
+        JOIN users u ON o.client_id = u.id 
+        LEFT JOIN job_schedule js ON js.order_id = o.id AND js.employee_id = ?
+        WHERE (o.assigned_to = ? OR js.employee_id = ?)
+          AND o.status IN ('accepted', 'in_progress')
+        ORDER BY schedule_date ASC, js.scheduled_time ASC
+    ");
+    $jobs_stmt->execute([$employee_id, $employee_id, $employee_id]);
+    $assigned_jobs = $jobs_stmt->fetchAll();
 
-// Get job statistics
-$stats_stmt = $pdo->prepare("
-    SELECT 
-        (SELECT COUNT(*) FROM orders o WHERE (o.assigned_to = ? OR EXISTS (SELECT 1 FROM job_schedule js WHERE js.order_id = o.id AND js.employee_id = ?)) AND o.status = 'in_progress') as in_progress,
-        (SELECT COUNT(*) FROM orders o WHERE (o.assigned_to = ? OR EXISTS (SELECT 1 FROM job_schedule js WHERE js.order_id = o.id AND js.employee_id = ?)) AND o.status = 'completed') as completed,
-        (SELECT COUNT(*) FROM orders o WHERE (o.assigned_to = ? OR EXISTS (SELECT 1 FROM job_schedule js WHERE js.order_id = o.id AND js.employee_id = ?)) AND COALESCE((SELECT js2.scheduled_date FROM job_schedule js2 WHERE js2.order_id = o.id AND js2.employee_id = ? LIMIT 1), o.scheduled_date) = CURDATE()) as today_tasks,
-        (SELECT AVG(o.rating) FROM orders o WHERE (o.assigned_to = ? OR EXISTS (SELECT 1 FROM job_schedule js WHERE js.order_id = o.id AND js.employee_id = ?)) AND o.rating IS NOT NULL) as avg_rating
-");
-$stats_stmt->execute([$employee_id, $employee_id, $employee_id, $employee_id, $employee_id, $employee_id, $employee_id, $employee_id, $employee_id]);
-$stats = $stats_stmt->fetch();
+    // Get today's schedule
+    $schedule_stmt = $pdo->prepare("
+        SELECT 
+            o.id as order_id,
+            o.order_number,
+            o.service_type,
+            o.status as order_status,
+            u.fullname as client_name,
+            COALESCE(js.scheduled_date, o.scheduled_date) as schedule_date,
+            js.scheduled_time as schedule_time,
+            COALESCE(js.status, o.status) as schedule_status,
+            js.task_description
+        FROM orders o
+        JOIN users u ON o.client_id = u.id
+        LEFT JOIN job_schedule js ON js.order_id = o.id AND js.employee_id = ?
+        WHERE (o.assigned_to = ? OR js.employee_id = ?)
+          AND COALESCE(js.scheduled_date, o.scheduled_date) = CURDATE()
+        ORDER BY schedule_time ASC
+    ");
+    $schedule_stmt->execute([$employee_id, $employee_id, $employee_id]);
+    $today_schedule = $schedule_stmt->fetchAll();
+
+    // Get job statistics
+    $stats_stmt = $pdo->prepare("
+        SELECT 
+            (SELECT COUNT(*) FROM orders o WHERE (o.assigned_to = ? OR EXISTS (SELECT 1 FROM job_schedule js WHERE js.order_id = o.id AND js.employee_id = ?)) AND o.status = 'in_progress') as in_progress,
+            (SELECT COUNT(*) FROM orders o WHERE (o.assigned_to = ? OR EXISTS (SELECT 1 FROM job_schedule js WHERE js.order_id = o.id AND js.employee_id = ?)) AND o.status = 'completed') as completed,
+            (SELECT COUNT(*) FROM orders o WHERE (o.assigned_to = ? OR EXISTS (SELECT 1 FROM job_schedule js WHERE js.order_id = o.id AND js.employee_id = ?)) AND COALESCE((SELECT js2.scheduled_date FROM job_schedule js2 WHERE js2.order_id = o.id AND js2.employee_id = ? LIMIT 1), o.scheduled_date) = CURDATE()) as today_tasks,
+            (SELECT AVG(o.rating) FROM orders o WHERE (o.assigned_to = ? OR EXISTS (SELECT 1 FROM job_schedule js WHERE js.order_id = o.id AND js.employee_id = ?)) AND o.rating IS NOT NULL) as avg_rating
+    ");
+    $stats_stmt->execute([$employee_id, $employee_id, $employee_id, $employee_id, $employee_id, $employee_id, $employee_id, $employee_id, $employee_id]);
+    $stats = $stats_stmt->fetch();
+} else {
+    $assigned_jobs = [];
+    $today_schedule = [];
+    $stats = [
+        'in_progress' => 0,
+        'completed' => 0,
+        'today_tasks' => 0,
+        'avg_rating' => 0,
+    ];
+}
 ?>
 <!DOCTYPE html>
 <html lang="en">
@@ -134,10 +150,16 @@ $stats = $stats_stmt->fetch();
             </a>
             <ul class="navbar-nav">
                 <li><a href="dashboard.php" class="nav-link active">Dashboard</a></li>
-                <li><a href="assigned_jobs.php" class="nav-link">My Jobs</a></li>
-                <li><a href="update_status.php" class="nav-link">Update Status</a></li>
-                <li><a href="upload_photos.php" class="nav-link">Upload Photos</a></li>
-                <li><a href="schedule.php" class="nav-link">Schedule</a></li>
+                <?php if($can_view_jobs): ?>
+                    <li><a href="assigned_jobs.php" class="nav-link">My Jobs</a></li>
+                    <li><a href="schedule.php" class="nav-link">Schedule</a></li>
+                <?php endif; ?>
+                <?php if($can_update_status): ?>
+                    <li><a href="update_status.php" class="nav-link">Update Status</a></li>
+                <?php endif; ?>
+                <?php if($can_upload_photos): ?>
+                    <li><a href="upload_photos.php" class="nav-link">Upload Photos</a></li>
+                <?php endif; ?>
                 <li class="dropdown">
                     <a href="#" class="nav-link dropdown-toggle">
                         <i class="fas fa-user"></i> <?php echo $_SESSION['user']['fullname']; ?>
@@ -216,18 +238,26 @@ $stats = $stats_stmt->fetch();
         <div class="card mb-4">
             <h3>Quick Actions</h3>
             <div class="d-flex flex-wrap" style="gap: 10px;">
-                <a href="assigned_jobs.php" class="btn btn-primary">
-                    <i class="fas fa-list"></i> View All Jobs
-                </a>
-                <a href="update_status.php" class="btn btn-outline-primary">
-                    <i class="fas fa-edit"></i> Update Job Status
-                </a>
-                <a href="upload_photos.php" class="btn btn-outline-success">
-                    <i class="fas fa-camera"></i> Upload Photos
-                </a>
-                <a href="schedule.php" class="btn btn-outline-warning">
-                    <i class="fas fa-calendar"></i> View Schedule
-                </a>
+                <?php if($can_view_jobs): ?>
+                    <a href="assigned_jobs.php" class="btn btn-primary">
+                        <i class="fas fa-list"></i> View All Jobs
+                    </a>
+                <?php endif; ?>
+                <?php if($can_update_status): ?>
+                    <a href="update_status.php" class="btn btn-outline-primary">
+                        <i class="fas fa-edit"></i> Update Job Status
+                    </a>
+                <?php endif; ?>
+                <?php if($can_upload_photos): ?>
+                    <a href="upload_photos.php" class="btn btn-outline-success">
+                        <i class="fas fa-camera"></i> Upload Photos
+                    </a>
+                <?php endif; ?>
+                <?php if($can_view_jobs): ?>
+                    <a href="schedule.php" class="btn btn-outline-warning">
+                        <i class="fas fa-calendar"></i> View Schedule
+                    </a>
+                <?php endif; ?>
             </div>
         </div>
 
@@ -236,7 +266,13 @@ $stats = $stats_stmt->fetch();
             <div style="flex: 1;">
                 <div class="card">
                     <h3><i class="fas fa-calendar-day"></i> Today's Schedule (<?php echo date('F j, Y'); ?>)</h3>
-                    <?php if(!empty($today_schedule)): ?>
+                    <?php if(!$can_view_jobs): ?>
+                        <div class="text-center p-4">
+                            <i class="fas fa-lock fa-3x text-muted mb-3"></i>
+                            <h4>Schedule Access Restricted</h4>
+                            <p class="text-muted">Your permissions do not allow schedule access. Contact your shop owner.</p>
+                        </div>
+                    <?php elseif(!empty($today_schedule)): ?>
                         <ul class="task-list">
                             <?php foreach($today_schedule as $task): ?>
                             <li class="task-item">
@@ -284,7 +320,13 @@ $stats = $stats_stmt->fetch();
             <div style="flex: 1;">
                 <div class="card">
                     <h3><i class="fas fa-tasks"></i> Currently Assigned Jobs</h3>
-                    <?php if(!empty($assigned_jobs)): ?>
+                    <?php if(!$can_view_jobs): ?>
+                        <div class="text-center p-4">
+                            <i class="fas fa-lock fa-3x text-muted mb-3"></i>
+                            <h4>Jobs Access Restricted</h4>
+                            <p class="text-muted">Your permissions do not allow job details. Contact your shop owner.</p>
+                        </div>
+                    <?php elseif(!empty($assigned_jobs)): ?>
                         <?php foreach($assigned_jobs as $job): ?>
                         <div class="job-card">
                             <div class="d-flex justify-between align-center">
@@ -304,10 +346,12 @@ $stats = $stats_stmt->fetch();
                                     <div class="mb-2">
                                         <small class="text-muted">Order #<?php echo $job['order_number']; ?></small>
                                     </div>
-                                    <a href="update_status.php?order_id=<?php echo $job['id']; ?>" 
-                                       class="btn btn-sm btn-primary">
-                                        <i class="fas fa-edit"></i> Update
-                                    </a>
+                                    <?php if($can_update_status): ?>
+                                        <a href="update_status.php?order_id=<?php echo $job['id']; ?>" 
+                                           class="btn btn-sm btn-primary">
+                                            <i class="fas fa-edit"></i> Update
+                                        </a>
+                                    <?php endif; ?>
                                 </div>
                             </div>
                             <?php if($job['schedule_date']): ?>

@@ -67,7 +67,7 @@ function notification_badge($type) {
     </style>
 </head>
 <body>
-    <nav class="navbar">
+    <nav class="navbar navbar--compact">
         <div class="container d-flex justify-between align-center">
             <a href="dashboard.php" class="navbar-brand">
 
@@ -76,10 +76,24 @@ function notification_badge($type) {
             </a>
             <ul class="navbar-nav">
                 <li><a href="dashboard.php" class="nav-link">Dashboard</a></li>
-                <li><a href="place_order.php" class="nav-link">Place Order</a></li>
-                <li><a href="track_order.php" class="nav-link">Track Orders</a></li>
-                <li><a href="customize_design.php" class="nav-link">Customize Design</a></li>
-                <li><a href="rate_provider.php" class="nav-link">Rate Provider</a></li>
+                <li class="dropdown">
+                    <a href="#" class="nav-link dropdown-toggle">
+                        <i class="fas fa-clipboard-list"></i> Orders
+                    </a>
+                    <div class="dropdown-menu">
+                        <a href="place_order.php" class="dropdown-item"><i class="fas fa-plus-circle"></i> Place Order</a>
+                        <a href="track_order.php" class="dropdown-item"><i class="fas fa-route"></i> Track Orders</a>
+                    </div>
+                </li>
+                <li class="dropdown">
+                    <a href="#" class="nav-link dropdown-toggle">
+                        <i class="fas fa-layer-group"></i> Services
+                    </a>
+                    <div class="dropdown-menu">
+                        <a href="customize_design.php" class="dropdown-item"><i class="fas fa-paint-brush"></i> Customize Design</a>
+                        <a href="rate_provider.php" class="dropdown-item"><i class="fas fa-star"></i> Rate Provider</a>
+                    </div>
+                </li>
                 <li><a href="notifications.php" class="nav-link active">Notifications
                     <?php if($unread_notifications > 0): ?>
                         <span class="badge badge-danger"><?php echo $unread_notifications; ?></span>
