@@ -512,6 +512,12 @@ function payment_status_pill($status) {
                             </div>
                         <?php endif; ?>
                     </div>
+                    <?php if($order['status'] === 'cancelled' && !empty($order['cancellation_reason'])): ?>
+                        <div class="mt-2 text-muted">
+                            <strong>Cancellation reason:</strong>
+                            <div><?php echo nl2br(htmlspecialchars($order['cancellation_reason'])); ?></div>
+                        </div>
+                    <?php endif; ?>
                     <?php if($order['status'] === 'pending'): ?>
                         <div class="mt-3">
                             <strong>Price Quote</strong>

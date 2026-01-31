@@ -1,6 +1,7 @@
 <?php
 session_start();
 require_once '../config/db.php';
+require_once '../config/constants.php';
 require_role('employee');
 
 $employee_id = $_SESSION['user']['id'];
@@ -49,6 +50,14 @@ function job_status_badge($status) {
     $class = $map[$status] ?? 'badge-secondary';
     return '<span class="badge ' . $class . '">' . ucfirst(str_replace('_', ' ', $status)) . '</span>';
 }
+
+function is_design_image(?string $filename): bool {
+    if(!$filename) {
+        return false;
+    }
+    $extension = strtolower(pathinfo($filename, PATHINFO_EXTENSION));
+    return in_array($extension, ALLOWED_IMAGE_TYPES, true);
+}
 ?>
 <!DOCTYPE html>
 <html lang="en">
@@ -89,6 +98,18 @@ function job_status_badge($status) {
         .progress-fill {
             height: 100%;
             background: #4361ee;
+        }
+        .design-preview {
+            margin-top: 12px;
+        }
+        .design-preview img {
+            width: 100%;
+            max-width: 320px;
+            border-radius: 10px;
+            border: 1px solid #e2e8f0;
+        }
+        .design-file {
+            margin-top: 10px;
         }
     </style>
 </head>
@@ -175,6 +196,18 @@ function job_status_badge($status) {
                             <div><i class="fas fa-clipboard"></i> <?php echo htmlspecialchars($job['design_description']); ?></div>
                         <?php endif; ?>
                     </div>
+                    <?php if(!empty($job['design_file'])): ?>
+                        <div class="design-file">
+                            <a href="../assets/uploads/designs/<?php echo htmlspecialchars($job['design_file']); ?>" target="_blank" rel="noopener noreferrer">
+                                <i class="fas fa-paperclip"></i> View design file
+                            </a>
+                        </div>
+                        <?php if(is_design_image($job['design_file'])): ?>
+                            <div class="design-preview">
+                                <img src="../assets/uploads/designs/<?php echo htmlspecialchars($job['design_file']); ?>" alt="Client design upload">
+                            </div>
+                        <?php endif; ?>
+                    <?php endif; ?>
                 </div>
             <?php endforeach; ?>
         <?php else: ?>

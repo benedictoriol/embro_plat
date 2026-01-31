@@ -1,6 +1,7 @@
 <?php
 session_start();
 require_once '../config/db.php';
+require_once '../config/constants.php';
 require_role('employee');
 
 $employee_id = $_SESSION['user']['id'];
@@ -40,6 +41,28 @@ $jobs_stmt = $pdo->prepare("
 ");
 $jobs_stmt->execute([$employee_id, $employee_id, $employee_id]);
 $jobs = $jobs_stmt->fetchAll();
+$photo_counts = [];
+function is_design_image(?string $filename): bool {
+    if(!$filename) {
+        return false;
+    }
+    $extension = strtolower(pathinfo($filename, PATHINFO_EXTENSION));
+    return in_array($extension, ALLOWED_IMAGE_TYPES, true);
+}
+
+if(!empty($jobs)) {
+    $job_ids = array_column($jobs, 'id');
+    $placeholders = implode(',', array_fill(0, count($job_ids), '?'));
+    $photo_stmt = $pdo->prepare("
+        SELECT order_id, COUNT(*) as photo_count
+        FROM order_photos
+        WHERE employee_id = ?
+          AND order_id IN ($placeholders)
+        GROUP BY order_id
+    ");
+    $photo_stmt->execute(array_merge([$employee_id], $job_ids));
+    $photo_counts = $photo_stmt->fetchAll(PDO::FETCH_KEY_PAIR);
+}
 
 // Update status
 if(isset($_POST['update_status'])) {
@@ -49,6 +72,14 @@ if(isset($_POST['update_status'])) {
     $employee_notes = sanitize($_POST['employee_notes']);
     
     
+    $photo_check_stmt = $pdo->prepare("
+        SELECT COUNT(*)
+        FROM order_photos
+        WHERE order_id = ? AND employee_id = ?
+    ");
+    $photo_check_stmt->execute([$order_id, $employee_id]);
+    $photo_count = (int) $photo_check_stmt->fetchColumn();
+
     $order_info_stmt = $pdo->prepare("
         SELECT status, client_id, order_number
         FROM orders
@@ -59,6 +90,8 @@ if(isset($_POST['update_status'])) {
 
     if(!$order_info) {
         $error = "Unable to update this order.";
+        } elseif($photo_count === 0) {
+        $error = "Please upload a progress photo before updating the status.";
     } else {
 
        $order_id = (int) $_POST['order_id'];
@@ -76,6 +109,8 @@ if(isset($_POST['update_status'])) {
 
         if(!$order_info) {
             $error = "Unable to update this order.";
+            } elseif($photo_count === 0) {
+            $error = "Please upload a progress photo before updating the status.";
         } else {
             try {
                 $order_info_stmt = $pdo->prepare("
@@ -205,6 +240,18 @@ if(isset($_POST['update_status'])) {
             text-align: center;
             margin: 20px 0;
         }
+        .design-preview {
+            margin-top: 12px;
+        }
+        .design-preview img {
+            width: 100%;
+            max-width: 320px;
+            border-radius: 10px;
+            border: 1px solid #e2e8f0;
+        }
+        .design-file {
+            margin-top: 10px;
+        }
     </style>
 </head>
 <body>
@@ -246,6 +293,7 @@ if(isset($_POST['update_status'])) {
 
         <?php if(!empty($jobs)): ?>
             <?php foreach($jobs as $job): ?>
+                <?php $has_photo = !empty($photo_counts[$job['id']]); ?>
             <div class="card mb-4">
                 <div class="job-details">
                     <div class="d-flex justify-between align-center">
@@ -259,6 +307,18 @@ if(isset($_POST['update_status'])) {
                             <p class="mb-0 text-muted">
                                 <?php echo htmlspecialchars($job['design_description']); ?>
                             </p>
+                            <?php if(!empty($job['design_file'])): ?>
+                                <div class="design-file">
+                                    <a href="../assets/uploads/designs/<?php echo htmlspecialchars($job['design_file']); ?>" target="_blank" rel="noopener noreferrer">
+                                        <i class="fas fa-paperclip"></i> View design file
+                                    </a>
+                                </div>
+                                <?php if(is_design_image($job['design_file'])): ?>
+                                    <div class="design-preview">
+                                        <img src="../assets/uploads/designs/<?php echo htmlspecialchars($job['design_file']); ?>" alt="Client design upload">
+                                    </div>
+                                <?php endif; ?>
+                            <?php endif; ?>
                             <?php if(!empty($job['schedule_date'])): ?>
                                 <p class="mb-0 text-muted">
                                     <i class="fas fa-calendar"></i> Scheduled: <?php echo date('M d, Y', strtotime($job['schedule_date'])); ?>
@@ -315,8 +375,15 @@ if(isset($_POST['update_status'])) {
                                   placeholder="Add any notes about this update..."></textarea>
                     </div>
 
+                    <?php if(!$has_photo): ?>
+                        <div class="alert alert-warning">
+                            Please upload a progress photo before updating this job.
+                            <a href="upload_photos.php">Upload a photo</a>.
+                        </div>
+                    <?php endif; ?>
+
                     <div class="text-right">
-                        <button type="submit" name="update_status" class="btn btn-primary">
+                        <button type="submit" name="update_status" class="btn btn-primary" <?php echo $has_photo ? '' : 'disabled'; ?>>
                             <i class="fas fa-save"></i> Update Status
                         </button>
                     </div>

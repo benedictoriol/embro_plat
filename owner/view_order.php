@@ -1,6 +1,7 @@
 <?php
 session_start();
 require_once '../config/db.php';
+require_once '../config/constants.php';
 require_role('owner');
 
 $owner_id = $_SESSION['user']['id'];
@@ -43,9 +44,12 @@ if(!$order) {
 
 $payment_status = $order['payment_status'] ?? 'unpaid';
 $payment_class = 'payment-' . $payment_status;
-$design_file = $order['design_file']
-    ? '../assets/uploads/designs/' . $order['design_file']
+$design_file_name = $order['design_file'] ?? null;
+$design_file = $design_file_name
+    ? '../assets/uploads/designs/' . $design_file_name
     : null;
+    $design_file_extension = $design_file_name ? strtolower(pathinfo($design_file_name, PATHINFO_EXTENSION)) : '';
+$is_design_image = $design_file_name && in_array($design_file_extension, ALLOWED_IMAGE_TYPES, true);
 ?>
 <!DOCTYPE html>
 <html lang="en">
@@ -101,6 +105,16 @@ $design_file = $order['design_file']
             display: inline-flex;
             align-items: center;
             gap: 8px;
+        }
+        .design-preview {
+            margin-top: 16px;
+        }
+        .design-preview img {
+            max-width: 100%;
+            height: auto;
+            border-radius: 12px;
+            border: 1px solid #e2e8f0;
+            background: #fff;
         }
     </style>
 </head>
@@ -161,6 +175,9 @@ $design_file = $order['design_file']
                         <?php echo str_replace('_', ' ', ucfirst($order['status'])); ?>
                     </span>
                 </p>
+                <?php if($order['status'] === 'cancelled' && !empty($order['cancellation_reason'])): ?>
+                    <p><strong>Cancellation reason:</strong> <?php echo nl2br(htmlspecialchars($order['cancellation_reason'])); ?></p>
+                <?php endif; ?>
                 <p>
                     <span class="status-pill <?php echo htmlspecialchars($payment_class); ?>">
                         <?php echo ucfirst($payment_status); ?> payment
@@ -194,6 +211,11 @@ $design_file = $order['design_file']
                 <p class="mt-3">
                     <a class="file-link" href="<?php echo htmlspecialchars($design_file); ?>" target="_blank" rel="noopener noreferrer">
                         <i class="fas fa-file-download"></i> Download design file
+                        <?php if($is_design_image): ?>
+                    <div class="design-preview">
+                        <img src="<?php echo htmlspecialchars($design_file); ?>" alt="Client design upload">
+                    </div>
+                <?php endif; ?>
                     </a>
                 </p>
             <?php endif; ?>
