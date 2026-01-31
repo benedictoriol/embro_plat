@@ -27,6 +27,47 @@ $active_staff_stmt = $pdo->prepare("
 $active_staff_stmt->execute([$shop_id]);
 $active_staff = $active_staff_stmt->fetchAll();
 
+if(isset($_POST['set_price'])) {
+    $order_id = (int) ($_POST['order_id'] ?? 0);
+    $price_input = $_POST['price'] ?? '';
+    $price_value = filter_var($price_input, FILTER_VALIDATE_FLOAT);
+
+    $order_stmt = $pdo->prepare("SELECT id, status, client_id, order_number, price FROM orders WHERE id = ? AND shop_id = ?");
+    $order_stmt->execute([$order_id, $shop_id]);
+    $order = $order_stmt->fetch();
+
+    if(!$order) {
+        $error = "Order not found for this shop.";
+    } elseif($order['status'] !== 'pending') {
+        $error = "Prices can only be set for pending orders.";
+    } elseif($price_value === false || $price_value <= 0) {
+        $error = "Please enter a valid price greater than zero.";
+    } else {
+        $update_stmt = $pdo->prepare("UPDATE orders SET price = ?, updated_at = NOW() WHERE id = ? AND shop_id = ?");
+        $update_stmt->execute([$price_value, $order_id, $shop_id]);
+        $success = "Price sent to the client for approval.";
+
+        create_notification(
+            $pdo,
+            (int) $order['client_id'],
+            $order_id,
+            'info',
+            'A price of ₱' . number_format($price_value, 2) . ' has been set for order #' . $order['order_number'] . '. Please review and respond.'
+        );
+
+        log_audit(
+            $pdo,
+            $owner_id,
+            $_SESSION['user']['role'] ?? null,
+            'set_order_price',
+            'orders',
+            $order_id,
+            ['price' => $order['price'] ?? null],
+            ['price' => $price_value]
+        );
+    }
+}
+
 if(isset($_POST['assign_order'])) {
     $order_id = (int) $_POST['order_id'];
     $employee_id = (int) $_POST['employee_id'];
@@ -136,6 +177,14 @@ $orders = $orders_stmt->fetchAll();
         .assignment-form select {
             min-width: 160px;
         }
+        .price-form {
+            display: flex;
+            gap: 8px;
+            align-items: center;
+        }
+        .price-form input {
+            width: 120px;
+        }
     </style>
 </head>
 <body>
@@ -215,7 +264,23 @@ $orders = $orders_stmt->fetchAll();
                                 <td>#<?php echo htmlspecialchars($order['order_number']); ?></td>
                                 <td><?php echo htmlspecialchars($order['client_name']); ?></td>
                                 <td><?php echo htmlspecialchars($order['service_type']); ?></td>
-                                <td>₱<?php echo number_format($order['price'], 2); ?></td>
+                                <td>
+                                    <?php if($order['status'] === 'pending'): ?>
+                                        <form method="POST" class="price-form">
+                                            <input type="hidden" name="order_id" value="<?php echo $order['id']; ?>">
+                                            <input type="number" name="price" class="form-control" step="0.01" min="0" placeholder="Price"
+                                                value="<?php echo $order['price'] !== null ? htmlspecialchars($order['price']) : ''; ?>" required>
+                                            <button type="submit" name="set_price" class="btn btn-sm btn-outline-primary">
+                                                <?php echo $order['price'] !== null ? 'Update' : 'Send'; ?>
+                                            </button>
+                                        </form>
+                                        <?php if($order['price'] !== null): ?>
+                                            <div class="text-muted small">Awaiting client approval</div>
+                                        <?php endif; ?>
+                                    <?php else: ?>
+                                        ₱<?php echo number_format($order['price'] ?? 0, 2); ?>
+                                    <?php endif; ?>
+                                </td>
                                 <td>
                                     <span class="status-pill status-<?php echo htmlspecialchars($order['status']); ?>">
                                         <?php echo str_replace('_', ' ', ucfirst($order['status'])); ?>

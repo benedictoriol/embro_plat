@@ -102,9 +102,19 @@ $action = $_POST['action'] ?? '';
 if($_SERVER['REQUEST_METHOD'] === 'POST' && $action !== '') {
     $order_id = (int) ($_POST['order_id'] ?? 0);
     $order_stmt = $pdo->prepare("
-        SELECT id, status, progress, design_file, design_approved, order_number, revision_count
-        FROM orders
-        WHERE id = ? AND client_id = ?
+        SELECT o.id,
+            o.status,
+            o.progress,
+            o.design_file,
+            o.design_approved,
+            o.order_number,
+            o.revision_count,
+            o.price,
+            s.owner_id,
+            s.shop_name
+        FROM orders o
+        JOIN shops s ON o.shop_id = s.id
+        WHERE o.id = ? AND o.client_id = ?
     ");
     $order_stmt->execute([$order_id, $client_id]);
     $order = $order_stmt->fetch();
@@ -169,6 +179,50 @@ if($_SERVER['REQUEST_METHOD'] === 'POST' && $action !== '') {
             ");
             $revision_stmt->execute([$notes, $order_id, $client_id]);
             $success = 'Revision request sent to the shop.';
+        }
+        } elseif($action === 'accept_price') {
+        if($order['status'] !== 'pending') {
+            $error = 'Price acceptance is only available for pending orders.';
+        } elseif($order['price'] === null) {
+            $error = 'No price quote is available to accept yet.';
+        } else {
+            $accept_stmt = $pdo->prepare("
+                UPDATE orders
+                SET status = 'accepted', updated_at = NOW()
+                WHERE id = ? AND client_id = ?
+            ");
+            $accept_stmt->execute([$order_id, $client_id]);
+            $success = 'Price accepted. Your order is now scheduled for production.';
+
+            create_notification(
+                $pdo,
+                (int) $order['owner_id'],
+                $order_id,
+                'order_status',
+                'Client accepted the price for order #' . $order['order_number'] . ' (' . $order['shop_name'] . ').'
+            );
+        }
+    } elseif($action === 'reject_price') {
+        if($order['status'] !== 'pending') {
+            $error = 'Price rejection is only available for pending orders.';
+        } elseif($order['price'] === null) {
+            $error = 'No price quote is available to reject yet.';
+        } else {
+            $reject_stmt = $pdo->prepare("
+                UPDATE orders
+                SET price = NULL, updated_at = NOW()
+                WHERE id = ? AND client_id = ?
+            ");
+            $reject_stmt->execute([$order_id, $client_id]);
+            $success = 'Price rejected. The shop will send an updated quote.';
+
+            create_notification(
+                $pdo,
+                (int) $order['owner_id'],
+                $order_id,
+                'warning',
+                'Client rejected the price for order #' . $order['order_number'] . ' (' . $order['shop_name'] . '). Please send a new quote.'
+            );
         }
     }
 }
@@ -433,13 +487,45 @@ function payment_status_pill($status) {
                     <div class="order-meta">
                         <div><i class="fas fa-calendar"></i> Created: <?php echo date('M d, Y', strtotime($order['created_at'])); ?></div>
                         <div><i class="fas fa-box"></i> Quantity: <?php echo htmlspecialchars($order['quantity']); ?></div>
-                        <div><i class="fas fa-peso-sign"></i> ₱<?php echo number_format($order['price'] ?? 0, 2); ?></div>
+                        <?php if($order['price'] === null): ?>
+                            <div><i class="fas fa-peso-sign"></i> Price: Awaiting quote</div>
+                        <?php else: ?>
+                            <div><i class="fas fa-peso-sign"></i> ₱<?php echo number_format($order['price'], 2); ?></div>
+                        <?php endif; ?>
                         <?php if(!empty($order['design_file'])): ?>
                             <div><i class="fas fa-paperclip"></i>
                                 <a href="../assets/uploads/designs/<?php echo htmlspecialchars($order['design_file']); ?>" target="_blank">View design file</a>
                             </div>
                         <?php endif; ?>
                     </div>
+                    <?php if($order['status'] === 'pending'): ?>
+                        <div class="mt-3">
+                            <strong>Price Quote</strong>
+                            <?php if($order['price'] === null): ?>
+                                <div class="text-muted small mt-2">Waiting for the shop to send a price quote.</div>
+                            <?php else: ?>
+                                <div class="text-muted small mt-2">
+                                    The shop quoted ₱<?php echo number_format($order['price'], 2); ?>. Please accept or reject before production begins.
+                                </div>
+                                <div class="mt-2">
+                                    <form method="POST" class="d-inline">
+                                        <input type="hidden" name="action" value="accept_price">
+                                        <input type="hidden" name="order_id" value="<?php echo $order['id']; ?>">
+                                        <button type="submit" class="btn btn-success btn-sm">
+                                            <i class="fas fa-check"></i> Accept Price
+                                        </button>
+                                    </form>
+                                    <form method="POST" class="d-inline">
+                                        <input type="hidden" name="action" value="reject_price">
+                                        <input type="hidden" name="order_id" value="<?php echo $order['id']; ?>">
+                                        <button type="submit" class="btn btn-outline-danger btn-sm">
+                                            <i class="fas fa-times"></i> Reject Price
+                                        </button>
+                                    </form>
+                                </div>
+                            <?php endif; ?>
+                        </div>
+                    <?php endif; ?>
 
                     <?php
                         $payment = $payment_by_order[$order['id']] ?? null;
