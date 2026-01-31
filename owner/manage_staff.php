@@ -4,6 +4,11 @@ require_once '../config/db.php';
 require_role('owner');
 
 $owner_id = $_SESSION['user']['id'];
+$available_permissions = [
+    'view_jobs' => 'View assigned jobs',
+    'update_status' => 'Update job status',
+    'upload_photos' => 'Upload output photos',
+];
 
 // Get shop details
 $shop_stmt = $pdo->prepare("SELECT * FROM shops WHERE owner_id = ?");
@@ -25,8 +30,13 @@ if(isset($_POST['add_employee'])) {
     $password = $_POST['password'];
     $confirm_password = $_POST['confirm_password'];
     $position = sanitize($_POST['position']);
-    $permissions = json_encode(['view_jobs' => true, 'update_status' => true, 'upload_photos' => true]);
-    
+    $selected_permissions = $_POST['permissions'] ?? [];
+    $permissions_map = [];
+    foreach ($available_permissions as $permission_key => $permission_label) {
+        $permissions_map[$permission_key] = in_array($permission_key, $selected_permissions, true);
+    }
+    $permissions = json_encode($permissions_map);    
+
     try {
         if($password !== $confirm_password) {
             $error = "Passwords do not match!";
@@ -347,18 +357,22 @@ $employees = $employees_stmt->fetchAll();
                 
                 <div class="form-group">
                     <label>Permissions</label>
-                    <div class="form-check">
-                        <input type="checkbox" class="form-check-input" checked disabled>
-                        <label class="form-check-label">View assigned jobs</label>
-                    </div>
-                    <div class="form-check">
-                        <input type="checkbox" class="form-check-input" checked disabled>
-                        <label class="form-check-label">Update job status</label>
-                    </div>
-                    <div class="form-check">
-                        <input type="checkbox" class="form-check-input" checked disabled>
-                        <label class="form-check-label">Upload output photos</label>
-                    </div>
+                    <p class="text-muted mb-2">Select the permissions this staff member should have.</p>
+                    <?php foreach ($available_permissions as $permission_key => $permission_label): ?>
+                        <div class="form-check">
+                            <input
+                                type="checkbox"
+                                class="form-check-input"
+                                id="permission_<?php echo $permission_key; ?>"
+                                name="permissions[]"
+                                value="<?php echo $permission_key; ?>"
+                                checked
+                            >
+                            <label class="form-check-label" for="permission_<?php echo $permission_key; ?>">
+                                <?php echo htmlspecialchars($permission_label); ?>
+                            </label>
+                        </div>
+                    <?php endforeach; ?>
                 </div>
                 
                 <div class="modal-footer mt-4">
