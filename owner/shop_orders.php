@@ -175,6 +175,20 @@ $query .= " ORDER BY o.created_at DESC";
 $orders_stmt = $pdo->prepare($query);
 $orders_stmt->execute($params);
 $orders = $orders_stmt->fetchAll();
+
+function format_quote_details(?array $quote_details): array {
+    if (!$quote_details) {
+        return ['summary' => 'No quote details provided.', 'estimate' => null];
+    }
+    $complexity = $quote_details['complexity'] ?? 'Standard';
+    $add_ons = $quote_details['add_ons'] ?? [];
+    $rush = !empty($quote_details['rush']);
+    $estimated_total = $quote_details['estimated_total'] ?? null;
+    $add_on_label = !empty($add_ons) ? implode(', ', $add_ons) : 'None';
+    $summary = "Complexity: {$complexity} • Add-ons: {$add_on_label} • Rush: " . ($rush ? 'Yes' : 'No');
+
+    return ['summary' => $summary, 'estimate' => $estimated_total];
+}
 ?>
 <!DOCTYPE html>
 <html lang="en">
@@ -311,10 +325,20 @@ $orders = $orders_stmt->fetchAll();
                     </thead>
                     <tbody>
                         <?php foreach($orders as $order): ?>
+                            <?php
+                                $quote_details = !empty($order['quote_details']) ? json_decode($order['quote_details'], true) : null;
+                                $quote_summary = format_quote_details($quote_details);
+                            ?>
                             <tr>
                                 <td>#<?php echo htmlspecialchars($order['order_number']); ?></td>
                                 <td><?php echo htmlspecialchars($order['client_name']); ?></td>
-                                <td><?php echo htmlspecialchars($order['service_type']); ?></td>
+                                <td>
+                                    <?php echo htmlspecialchars($order['service_type']); ?>
+                                    <div class="text-muted small mt-1"><?php echo htmlspecialchars($quote_summary['summary']); ?></div>
+                                    <?php if($quote_summary['estimate'] !== null): ?>
+                                        <div class="text-muted small">Estimated total: ₱<?php echo number_format((float) $quote_summary['estimate'], 2); ?></div>
+                                    <?php endif; ?>
+                                </td>
                                 <td>
                                     <?php if($order['status'] === 'pending'): ?>
                                         <form method="POST" class="price-form">

@@ -484,6 +484,7 @@ function payment_status_pill($status) {
 
         <?php if(!empty($orders)): ?>
             <?php foreach($orders as $order): ?>
+                <?php $quote_details = !empty($order['quote_details']) ? json_decode($order['quote_details'], true) : null; ?>
                 <div class="order-card">
                     <div class="d-flex justify-between align-center">
                         <div>
@@ -497,7 +498,18 @@ function payment_status_pill($status) {
                             <div class="text-muted mt-2">#<?php echo htmlspecialchars($order['order_number']); ?></div>
                         </div>
                     </div>
-
+                    <?php if($quote_details): ?>
+                        <div class="mt-2 text-muted small">
+                            <strong>Quote preferences:</strong>
+                            Complexity <?php echo htmlspecialchars($quote_details['complexity'] ?? 'Standard'); ?> •
+                            Add-ons <?php echo htmlspecialchars(!empty($quote_details['add_ons']) ? implode(', ', $quote_details['add_ons']) : 'None'); ?> •
+                            Rush <?php echo !empty($quote_details['rush']) ? 'Yes' : 'No'; ?>
+                            <?php if(isset($quote_details['estimated_total'])): ?>
+                                • Est. total ₱<?php echo number_format((float) $quote_details['estimated_total'], 2); ?>
+                            <?php endif; ?>
+                        </div>
+                    <?php endif; ?>
+                    
                     <div class="order-meta">
                         <div><i class="fas fa-calendar"></i> Created: <?php echo date('M d, Y', strtotime($order['created_at'])); ?></div>
                         <div><i class="fas fa-box"></i> Quantity: <?php echo htmlspecialchars($order['quantity']); ?></div>

@@ -14,6 +14,38 @@ $available_services = [
     'Bag Embroidery',
     'Custom',
 ];
+$default_pricing_settings = [
+    'base_prices' => [
+        'T-shirt Embroidery' => 180,
+        'Logo Embroidery' => 160,
+        'Cap Embroidery' => 150,
+        'Bag Embroidery' => 200,
+        'Custom' => 200,
+    ],
+    'complexity_multipliers' => [
+        'Simple' => 1,
+        'Standard' => 1.15,
+        'Complex' => 1.35,
+    ],
+    'rush_fee_percent' => 25,
+    'add_ons' => [
+        'Metallic Thread' => 50,
+        '3D Puff' => 75,
+        'Extra Color' => 25,
+        'Applique' => 60,
+    ],
+];
+
+function resolve_pricing_settings(array $shop, array $defaults): array {
+    if (!empty($shop['pricing_settings'])) {
+        $decoded = json_decode($shop['pricing_settings'], true);
+        if (is_array($decoded)) {
+            return array_replace_recursive($defaults, $decoded);
+        }
+    }
+
+    return $defaults;
+}
 
 function resolve_shop_services(array $shop, array $available_services): array {
     if (!empty($shop['service_settings'])) {
@@ -62,10 +94,11 @@ $shops_stmt = $pdo->query("
     ORDER BY rating DESC, total_orders DESC
 ");
 $shops = $shops_stmt->fetchAll();
-$shops = array_map(function($shop) use ($available_services) {
+$shops = array_map(function($shop) use ($available_services, $default_pricing_settings) {
     $shop['operating_days_list'] = resolve_operating_days($shop);
     $shop['service_list'] = resolve_shop_services($shop, $available_services);
     $shop['is_open'] = is_shop_open($shop);
+    $shop['pricing_settings'] = resolve_pricing_settings($shop, $default_pricing_settings);
     return $shop;
 }, $shops);
 
@@ -77,6 +110,12 @@ if(isset($_POST['place_order'])) {
     $design_description = sanitize($_POST['design_description']);
     $quantity = $_POST['quantity'];
     $client_notes = sanitize($_POST['client_notes']);
+    $complexity_level = sanitize($_POST['complexity_level'] ?? 'Standard');
+    $requested_add_ons = $_POST['add_ons'] ?? [];
+    if (!is_array($requested_add_ons)) {
+        $requested_add_ons = [];
+    }
+    $rush_requested = ($_POST['rush_service'] ?? '') === '1';
     
     // Generate order number
     $order_number = 'ORD-' . date('Ymd') . '-' . strtoupper(substr(uniqid(), -6));
@@ -107,14 +146,46 @@ if(isset($_POST['place_order'])) {
             throw new RuntimeException('Selected shop is currently closed and cannot accept new orders.');
         }
 
+        $pricing_settings = resolve_pricing_settings($shop_policy, $default_pricing_settings);
+        $base_prices = $pricing_settings['base_prices'] ?? [];
+        $add_on_fees = $pricing_settings['add_ons'] ?? [];
+        $complexity_multipliers = $pricing_settings['complexity_multipliers'] ?? [];
+        $rush_fee_percent = (float) ($pricing_settings['rush_fee_percent'] ?? 0);
+
+        $base_price = (float) ($base_prices[$service_type] ?? ($base_prices['Custom'] ?? 0));
+        $selected_add_ons = array_values(array_intersect($requested_add_ons, array_keys($add_on_fees)));
+        $add_on_total = 0.0;
+        foreach ($selected_add_ons as $addon) {
+            $add_on_total += (float) ($add_on_fees[$addon] ?? 0);
+        }
+        $complexity_multiplier = (float) ($complexity_multipliers[$complexity_level] ?? 1);
+        $rush_multiplier = $rush_requested ? 1 + ($rush_fee_percent / 100) : 1;
+        $estimated_unit_price = ($base_price + $add_on_total) * $complexity_multiplier * $rush_multiplier;
+        $estimated_total = $estimated_unit_price * (int) $quantity;
+        $quote_details = [
+            'service_type' => $service_type,
+            'complexity' => $complexity_level,
+            'add_ons' => $selected_add_ons,
+            'rush' => $rush_requested,
+            'breakdown' => [
+                'base_price' => round($base_price, 2),
+                'add_on_total' => round($add_on_total, 2),
+                'complexity_multiplier' => round($complexity_multiplier, 2),
+                'rush_fee_percent' => $rush_requested ? round($rush_fee_percent, 2) : 0,
+            ],
+            'estimated_unit_price' => round($estimated_unit_price, 2),
+            'estimated_total' => round($estimated_total, 2),
+        ];
+        $quote_details_json = json_encode($quote_details);
+
         // Start transaction
         $pdo->beginTransaction();
         
         // Insert order
         $order_stmt = $pdo->prepare("
             INSERT INTO orders (order_number, client_id, shop_id, service_type, design_description, 
-                                quantity, price, client_notes, status) 
-            VALUES (?, ?, ?, ?, ?, ?, NULL, ?, 'pending')
+                                quantity, price, client_notes, quote_details, status) 
+            VALUES (?, ?, ?, ?, ?, ?, NULL, ?, ?, 'pending')
         ");
         
         $order_stmt->execute([
@@ -124,7 +195,8 @@ if(isset($_POST['place_order'])) {
             $service_type,
             $design_description,
             $quantity,
-            $client_notes
+            $client_notes,
+            $quote_details_json
         ]);
         
         $order_id = $pdo->lastInsertId();
@@ -284,6 +356,7 @@ if(isset($_POST['place_order'])) {
                     <?php foreach($shops as $shop): ?>
                     <div class="shop-card" onclick="selectShop(<?php echo $shop['id']; ?>)"
                          data-services="<?php echo htmlspecialchars(json_encode($shop['service_list']), ENT_QUOTES, 'UTF-8'); ?>"
+                         data-pricing="<?php echo htmlspecialchars(json_encode($shop['pricing_settings']), ENT_QUOTES, 'UTF-8'); ?>"
                          data-is-open="<?php echo $shop['is_open'] ? '1' : '0'; ?>"
                          id="shop-<?php echo $shop['id']; ?>">
                         <div class="d-flex align-center">
@@ -360,9 +433,46 @@ if(isset($_POST['place_order'])) {
                 </div>
             </div>
 
-            <!-- Step 3: Design Details -->
+            <!-- Step 3: Quote Preferences -->
             <div class="card mb-4">
-                <h3>Step 3: Design Details</h3>
+                <h3>Step 3: Quote Preferences</h3>
+                <p class="text-muted">Help the shop prepare a structured quote. Final pricing will be confirmed by the shop.</p>
+                <div class="row" style="display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 12px;">
+                    <div class="form-group">
+                        <label>Complexity Level</label>
+                        <select name="complexity_level" class="form-control" id="complexitySelect">
+                            <option value="Simple">Simple</option>
+                            <option value="Standard" selected>Standard</option>
+                            <option value="Complex">Complex</option>
+                        </select>
+                        <small class="text-muted" id="complexityHint">Select a shop to view multipliers.</small>
+                    </div>
+                    <div class="form-group">
+                        <label>Rush Service</label>
+                        <div class="d-flex align-center" style="gap: 8px;">
+                            <input type="checkbox" id="rushService" name="rush_service" value="1">
+                            <label for="rushService" class="mb-0">Request rush turnaround</label>
+                        </div>
+                        <small class="text-muted" id="rushHint">Select a shop to view rush fees.</small>
+                    </div>
+                </div>
+
+                <div class="form-group">
+                    <label>Optional Add-ons</label>
+                    <div id="addOnOptions" class="row" style="display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 10px;"></div>
+                    <small class="text-muted" id="addOnHint">Select a shop to see available add-ons and fees.</small>
+                </div>
+
+                <div class="alert alert-info mt-3">
+                    <strong>Estimated quote:</strong>
+                    <span id="quoteEstimate">Select a shop and service to see estimates.</span>
+                    <div class="text-muted small mt-2">Estimates are based on shop rules and quantity, and may change after review.</div>
+                </div>
+            </div>
+
+            <!-- Step 4: Design Details -->
+            <div class="card mb-4">
+                <h3>Step 4: Design Details</h3>
                 <div class="form-group">
                     <label>Design Description *</label>
                     <textarea name="design_description" class="form-control" rows="4" required
@@ -389,14 +499,15 @@ if(isset($_POST['place_order'])) {
                 </div>
             </div>
 
-            <!-- Step 4: Submit -->
+            <!-- Step 5: Submit -->
             <div class="card mb-4">
-                <h3>Step 4: Submit</h3>
+                <h3>Step 5: Submit</h3>
                 
                 <div class="alert alert-info mt-3">
                     <h6><i class="fas fa-info-circle"></i> Important Notes:</h6>
                     <ul class="mb-0">
                         <li>Shop owner will set the estimated price after reviewing your order</li>
+                        <li>The quote will follow the complexity, add-ons, and rush preferences you selected</li>
                         <li>You'll receive a confirmation email</li>
                         <li>Shop owner may contact you for clarifications</li>
                         <li>Payment details will be provided after order acceptance</li>
@@ -415,6 +526,102 @@ if(isset($_POST['place_order'])) {
     </div>
 
     <script>
+        const pricingState = {
+            base_prices: {},
+            add_ons: {},
+            complexity_multipliers: {},
+            rush_fee_percent: 0
+        };
+
+        function formatCurrency(value) {
+            return '₱' + Number(value || 0).toFixed(2);
+        }
+
+        function getSelectedService() {
+            const selected = document.querySelector('input[name="service_type"]:checked');
+            if (selected) {
+                return selected.value;
+            }
+            const custom = document.querySelector('input[name="custom_service"]');
+            return custom && custom.value.trim() ? custom.value.trim() : '';
+        }
+
+        function updateQuoteEstimate() {
+            const quoteEstimate = document.getElementById('quoteEstimate');
+            const service = getSelectedService();
+            const quantity = parseInt(document.querySelector('input[name="quantity"]').value || '0', 10);
+            if (!service || Object.keys(pricingState.base_prices).length === 0 || quantity <= 0) {
+                quoteEstimate.textContent = 'Select a shop and service to see estimates.';
+                return;
+            }
+
+            const basePrice = pricingState.base_prices[service] ?? pricingState.base_prices.Custom ?? 0;
+            const addOns = Array.from(document.querySelectorAll('input[name="add_ons[]"]:checked'))
+                .map((input) => input.value);
+            const addOnTotal = addOns.reduce((sum, addon) => sum + (pricingState.add_ons[addon] || 0), 0);
+            const complexity = document.getElementById('complexitySelect').value;
+            const complexityMultiplier = pricingState.complexity_multipliers[complexity] ?? 1;
+            const rushRequested = document.getElementById('rushService').checked;
+            const rushMultiplier = rushRequested ? 1 + (pricingState.rush_fee_percent / 100) : 1;
+
+            const unitEstimate = (Number(basePrice) + Number(addOnTotal)) * complexityMultiplier * rushMultiplier;
+            const totalEstimate = unitEstimate * quantity;
+
+            quoteEstimate.textContent = `${formatCurrency(unitEstimate)} per item • ${formatCurrency(totalEstimate)} total`;
+        }
+
+        function renderAddOns(addOns) {
+            const container = document.getElementById('addOnOptions');
+            container.innerHTML = '';
+            const entries = Object.entries(addOns);
+            if (!entries.length) {
+                container.innerHTML = '<span class="text-muted">No add-ons configured for this shop.</span>';
+                return;
+            }
+            entries.forEach(([name, fee]) => {
+                const wrapper = document.createElement('label');
+                wrapper.style.display = 'flex';
+                wrapper.style.alignItems = 'center';
+                wrapper.style.gap = '8px';
+                const input = document.createElement('input');
+                input.type = 'checkbox';
+                input.name = 'add_ons[]';
+                input.value = name;
+                input.addEventListener('change', updateQuoteEstimate);
+                const text = document.createElement('span');
+                text.textContent = `${name} (+${formatCurrency(fee)})`;
+                wrapper.appendChild(input);
+                wrapper.appendChild(text);
+                container.appendChild(wrapper);
+            });
+        }
+
+        function updateComplexityOptions(multipliers) {
+            const complexitySelect = document.getElementById('complexitySelect');
+            Array.from(complexitySelect.options).forEach(option => {
+                const multiplier = multipliers[option.value];
+                option.textContent = multiplier ? `${option.value} (x${Number(multiplier).toFixed(2)})` : option.value;
+            });
+        }
+
+        function setPricingState(pricing) {
+            pricingState.base_prices = pricing.base_prices || {};
+            pricingState.add_ons = pricing.add_ons || {};
+            pricingState.complexity_multipliers = pricing.complexity_multipliers || {};
+            pricingState.rush_fee_percent = Number(pricing.rush_fee_percent || 0);
+
+            renderAddOns(pricingState.add_ons);
+            updateComplexityOptions(pricingState.complexity_multipliers);
+
+            document.getElementById('complexityHint').textContent = 'Multipliers shown for this shop.';
+            document.getElementById('rushHint').textContent = pricingState.rush_fee_percent
+                ? `Rush fee: +${pricingState.rush_fee_percent}%`
+                : 'Rush service is not configured.';
+            document.getElementById('addOnHint').textContent = 'Add-ons pulled from shop pricing rules.';
+
+            updateQuoteEstimate();
+        }
+
         // Shop selection
         function selectShop(shopId) {
             // Remove selected class from all shops
@@ -456,6 +663,9 @@ if(isset($_POST['place_order'])) {
             customServiceHint.textContent = customAllowed
                 ? (isOpen ? 'Custom services are available for this shop.' : 'This shop is closed right now.')
                 : 'Custom services are not offered by this shop.';
+                
+            const pricing = JSON.parse(shopCard.dataset.pricing || '{}');
+            setPricingState(pricing);
         }
         
         // Service selection
@@ -474,11 +684,18 @@ if(isset($_POST['place_order'])) {
             
             // Update custom service field
             document.querySelector('input[name="custom_service"]').value = service;
+            updateQuoteEstimate();
         }
+
         document.querySelectorAll('.shop-card').forEach(card => {
             const services = card.dataset.services || '[]';
             card.dataset.services = services;
         });
+        
+        document.getElementById('complexitySelect').addEventListener('change', updateQuoteEstimate);
+        document.getElementById('rushService').addEventListener('change', updateQuoteEstimate);
+        document.querySelector('input[name="quantity"]').addEventListener('input', updateQuoteEstimate);
+        document.querySelector('input[name="custom_service"]').addEventListener('input', updateQuoteEstimate);
     </script>
 </body>
 </html>

@@ -42,6 +42,7 @@ if(!$order) {
     exit();
 }
 
+$quote_details = !empty($order['quote_details']) ? json_decode($order['quote_details'], true) : null;
 $payment_status = $order['payment_status'] ?? 'unpaid';
 $payment_class = 'payment-' . $payment_status;
 $design_file_name = $order['design_file'] ?? null;
@@ -195,6 +196,19 @@ $is_design_image = $design_file_name && in_array($design_file_extension, ALLOWED
                 <p><strong>Email:</strong> <?php echo htmlspecialchars($order['client_email']); ?></p>
                 <?php if(!empty($order['client_phone'])): ?>
                     <p><strong>Phone:</strong> <?php echo htmlspecialchars($order['client_phone']); ?></p>
+                <?php endif; ?>
+            </div>
+            <div class="detail-group">
+                <h4>Quote Request</h4>
+                <?php if($quote_details): ?>
+                    <p><strong>Complexity:</strong> <?php echo htmlspecialchars($quote_details['complexity'] ?? 'Standard'); ?></p>
+                    <p><strong>Add-ons:</strong> <?php echo htmlspecialchars(!empty($quote_details['add_ons']) ? implode(', ', $quote_details['add_ons']) : 'None'); ?></p>
+                    <p><strong>Rush:</strong> <?php echo !empty($quote_details['rush']) ? 'Yes' : 'No'; ?></p>
+                    <?php if(isset($quote_details['estimated_total'])): ?>
+                        <p><strong>Estimated total:</strong> ₱<?php echo number_format((float) $quote_details['estimated_total'], 2); ?></p>
+                    <?php endif; ?>
+                <?php else: ?>
+                    <p class="text-muted">No quote preferences submitted.</p>
                 <?php endif; ?>
             </div>
         </div>

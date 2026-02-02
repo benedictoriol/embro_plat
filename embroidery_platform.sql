@@ -373,6 +373,7 @@ CREATE TABLE `orders` (
   `quantity` int(11) DEFAULT 1,
   `price` decimal(10,2) DEFAULT NULL,
   `client_notes` text DEFAULT NULL,
+  `quote_details` longtext CHARACTER SET utf8mb4 COLLATE utf8mb4_bin DEFAULT NULL CHECK (json_valid(`quote_details`)),
   `status` enum('pending','accepted','in_progress','completed','cancelled') DEFAULT 'pending',
   `assigned_to` int(11) DEFAULT NULL,
   `progress` int(11) DEFAULT 0,
@@ -400,17 +401,17 @@ CREATE TABLE `orders` (
 -- Dumping data for table `orders`
 --
 
-INSERT INTO `orders` (`id`, `order_number`, `client_id`, `shop_id`, `service_type`, `design_description`, `quantity`, `price`, `client_notes`, `status`, `assigned_to`, `progress`, `scheduled_date`, `shop_notes`, `design_file`, `design_approved`, `rating`, `payment_status`, `payment_verified_at`, `rating_title`, `rating_comment`, `rating_submitted_at`, `revision_count`, `revision_notes`, `revision_requested_at`, `cancellation_reason`, `cancelled_at`, `completed_at`, `created_at`, `updated_at`) VALUES
-(1, 'ORD-20260122-ABC123', 3, 1, 'Custom Logo Embroidery', 'Logo for company uniforms', 50, 2500.00, 'Please match our brand colors.', 'in_progress', NULL, 75, '2026-01-28', NULL, NULL, 0, NULL, 'unpaid', NULL, NULL, NULL, NULL, 0, NULL, NULL, NULL, NULL, NULL, '2026-01-22 12:31:55', '2026-01-22 12:31:55'),
-(2, 'ORD-20260122-DEF456', 3, 1, 'Name Patch Embroidery', 'Name patches for employees', 25, 1200.00, 'Include last names only.', 'completed', NULL, 100, '2026-01-27', 'Completed successfully.', NULL, 0, 5, 'unpaid', NULL, 'Clean finish', 'Great quality, stitches are consistent.', '2026-01-28 10:05:00', 0, NULL, NULL, NULL, NULL, '2026-01-28 10:00:00', '2026-01-22 12:31:55', '2026-01-22 12:31:55'),
-(3, 'ORD-20260122-GHI789', 3, 1, 'Custom Logo Embroidery', 'Cap embroidery', 30, 900.00, NULL, 'accepted', NULL, 20, '2026-01-29', NULL, NULL, 0, NULL, 'unpaid', NULL, NULL, NULL, NULL, 0, NULL, NULL, NULL, NULL, NULL, '2026-01-22 12:35:37', '2026-01-22 12:35:37'),
-(4, 'ORD-20260122-JKL012', 3, 1, 'Name Patch Embroidery', 'Uniform patches', 10, 300.00, NULL, 'completed', NULL, 100, '2026-01-26', 'Delivered to client.', NULL, 0, 4, 'unpaid', NULL, 'Quick turnaround', 'Fast delivery and accurate sizing.', '2026-01-27 10:00:00', 0, NULL, NULL, NULL, NULL, '2026-01-27 09:30:00', '2026-01-22 12:35:37', '2026-01-22 12:35:37'),
-(5, 'ORD-20260122-MNO345', 3, 1, 'Uniform Design', 'Seasonal uniform design', 15, 1500.00, 'Need before end of month.', 'pending', NULL, 0, '2026-02-02', NULL, NULL, 0, NULL, 'unpaid', NULL, NULL, NULL, NULL, 0, NULL, NULL, NULL, NULL, NULL, '2026-01-22 12:35:37', '2026-01-22 12:35:37'),
-(6, 'ORD-20260130-B540E6', 12, 2, 'T-shirt Embroidery', 'add', 1, 290.00, 'adad', 'completed', 13, 17, NULL, '\n', '6_download.png', 0, NULL, 'unpaid', NULL, NULL, NULL, NULL, 0, NULL, NULL, NULL, NULL, '2026-01-30 21:19:46', '2026-01-30 13:19:07', '2026-01-30 13:19:46'),
-(7, 'ORD-20260130-74686B', 12, 2, 'Logo Embroidery', 'adad', 1, 200.00, 'adad', 'completed', 13, 50, NULL, '\nmalapit na po\n\n\n', '7_download.png', 0, NULL, 'unpaid', NULL, NULL, NULL, NULL, 0, NULL, NULL, NULL, NULL, '2026-01-30 21:39:33', '2026-01-30 13:20:39', '2026-01-30 13:39:33'),
-(8, 'ORD-20260130-5960D2', 15, 2, 'Bag Embroidery', 'adad', 1, 123.00, '', 'completed', 13, 35, NULL, '\n\n\n', '8_download.png', 0, 5, 'unpaid', NULL, '', '', '2026-01-30 21:53:11', 0, NULL, NULL, NULL, NULL, '2026-01-30 21:52:54', '2026-01-30 13:48:37', '2026-01-30 13:53:11'),
-(9, 'ORD-20260131-E9DC0B', 15, 2, 'T-shirt Embroidery', 'malupet', 2, NULL, '', 'in_progress', 13, 50, NULL, '\n\n\n\n', NULL, 0, NULL, 'unpaid', NULL, NULL, NULL, NULL, 0, NULL, NULL, NULL, NULL, '2026-01-31 09:32:39', '2026-01-31 01:31:26', '2026-01-31 01:32:43'),
-(10, 'ORD-20260131-B29BA3', 16, 3, 'T-shirt Embroidery', 'master kim', 1, NULL, 'master ko si kim', 'cancelled', NULL, 0, NULL, NULL, '10_download.png', 0, NULL, 'unpaid', NULL, NULL, NULL, NULL, 0, NULL, NULL, '', '2026-01-31 14:02:25', NULL, '2026-01-31 06:00:59', '2026-01-31 06:02:25');
+INSERT INTO `orders` (`id`, `order_number`, `client_id`, `shop_id`, `service_type`, `design_description`, `quantity`, `price`, `client_notes`, `quote_details`, `status`, `assigned_to`, `progress`, `scheduled_date`, `shop_notes`, `design_file`, `design_approved`, `rating`, `payment_status`, `payment_verified_at`, `rating_title`, `rating_comment`, `rating_submitted_at`, `revision_count`, `revision_notes`, `revision_requested_at`, `cancellation_reason`, `cancelled_at`, `completed_at`, `created_at`, `updated_at`) VALUES
+(1, 'ORD-20260122-ABC123', 3, 1, 'Custom Logo Embroidery', 'Logo for company uniforms', 50, 2500.00, 'Please match our brand colors.', NULL, 'in_progress', NULL, 75, '2026-01-28', NULL, NULL, 0, NULL, 'unpaid', NULL, NULL, NULL, NULL, 0, NULL, NULL, NULL, NULL, NULL, '2026-01-22 12:31:55', '2026-01-22 12:31:55'),
+(2, 'ORD-20260122-DEF456', 3, 1, 'Name Patch Embroidery', 'Name patches for employees', 25, 1200.00, 'Include last names only.', NULL, 'completed', NULL, 100, '2026-01-27', 'Completed successfully.', NULL, 0, 5, 'unpaid', NULL, 'Clean finish', 'Great quality, stitches are consistent.', '2026-01-28 10:05:00', 0, NULL, NULL, NULL, NULL, '2026-01-28 10:00:00', '2026-01-22 12:31:55', '2026-01-22 12:31:55'),
+(3, 'ORD-20260122-GHI789', 3, 1, 'Custom Logo Embroidery', 'Cap embroidery', 30, 900.00, NULL, NULL, 'accepted', NULL, 20, '2026-01-29', NULL, NULL, 0, NULL, 'unpaid', NULL, NULL, NULL, NULL, 0, NULL, NULL, NULL, NULL, NULL, '2026-01-22 12:35:37', '2026-01-22 12:35:37'),
+(4, 'ORD-20260122-JKL012', 3, 1, 'Name Patch Embroidery', 'Uniform patches', 10, 300.00, NULL, NULL, 'completed', NULL, 100, '2026-01-26', 'Delivered to client.', NULL, 0, 4, 'unpaid', NULL, 'Quick turnaround', 'Fast delivery and accurate sizing.', '2026-01-27 10:00:00', 0, NULL, NULL, NULL, NULL, '2026-01-27 09:30:00', '2026-01-22 12:35:37', '2026-01-22 12:35:37'),
+(5, 'ORD-20260122-MNO345', 3, 1, 'Uniform Design', 'Seasonal uniform design', 15, 1500.00, 'Need before end of month.', NULL, 'pending', NULL, 0, '2026-02-02', NULL, NULL, 0, NULL, 'unpaid', NULL, NULL, NULL, NULL, 0, NULL, NULL, NULL, NULL, NULL, '2026-01-22 12:35:37', '2026-01-22 12:35:37'),
+(6, 'ORD-20260130-B540E6', 12, 2, 'T-shirt Embroidery', 'add', 1, 290.00, 'adad', NULL, 'completed', 13, 17, NULL, '\n', '6_download.png', 0, NULL, 'unpaid', NULL, NULL, NULL, NULL, 0, NULL, NULL, NULL, NULL, '2026-01-30 21:19:46', '2026-01-30 13:19:07', '2026-01-30 13:19:46'),
+(7, 'ORD-20260130-74686B', 12, 2, 'Logo Embroidery', 'adad', 1, 200.00, 'adad', NULL, 'completed', 13, 50, NULL, '\nmalapit na po\n\n\n', '7_download.png', 0, NULL, 'unpaid', NULL, NULL, NULL, NULL, 0, NULL, NULL, NULL, NULL, '2026-01-30 21:39:33', '2026-01-30 13:20:39', '2026-01-30 13:39:33'),
+(8, 'ORD-20260130-5960D2', 15, 2, 'Bag Embroidery', 'adad', 1, 123.00, '', NULL, 'completed', 13, 35, NULL, '\n\n\n', '8_download.png', 0, 5, 'unpaid', NULL, '', '', '2026-01-30 21:53:11', 0, NULL, NULL, NULL, NULL, '2026-01-30 21:52:54', '2026-01-30 13:48:37', '2026-01-30 13:53:11'),
+(9, 'ORD-20260131-E9DC0B', 15, 2, 'T-shirt Embroidery', 'malupet', 2, NULL, '', NULL, 'in_progress', 13, 50, NULL, '\n\n\n\n', NULL, 0, NULL, 'unpaid', NULL, NULL, NULL, NULL, 0, NULL, NULL, NULL, NULL, '2026-01-31 09:32:39', '2026-01-31 01:31:26', '2026-01-31 01:32:43'),
+(10, 'ORD-20260131-B29BA3', 16, 3, 'T-shirt Embroidery', 'master kim', 1, NULL, 'master ko si kim', NULL, 'cancelled', NULL, 0, NULL, NULL, '10_download.png', 0, NULL, 'unpaid', NULL, NULL, NULL, NULL, 0, NULL, NULL, '', '2026-01-31 14:02:25', NULL, '2026-01-31 06:00:59', '2026-01-31 06:02:25');
 
 -- --------------------------------------------------------
 
@@ -625,6 +626,7 @@ CREATE TABLE `shops` (
   `closing_time` time DEFAULT NULL,
   `operating_days` longtext CHARACTER SET utf8mb4 COLLATE utf8mb4_bin DEFAULT NULL CHECK (json_valid(`operating_days`)),
   `service_settings` longtext CHARACTER SET utf8mb4 COLLATE utf8mb4_bin DEFAULT NULL CHECK (json_valid(`service_settings`)),
+  `pricing_settings` longtext CHARACTER SET utf8mb4 COLLATE utf8mb4_bin DEFAULT NULL CHECK (json_valid(`pricing_settings`)),
   `status` enum('pending','active','suspended','rejected') DEFAULT 'pending',
   `rejection_reason` text DEFAULT NULL,
   `rejected_at` timestamp NULL DEFAULT NULL,
@@ -639,10 +641,10 @@ CREATE TABLE `shops` (
 -- Dumping data for table `shops`
 --
 
-INSERT INTO `shops` (`id`, `owner_id`, `shop_name`, `shop_description`, `address`, `phone`, `email`, `business_permit`, `permit_file`, `logo`, `opening_time`, `closing_time`, `operating_days`, `service_settings`, `status`, `rejection_reason`, `rejected_at`, `rating`, `total_orders`, `total_earnings`, `created_at`, `updated_at`) VALUES
-(1, 5, 'Thread & Needle Studio', 'Custom embroidery and uniform design services.', '123 Market Street', '09171234567', 'owner@embroidery.com', NULL, NULL, NULL, '08:00:00', '18:00:00', '[1,2,3,4,5,6]', '[\"T-shirt Embroidery\",\"Logo Embroidery\",\"Cap Embroidery\",\"Bag Embroidery\",\"Custom\"]', 'active', NULL, NULL, 4.50, 5, 6400.00, '2026-01-22 12:20:00', '2026-01-22 12:20:00'),
-(2, 14, 'Ailly Mae Ramil\'s Shop', NULL, NULL, NULL, NULL, NULL, NULL, NULL, '09:00:00', '17:00:00', '[1,2,3,4,5]', '[\"T-shirt Embroidery\",\"Logo Embroidery\",\"Custom\"]', 'active', NULL, NULL, 5.00, 4, 0.00, '2026-01-30 13:17:57', '2026-01-31 01:31:26'),
-(3, 17, 'sean\'s Shop', NULL, NULL, NULL, NULL, NULL, NULL, NULL, '10:00:00', '19:00:00', '[2,3,4,5,6]', '[\"Cap Embroidery\",\"Bag Embroidery\",\"Custom\"]', 'active', NULL, NULL, 0.00, 1, 0.00, '2026-01-31 05:59:47', '2026-01-31 06:00:59');
+INSERT INTO `shops` (`id`, `owner_id`, `shop_name`, `shop_description`, `address`, `phone`, `email`, `business_permit`, `permit_file`, `logo`, `opening_time`, `closing_time`, `operating_days`, `service_settings`, `pricing_settings`, `status`, `rejection_reason`, `rejected_at`, `rating`, `total_orders`, `total_earnings`, `created_at`, `updated_at`) VALUES
+(1, 5, 'Thread & Needle Studio', 'Custom embroidery and uniform design services.', '123 Market Street', '09171234567', 'owner@embroidery.com', NULL, NULL, NULL, '08:00:00', '18:00:00', '[1,2,3,4,5,6]', '[\"T-shirt Embroidery\",\"Logo Embroidery\",\"Cap Embroidery\",\"Bag Embroidery\",\"Custom\"]', '{\"base_prices\":{\"T-shirt Embroidery\":180,\"Logo Embroidery\":160,\"Cap Embroidery\":150,\"Bag Embroidery\":200,\"Custom\":200},\"complexity_multipliers\":{\"Simple\":1,\"Standard\":1.15,\"Complex\":1.35},\"rush_fee_percent\":25,\"add_ons\":{\"Metallic Thread\":50,\"3D Puff\":75,\"Extra Color\":25,\"Applique\":60}}', 'active', NULL, NULL, 4.50, 5, 6400.00, '2026-01-22 12:20:00', '2026-01-22 12:20:00'),
+(2, 14, 'Ailly Mae Ramil\'s Shop', NULL, NULL, NULL, NULL, NULL, NULL, NULL, '09:00:00', '17:00:00', '[1,2,3,4,5]', '[\"T-shirt Embroidery\",\"Logo Embroidery\",\"Custom\"]', '{\"base_prices\":{\"T-shirt Embroidery\":170,\"Logo Embroidery\":150,\"Cap Embroidery\":140,\"Bag Embroidery\":190,\"Custom\":190},\"complexity_multipliers\":{\"Simple\":1,\"Standard\":1.15,\"Complex\":1.35},\"rush_fee_percent\":20,\"add_ons\":{\"Metallic Thread\":45,\"3D Puff\":70,\"Extra Color\":20,\"Applique\":55}}', 'active', NULL, NULL, 5.00, 4, 0.00, '2026-01-30 13:17:57', '2026-01-31 01:31:26'),
+(3, 17, 'sean\'s Shop', NULL, NULL, NULL, NULL, NULL, NULL, NULL, '10:00:00', '19:00:00', '[2,3,4,5,6]', '[\"Cap Embroidery\",\"Bag Embroidery\",\"Custom\"]', '{\"base_prices\":{\"T-shirt Embroidery\":160,\"Logo Embroidery\":140,\"Cap Embroidery\":130,\"Bag Embroidery\":180,\"Custom\":180},\"complexity_multipliers\":{\"Simple\":1,\"Standard\":1.1,\"Complex\":1.3},\"rush_fee_percent\":15,\"add_ons\":{\"Metallic Thread\":40,\"3D Puff\":60,\"Extra Color\":15,\"Applique\":50}}', 'active', NULL, NULL, 0.00, 1, 0.00, '2026-01-31 05:59:47', '2026-01-31 06:00:59');
 
 -- --------------------------------------------------------
 
