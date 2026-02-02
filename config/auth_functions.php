@@ -9,12 +9,20 @@ function is_logged_in() {
     return isset($_SESSION['user']);
 }
 
+function is_active_user(): bool {
+    return isset($_SESSION['user']) && ($_SESSION['user']['status'] ?? null) === 'active';
+}
+
 /**
  *
  * @param string $required_role Role required to access the page
  */
 function check_role($required_role) {
     if (!isset($_SESSION['user'])) {
+        return false;
+    }
+
+    if (!is_active_user()) {
         return false;
     }
 
@@ -28,6 +36,10 @@ function check_role($required_role) {
  */
 function require_role($required_role) {
     if (!check_role($required_role)) {
+        if (isset($_SESSION['user']) && !is_active_user()) {
+            session_unset();
+            session_destroy();
+        }
         header("Location: ../auth/login.php");
         exit();
     }

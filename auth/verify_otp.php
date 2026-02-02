@@ -6,12 +6,36 @@ $message = '';
 $error = '';
 
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
-    $otp = sanitize($_POST['otp']);
+    $email = sanitize($_POST['email'] ?? '');
+    $otp = sanitize($_POST['otp'] ?? '');
 
-    if (empty($otp)) {
-        $error = 'Please enter the verification code.';
+    if (empty($email) || empty($otp)) {
+        $error = 'Please enter your email and verification code.';
     } else {
-        $message = 'Verification successful. You may now reset your password.';
+        $otpStmt = $pdo->prepare("
+            SELECT id, user_id, expires_at
+            FROM otp_verifications
+            WHERE email = ? AND otp_code = ? AND type = 'reset' AND verified = 0
+            ORDER BY created_at DESC
+            LIMIT 1
+        ");
+        $otpStmt->execute([$email, $otp]);
+        $record = $otpStmt->fetch();
+
+        if (!$record) {
+            $error = 'Invalid verification code. Please try again.';
+        } elseif (strtotime($record['expires_at']) < time()) {
+            $error = 'This verification code has expired. Please request a new one.';
+        } else {
+            $verifyStmt = $pdo->prepare("UPDATE otp_verifications SET verified = 1 WHERE id = ?");
+            $verifyStmt->execute([$record['id']]);
+
+            $_SESSION['password_reset_user_id'] = (int) $record['user_id'];
+            $_SESSION['password_reset_email'] = $email;
+
+            header('Location: reset_password.php');
+            exit();
+        }
     }
 }
 ?>
@@ -47,6 +71,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             </div>
         <?php else: ?>
             <form method="POST">
+                <div class="form-group">
+                    <label>Email Address *</label>
+                    <input type="email" name="email" class="form-control" required placeholder="Enter your email">
+                </div>
                 <div class="form-group">
                     <label>Verification Code *</label>
                     <input type="text" name="otp" class="form-control" required placeholder="Enter code">

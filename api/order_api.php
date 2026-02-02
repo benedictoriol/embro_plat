@@ -4,7 +4,7 @@ require_once '../config/db.php';
 
 header('Content-Type: application/json');
 
-if (!isset($_SESSION['user'])) {
+if (!is_active_user()) {
     http_response_code(401);
     echo json_encode(['error' => 'Unauthorized']);
     exit();
@@ -48,15 +48,22 @@ try {
         $orders_stmt->execute([$user['id']]);
         $orders = $orders_stmt->fetchAll();
     } elseif ($user['role'] === 'employee') {
+        $permissions = fetch_employee_permissions($pdo, (int) $user['id']);
+        if (empty($permissions['view_jobs'])) {
+            http_response_code(403);
+            echo json_encode(['error' => 'Permission denied']);
+            exit();
+        }
         $orders_stmt = $pdo->prepare("
             SELECT o.*, u.fullname as client_name, s.shop_name
             FROM orders o
             JOIN users u ON o.client_id = u.id
             JOIN shops s ON o.shop_id = s.id
-            WHERE o.assigned_to = ?
+            LEFT JOIN job_schedule js ON js.order_id = o.id AND js.employee_id = ?
+            WHERE (o.assigned_to = ? OR js.employee_id = ?)
             ORDER BY o.scheduled_date ASC, o.created_at DESC
         ");
-        $orders_stmt->execute([$user['id']]);
+        $orders_stmt->execute([$user['id'], $user['id'], $user['id']]);
         $orders = $orders_stmt->fetchAll();
     } else {
         http_response_code(403);

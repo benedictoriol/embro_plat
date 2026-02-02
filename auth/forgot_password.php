@@ -4,6 +4,7 @@ require_once '../config/db.php';
 
 $message = '';
 $error = '';
+$show_verify_link = false;
 
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $email = sanitize($_POST['email']);
@@ -11,7 +12,29 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     if (empty($email)) {
         $error = 'Please enter your email address.';
     } else {
-        $message = 'If an account exists for that email, a reset link has been sent.';
+        $userStmt = $pdo->prepare("SELECT id, email FROM users WHERE email = ?");
+        $userStmt->execute([$email]);
+        $user = $userStmt->fetch();
+
+        if ($user) {
+            $otpCode = (string) random_int(100000, 999999);
+            $expiresAt = (new DateTime('+10 minutes'))->format('Y-m-d H:i:s');
+
+            $cleanupStmt = $pdo->prepare("
+                DELETE FROM otp_verifications
+                WHERE email = ? AND type = 'reset' AND verified = 0
+            ");
+            $cleanupStmt->execute([$user['email']]);
+
+            $otpStmt = $pdo->prepare("
+                INSERT INTO otp_verifications (user_id, email, otp_code, type, expires_at, verified)
+                VALUES (?, ?, ?, 'reset', ?, 0)
+            ");
+            $otpStmt->execute([$user['id'], $user['email'], $otpCode, $expiresAt]);
+        }
+
+        $show_verify_link = true;
+        $message = 'If an account exists for that email, a reset code has been sent. Please enter the code to continue.';
     }
 }
 ?>
@@ -43,7 +66,12 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         <?php if ($message): ?>
             <div class="alert alert-success">
                 <i class="fas fa-check-circle"></i> <?php echo $message; ?>
-                <p class="mt-2"><a href="login.php" class="btn btn-sm btn-primary">Return to Login</a></p>
+                <div class="d-flex gap-2 mt-2">
+                    <?php if ($show_verify_link): ?>
+                        <a href="verify_otp.php" class="btn btn-sm btn-primary">Verify Code</a>
+                    <?php endif; ?>
+                    <a href="login.php" class="btn btn-sm btn-outline-primary">Return to Login</a>
+                </div>
             </div>
         <?php else: ?>
             <form method="POST">

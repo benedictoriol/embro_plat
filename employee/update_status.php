@@ -66,12 +66,11 @@ if(!empty($jobs)) {
 
 // Update status
 if(isset($_POST['update_status'])) {
-    $order_id = (int) $_POST['order_id'];
-    $progress = (int) $_POST['progress'];
-    $status = $_POST['status'];
-    $employee_notes = sanitize($_POST['employee_notes']);
-    
-    
+    $order_id = (int) ($_POST['order_id'] ?? 0);
+    $progress = (int) ($_POST['progress'] ?? 0);
+    $status = $_POST['status'] ?? '';
+    $employee_notes = sanitize($_POST['employee_notes'] ?? '');
+
     $photo_check_stmt = $pdo->prepare("
         SELECT COUNT(*)
         FROM order_photos
@@ -81,11 +80,14 @@ if(isset($_POST['update_status'])) {
     $photo_count = (int) $photo_check_stmt->fetchColumn();
 
     $order_info_stmt = $pdo->prepare("
-        SELECT status, client_id, order_number
-        FROM orders
-        WHERE id = ? AND assigned_to = ?
+        SELECT o.status, o.progress, o.order_number, o.client_id, s.shop_name, s.owner_id
+        FROM orders o
+        JOIN shops s ON o.shop_id = s.id
+        LEFT JOIN job_schedule js ON js.order_id = o.id AND js.employee_id = ?
+        WHERE o.id = ? AND (o.assigned_to = ? OR js.employee_id = ?)
+        LIMIT 1
     ");
-    $order_info_stmt->execute([$order_id, $employee_id]);
+    $order_info_stmt->execute([$employee_id, $order_id, $employee_id, $employee_id]);
     $order_info = $order_info_stmt->fetch();
 
     if(!$order_info) {
@@ -93,66 +95,35 @@ if(isset($_POST['update_status'])) {
         } elseif($photo_count === 0) {
         $error = "Please upload a progress photo before updating the status.";
     } else {
-
-       $order_id = (int) $_POST['order_id'];
-        $progress = (int) $_POST['progress'];
-        $status = $_POST['status'];
-        $employee_notes = sanitize($_POST['employee_notes'] ?? '');
-
-        $order_info_stmt = $pdo->prepare("
-            SELECT status, client_id, order_number
-            FROM orders
-            WHERE id = ? AND assigned_to = ?
-        ");
-        $order_info_stmt->execute([$order_id, $employee_id]);
-                $order_info = $order_info_stmt->fetch();
-
-        if(!$order_info) {
-            $error = "Unable to update this order.";
-            } elseif($photo_count === 0) {
-            $error = "Please upload a progress photo before updating the status.";
-        } else {
-            try {
-                $order_info_stmt = $pdo->prepare("
-
-            SELECT o.status, o.order_number, o.client_id, s.shop_name, s.owner_id
-            FROM orders o
-            JOIN shops s ON o.shop_id = s.id
-            WHERE o.id = ? AND o.assigned_to = ?
-        ");
-        $order_info_stmt->execute([$order_id, $employee_id]);
-        $order_info = $order_info_stmt->fetch();
-
+        try {
             $update_stmt = $pdo->prepare("
                 UPDATE orders 
                 SET progress = ?, status = ?, shop_notes = CONCAT(COALESCE(shop_notes, ''), '\n', ?), 
                     updated_at = NOW() 
-                WHERE id = ? AND assigned_to = ?
+                WHERE id = ? AND (assigned_to = ? OR EXISTS (
+                    SELECT 1 FROM job_schedule js WHERE js.order_id = orders.id AND js.employee_id = ?
+                ))
             ");
-            
-            $update_stmt->execute([$progress, $status, $employee_notes, $order_id, $employee_id]);
-            
-            // If completed, set completed_at
-            if($status == 'completed') {
+            $update_stmt->execute([$progress, $status, $employee_notes, $order_id, $employee_id, $employee_id]);
+
+            if($status === 'completed') {
                 $complete_stmt = $pdo->prepare("UPDATE orders SET completed_at = NOW() WHERE id = ?");
                 $complete_stmt->execute([$order_id]);
             }
 
             
         if($order_info && $order_info['status'] !== $status) {
-            $message = sprintf(
-                'Order #%s status updated to %s by %s.',
-                $order_info['order_number'],
-                str_replace('_', ' ', $status),
-                $order_info['shop_name']
-            );
-            create_notification($pdo, (int) $order_info['client_id'], (int) $order_id, 'order_status', $message);
-            if(!empty($order_info['owner_id'])) {
-                create_notification($pdo, (int) $order_info['owner_id'], (int) $order_id, 'order_status', $message);
-            }
-        }
+                $message = sprintf(
+                    'Order #%s status updated to %s by %s.',
+                    $order_info['order_number'],
+                    str_replace('_', ' ', $status),
+                    $order_info['shop_name']
+                );
+                create_notification($pdo, (int) $order_info['client_id'], (int) $order_id, 'order_status', $message);
+                if(!empty($order_info['owner_id'])) {
+                    create_notification($pdo, (int) $order_info['owner_id'], (int) $order_id, 'order_status', $message);
+                }
 
-            if($status !== $order_info['status']) {
                 $status_label = ucfirst(str_replace('_', ' ', $status));
                 $notification_type = $status === 'completed' ? 'success' : 'info';
                 create_notification(
@@ -166,29 +137,26 @@ if(isset($_POST['update_status'])) {
             
 
            $success = "Status updated successfully!";
-            } catch(PDOException $e) {
-                $error = "Failed to update status: " . $e->getMessage();
+        } catch(PDOException $e) {
+            $error = "Failed to update status: " . $e->getMessage();
 
                 log_audit(
-                    $pdo,
-                    $employee_id,
-                    $employee_role,
-                    'update_order_status',
-                    'orders',
-                    (int) $order_id,
-                    [
-                        'status' => $current_order['status'] ?? null,
-                        'progress' => $current_order['progress'] ?? null,
-                    ],
-                    [
-                        'status' => $status,
-                        'progress' => (int) $progress,
-                    ]
-                );
-            }
+                $pdo,
+                $employee_id,
+                $employee_role,
+                'update_order_status',
+                'orders',
+                (int) $order_id,
+                [
+                    'status' => $order_info['status'] ?? null,
+                    'progress' => $order_info['progress'] ?? null,
+                ],
+                [
+                    'status' => $status,
+                    'progress' => (int) $progress,
+                ]
+            );
         }
-
-
     }
 }
 ?>
