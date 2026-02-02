@@ -22,7 +22,7 @@ if(!$shop) {
 }
 
 $order_stmt = $pdo->prepare("
-    SELECT o.status, o.order_number, o.client_id, o.cancellation_reason, s.shop_name
+    SELECT o.status, o.order_number, o.client_id, o.cancellation_reason, o.payment_status, o.price, s.shop_name
     FROM orders o
     JOIN shops s ON o.shop_id = s.id
     WHERE o.id = ? AND o.shop_id = ?
@@ -79,6 +79,48 @@ create_notification(
             ['status' => $order['status'] ?? null, 'cancellation_reason' => $order['cancellation_reason'] ?? null],
             ['status' => 'cancelled', 'cancellation_reason' => $rejection_reason]
         );
+
+        if(($order['payment_status'] ?? 'unpaid') === 'paid') {
+            $payment_stmt = $pdo->prepare("
+                SELECT id, amount FROM payments
+                WHERE order_id = ? AND status = 'verified'
+                ORDER BY created_at DESC
+                LIMIT 1
+            ");
+            $payment_stmt->execute([$order_id]);
+            $payment = $payment_stmt->fetch();
+
+            $refund_insert = $pdo->prepare("
+                INSERT INTO payment_refunds (order_id, payment_id, amount, reason, requested_by, status, requested_at)
+                VALUES (?, ?, ?, ?, ?, 'pending', NOW())
+            ");
+            $refund_insert->execute([
+                $order_id,
+                $payment['id'] ?? null,
+                (float) ($payment['amount'] ?? $order['price'] ?? 0),
+                $rejection_reason,
+                $owner_id
+            ]);
+
+            $refund_order_stmt = $pdo->prepare("
+                UPDATE orders SET payment_status = 'refund_pending', updated_at = NOW()
+                WHERE id = ? AND shop_id = ?
+            ");
+            $refund_order_stmt->execute([$order_id, $shop['id']]);
+
+            if($order['price'] !== null) {
+                $invoice_status = determine_invoice_status(STATUS_CANCELLED, 'refund_pending');
+                ensure_order_invoice($pdo, $order_id, $order['order_number'], (float) $order['price'], $invoice_status);
+            }
+
+            create_notification(
+                $pdo,
+                (int) $order['client_id'],
+                $order_id,
+                'payment',
+                'Refund pending for order #' . $order['order_number'] . ' after cancellation.'
+            );
+        }
 
         header("Location: shop_orders.php?filter=cancelled&action=rejected");
         exit();

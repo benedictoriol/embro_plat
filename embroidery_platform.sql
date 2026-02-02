@@ -382,7 +382,7 @@ CREATE TABLE `orders` (
   `design_file` varchar(255) DEFAULT NULL,
   `design_approved` tinyint(1) DEFAULT 0,
   `rating` tinyint(1) DEFAULT NULL,
-  `payment_status` enum('unpaid','pending','paid','rejected') DEFAULT 'unpaid',
+  `payment_status` enum('unpaid','pending','paid','rejected','refund_pending','refunded') DEFAULT 'unpaid',
   `payment_verified_at` datetime DEFAULT NULL,
   `rating_title` varchar(150) DEFAULT NULL,
   `rating_comment` text DEFAULT NULL,
@@ -486,6 +486,57 @@ CREATE TABLE `payments` (
   `verified_at` datetime DEFAULT NULL,
   `created_at` timestamp NOT NULL DEFAULT current_timestamp(),
   `updated_at` timestamp NOT NULL DEFAULT current_timestamp() ON UPDATE current_timestamp()
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
+
+-- --------------------------------------------------------
+
+--
+-- Table structure for table `order_invoices`
+--
+
+CREATE TABLE `order_invoices` (
+  `id` int(11) NOT NULL,
+  `order_id` int(11) NOT NULL,
+  `invoice_number` varchar(50) NOT NULL,
+  `amount` decimal(10,2) NOT NULL,
+  `status` enum('open','paid','cancelled','refunded') DEFAULT 'open',
+  `issued_at` datetime NOT NULL,
+  `updated_at` timestamp NOT NULL DEFAULT current_timestamp() ON UPDATE current_timestamp()
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
+
+-- --------------------------------------------------------
+
+--
+-- Table structure for table `payment_receipts`
+--
+
+CREATE TABLE `payment_receipts` (
+  `id` int(11) NOT NULL,
+  `payment_id` int(11) NOT NULL,
+  `receipt_number` varchar(50) NOT NULL,
+  `issued_by` int(11) NOT NULL,
+  `issued_at` datetime NOT NULL,
+  `created_at` timestamp NOT NULL DEFAULT current_timestamp()
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
+
+-- --------------------------------------------------------
+
+--
+-- Table structure for table `payment_refunds`
+--
+
+CREATE TABLE `payment_refunds` (
+  `id` int(11) NOT NULL,
+  `order_id` int(11) NOT NULL,
+  `payment_id` int(11) DEFAULT NULL,
+  `amount` decimal(10,2) NOT NULL,
+  `reason` text DEFAULT NULL,
+  `requested_by` int(11) DEFAULT NULL,
+  `refunded_by` int(11) DEFAULT NULL,
+  `status` enum('pending','refunded') DEFAULT 'pending',
+  `requested_at` datetime NOT NULL,
+  `refunded_at` datetime DEFAULT NULL,
+  `created_at` timestamp NOT NULL DEFAULT current_timestamp()
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
 
 -- --------------------------------------------------------
@@ -841,6 +892,14 @@ ALTER TABLE `orders`
   ADD KEY `assigned_to` (`assigned_to`);
 
 --
+-- Indexes for table `order_invoices`
+--
+ALTER TABLE `order_invoices`
+  ADD PRIMARY KEY (`id`),
+  ADD UNIQUE KEY `invoice_number` (`invoice_number`),
+  ADD KEY `order_id` (`order_id`);
+
+--
 -- Indexes for table `order_photos`
 --
 ALTER TABLE `order_photos`
@@ -862,6 +921,34 @@ ALTER TABLE `order_status_history`
 ALTER TABLE `otp_verifications`
   ADD PRIMARY KEY (`id`),
   ADD KEY `user_id` (`user_id`);
+
+--
+-- Indexes for table `payments`
+--
+ALTER TABLE `payments`
+  ADD PRIMARY KEY (`id`),
+  ADD KEY `order_id` (`order_id`),
+  ADD KEY `client_id` (`client_id`),
+  ADD KEY `shop_id` (`shop_id`);
+
+--
+-- Indexes for table `payment_receipts`
+--
+ALTER TABLE `payment_receipts`
+  ADD PRIMARY KEY (`id`),
+  ADD UNIQUE KEY `receipt_number` (`receipt_number`),
+  ADD KEY `payment_id` (`payment_id`),
+  ADD KEY `issued_by` (`issued_by`);
+
+--
+-- Indexes for table `payment_refunds`
+--
+ALTER TABLE `payment_refunds`
+  ADD PRIMARY KEY (`id`),
+  ADD KEY `order_id` (`order_id`),
+  ADD KEY `payment_id` (`payment_id`),
+  ADD KEY `requested_by` (`requested_by`),
+  ADD KEY `refunded_by` (`refunded_by`);
 
 --
 -- Indexes for table `payroll`
@@ -1017,6 +1104,12 @@ ALTER TABLE `orders`
   MODIFY `id` int(11) NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=11;
 
 --
+-- AUTO_INCREMENT for table `order_invoices`
+--
+ALTER TABLE `order_invoices`
+  MODIFY `id` int(11) NOT NULL AUTO_INCREMENT;
+
+--
 -- AUTO_INCREMENT for table `order_photos`
 --
 ALTER TABLE `order_photos`
@@ -1032,6 +1125,24 @@ ALTER TABLE `order_status_history`
 -- AUTO_INCREMENT for table `otp_verifications`
 --
 ALTER TABLE `otp_verifications`
+  MODIFY `id` int(11) NOT NULL AUTO_INCREMENT;
+
+--
+-- AUTO_INCREMENT for table `payments`
+--
+ALTER TABLE `payments`
+  MODIFY `id` int(11) NOT NULL AUTO_INCREMENT;
+
+--
+-- AUTO_INCREMENT for table `payment_receipts`
+--
+ALTER TABLE `payment_receipts`
+  MODIFY `id` int(11) NOT NULL AUTO_INCREMENT;
+
+--
+-- AUTO_INCREMENT for table `payment_refunds`
+--
+ALTER TABLE `payment_refunds`
   MODIFY `id` int(11) NOT NULL AUTO_INCREMENT;
 
 --

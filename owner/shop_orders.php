@@ -46,7 +46,7 @@ if(isset($_POST['set_price'])) {
     $price_input = $_POST['price'] ?? '';
     $price_value = filter_var($price_input, FILTER_VALIDATE_FLOAT);
 
-    $order_stmt = $pdo->prepare("SELECT id, status, client_id, order_number, price FROM orders WHERE id = ? AND shop_id = ?");
+    $order_stmt = $pdo->prepare("SELECT id, status, client_id, order_number, price, payment_status FROM orders WHERE id = ? AND shop_id = ?");
     $order_stmt->execute([$order_id, $shop_id]);
     $order = $order_stmt->fetch();
 
@@ -60,6 +60,9 @@ if(isset($_POST['set_price'])) {
         $update_stmt = $pdo->prepare("UPDATE orders SET price = ?, updated_at = NOW() WHERE id = ? AND shop_id = ?");
         $update_stmt->execute([$price_value, $order_id, $shop_id]);
         $success = "Price sent to the client for approval.";
+
+        $invoice_status = determine_invoice_status($order['status'], $order['payment_status'] ?? 'unpaid');
+        ensure_order_invoice($pdo, $order_id, $order['order_number'], (float) $price_value, $invoice_status);
 
         create_notification(
             $pdo,
@@ -235,6 +238,8 @@ function format_quote_details(?array $quote_details): array {
         .payment-pending { background: #e0f2fe; color: #0369a1; }
         .payment-paid { background: #dcfce7; color: #166534; }
         .payment-rejected { background: #fee2e2; color: #991b1b; }
+        .payment-refund_pending { background: #fef9c3; color: #92400e; }
+        .payment-refunded { background: #e2e8f0; color: #475569; }
         .assignment-form {
             display: flex;
             gap: 8px;
@@ -369,7 +374,7 @@ function format_quote_details(?array $quote_details): array {
                                         $payment_class = 'payment-' . $payment_status;
                                     ?>
                                     <span class="status-pill <?php echo htmlspecialchars($payment_class); ?>">
-                                        <?php echo ucfirst($payment_status); ?>
+                                        <?php echo ucfirst(str_replace('_', ' ', $payment_status)); ?>
                                     </span>
                                 </td>
                                 <td>

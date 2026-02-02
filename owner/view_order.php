@@ -42,6 +42,35 @@ if(!$order) {
     exit();
 }
 
+$invoice_stmt = $pdo->prepare("SELECT * FROM order_invoices WHERE order_id = ?");
+$invoice_stmt->execute([$order_id]);
+$invoice = $invoice_stmt->fetch();
+
+$payment_stmt = $pdo->prepare("
+    SELECT * FROM payments
+    WHERE order_id = ?
+    ORDER BY created_at DESC
+    LIMIT 1
+");
+$payment_stmt->execute([$order_id]);
+$payment = $payment_stmt->fetch();
+
+$receipt = null;
+if($payment) {
+    $receipt_stmt = $pdo->prepare("SELECT * FROM payment_receipts WHERE payment_id = ?");
+    $receipt_stmt->execute([$payment['id']]);
+    $receipt = $receipt_stmt->fetch();
+}
+
+$refund_stmt = $pdo->prepare("
+    SELECT * FROM payment_refunds
+    WHERE order_id = ?
+    ORDER BY requested_at DESC
+    LIMIT 1
+");
+$refund_stmt->execute([$order_id]);
+$refund = $refund_stmt->fetch();
+
 $active_staff_stmt = $pdo->prepare("
     SELECT 
         se.user_id,
@@ -324,6 +353,8 @@ $is_design_image = $design_file_name && in_array($design_file_extension, ALLOWED
         .payment-pending { background: #e0f2fe; color: #0369a1; }
         .payment-paid { background: #dcfce7; color: #166534; }
         .payment-rejected { background: #fee2e2; color: #991b1b; }
+        .payment-refund_pending { background: #fef9c3; color: #92400e; }
+        .payment-refunded { background: #e2e8f0; color: #475569; }
         .action-row {
             display: flex;
             gap: 10px;
@@ -440,9 +471,26 @@ $is_design_image = $design_file_name && in_array($design_file_extension, ALLOWED
                 <?php endif; ?>
                 <p>
                     <span class="status-pill <?php echo htmlspecialchars($payment_class); ?>">
-                        <?php echo ucfirst($payment_status); ?> payment
+                        <?php echo ucfirst(str_replace('_', ' ', $payment_status)); ?> payment
                     </span>
                 </p>
+                <?php if($invoice): ?>
+                    <p>
+                        <strong>Invoice:</strong> #<?php echo htmlspecialchars($invoice['invoice_number']); ?> (<?php echo htmlspecialchars($invoice['status']); ?>)
+                        <a href="view_invoice.php?order_id=<?php echo $order_id; ?>" class="text-primary">View</a>
+                    </p>
+                <?php else: ?>
+                    <p class="text-muted">Invoice will be issued once the price is set.</p>
+                <?php endif; ?>
+                <?php if($receipt): ?>
+                    <p>
+                        <strong>Receipt:</strong> #<?php echo htmlspecialchars($receipt['receipt_number']); ?>
+                        <a href="view_receipt.php?order_id=<?php echo $order_id; ?>" class="text-primary">View</a>
+                    </p>
+                <?php endif; ?>
+                <?php if($refund): ?>
+                    <p><strong>Refund:</strong> <?php echo htmlspecialchars($refund['status']); ?></p>
+                <?php endif; ?>
                 <p><strong>Assigned To:</strong>
                     <?php if($order['assigned_name']): ?>
                         <?php echo htmlspecialchars($order['assigned_name']); ?>

@@ -20,11 +20,11 @@ if(isset($_POST['action'], $_POST['payment_id'])) {
     $payment_id = (int) $_POST['payment_id'];
     $action = $_POST['action'];
 
-    if(!in_array($action, ['verify', 'reject'], true)) {
+    if(!in_array($action, ['verify', 'reject', 'refund'], true)) {
         $error = 'Invalid payment action.';
     } else {
         $payment_stmt = $pdo->prepare("
-            SELECT p.*, o.order_number, o.client_id, o.id as order_id
+            SELECT p.*, o.order_number, o.client_id, o.id as order_id, o.status as order_status, o.payment_status, o.price
             FROM payments p
             JOIN orders o ON p.order_id = o.id
             WHERE p.id = ? AND o.shop_id = ?
@@ -35,32 +35,107 @@ if(isset($_POST['action'], $_POST['payment_id'])) {
         if(!$payment) {
             $error = 'Payment record not found.';
         } else {
-            $new_status = $action === 'verify' ? 'verified' : 'rejected';
-            $order_payment_status = $action === 'verify' ? 'paid' : 'rejected';
-            $verified_at = $action === 'verify' ? date('Y-m-d H:i:s') : null;
+            if($action === 'verify' && $payment['order_status'] === 'cancelled') {
+                $error = 'Cannot verify payments for cancelled orders.';
+            } elseif($action === 'verify' && !can_transition_payment_status($payment['payment_status'] ?? 'unpaid', 'paid')) {
+                $error = 'Payment cannot be verified from the current status.';
+            } elseif($action === 'refund' && !in_array($payment['payment_status'], ['paid', 'refund_pending'], true)) {
+                $error = 'Refunds are only available for paid orders.';
+            } else {
+                if($action === 'refund') {
+                    $refund_status = 'refunded';
+                    $refunded_at = date('Y-m-d H:i:s');
+                    $refund_stmt = $pdo->prepare("
+                        SELECT id FROM payment_refunds
+                        WHERE order_id = ? AND payment_id = ?
+                        ORDER BY requested_at DESC
+                        LIMIT 1
+                    ");
+                    $refund_stmt->execute([$payment['order_id'], $payment_id]);
+                    $existing_refund = $refund_stmt->fetch();
 
-            $update_stmt = $pdo->prepare("
-                UPDATE payments
-                SET status = ?, verified_by = ?, verified_at = ?, updated_at = NOW()
-                WHERE id = ?
-            ");
-            $update_stmt->execute([$new_status, $owner_id, $verified_at, $payment_id]);
+            if($existing_refund) {
+                        $update_refund = $pdo->prepare("
+                            UPDATE payment_refunds
+                            SET status = 'refunded', refunded_by = ?, refunded_at = ?
+                            WHERE id = ?
+                        ");
+                        $update_refund->execute([$owner_id, $refunded_at, $existing_refund['id']]);
+                    } else {
+                        $insert_refund = $pdo->prepare("
+                            INSERT INTO payment_refunds (order_id, payment_id, amount, requested_by, refunded_by, status, requested_at, refunded_at)
+                            VALUES (?, ?, ?, ?, ?, 'refunded', NOW(), ?)
+                        ");
+                        $insert_refund->execute([
+                            $payment['order_id'],
+                            $payment_id,
+                            $payment['amount'] ?? $payment['price'] ?? 0,
+                            $payment['client_id'],
+                            $owner_id,
+                            $refunded_at
+                        ]);
+                    }
 
             $order_update_stmt = $pdo->prepare("
-                UPDATE orders
-                SET payment_status = ?, payment_verified_at = ?
-                WHERE id = ?
-            ");
-            $order_update_stmt->execute([$order_payment_status, $verified_at, $payment['order_id']]);
+                        UPDATE orders
+                        SET payment_status = 'refunded', payment_verified_at = ?
+                        WHERE id = ?
+                    ");
+                    $order_update_stmt->execute([$refunded_at, $payment['order_id']]);
 
-            $message = $action === 'verify'
-                ? sprintf('Payment verified for order #%s.', $payment['order_number'])
-                : sprintf('Payment proof rejected for order #%s. Please resubmit.', $payment['order_number']);
-            create_notification($pdo, (int) $payment['client_id'], (int) $payment['order_id'], 'payment', $message);
+            $invoice_status = determine_invoice_status($payment['order_status'], 'refunded');
+                    ensure_order_invoice($pdo, $payment['order_id'], $payment['order_number'], (float) ($payment['price'] ?? $payment['amount'] ?? 0), $invoice_status);
 
-            $success = $action === 'verify'
-                ? 'Payment verified successfully.'
-                : 'Payment rejected. Client notified to resubmit proof.';
+            create_notification(
+                        $pdo,
+                        (int) $payment['client_id'],
+                        (int) $payment['order_id'],
+                        'payment',
+                        sprintf('Refund processed for order #%s.', $payment['order_number'])
+                    );
+
+                    $success = 'Refund recorded successfully.';
+                } else {
+                    $new_status = $action === 'verify' ? 'verified' : 'rejected';
+                    $order_payment_status = $action === 'verify' ? 'paid' : 'rejected';
+                    $verified_at = $action === 'verify' ? date('Y-m-d H:i:s') : null;
+
+                    $update_stmt = $pdo->prepare("
+                        UPDATE payments
+                        SET status = ?, verified_by = ?, verified_at = ?, updated_at = NOW()
+                        WHERE id = ?
+                    ");
+                    $update_stmt->execute([$new_status, $owner_id, $verified_at, $payment_id]);
+
+                    $order_update_stmt = $pdo->prepare("
+                        UPDATE orders
+                        SET payment_status = ?, payment_verified_at = ?
+                        WHERE id = ?
+                    ");
+                    $order_update_stmt->execute([$order_payment_status, $verified_at, $payment['order_id']]);
+
+                    if($action === 'verify') {
+                        $invoice_status = determine_invoice_status($payment['order_status'], 'paid');
+                        $invoice = ensure_order_invoice(
+                            $pdo,
+                            $payment['order_id'],
+                            $payment['order_number'],
+                            (float) ($payment['price'] ?? $payment['amount'] ?? 0),
+                            $invoice_status
+                        );
+                        ensure_payment_receipt($pdo, $payment_id, $owner_id, $verified_at);
+                    }
+
+                    $message = $action === 'verify'
+                        ? sprintf('Payment verified for order #%s.', $payment['order_number'])
+                        : sprintf('Payment proof rejected for order #%s. Please resubmit.', $payment['order_number']);
+                    create_notification($pdo, (int) $payment['client_id'], (int) $payment['order_id'], 'payment', $message);
+
+                    $success = $action === 'verify'
+                        ? 'Payment verified successfully.'
+                        : 'Payment rejected. Client notified to resubmit proof.';
+                }
+            }
         }
     }
 }
@@ -69,10 +144,16 @@ $allowed_filters = ['pending', 'verified', 'rejected'];
 $filter = $_GET['filter'] ?? 'all';
 
 $query = "
-    SELECT p.*, o.order_number, o.price, u.fullname as client_name
+    SELECT p.*, o.order_number, o.price, o.status as order_status, o.payment_status, u.fullname as client_name,
+           oi.invoice_number, oi.status as invoice_status,
+           pr.receipt_number,
+           rf.status as refund_status
     FROM payments p
     JOIN orders o ON p.order_id = o.id
     JOIN users u ON o.client_id = u.id
+    LEFT JOIN order_invoices oi ON oi.order_id = o.id
+    LEFT JOIN payment_receipts pr ON pr.payment_id = p.id
+    LEFT JOIN payment_refunds rf ON rf.payment_id = p.id
     WHERE o.shop_id = ?
 ";
 $params = [$shop['id']];
@@ -203,6 +284,9 @@ function payment_badge($status) {
                             <th>Amount</th>
                             <th>Proof</th>
                             <th>Status</th>
+                            <th>Invoice</th>
+                            <th>Receipt</th>
+                            <th>Refund</th>
                             <th>Submitted</th>
                             <th>Actions</th>
                         </tr>
@@ -219,6 +303,32 @@ function payment_badge($status) {
                                     </a>
                                 </td>
                                 <td><?php echo payment_badge($payment['status']); ?></td>
+                                <td>
+                                    <?php if(!empty($payment['invoice_number'])): ?>
+                                        <div>#<?php echo htmlspecialchars($payment['invoice_number']); ?></div>
+                                        <small class="text-muted"><?php echo htmlspecialchars($payment['invoice_status']); ?></small>
+                                    <?php else: ?>
+                                        <span class="text-muted">Not issued</span>
+                                    <?php endif; ?>
+                                </td>
+                                <td>
+                                    <?php if(!empty($payment['receipt_number'])): ?>
+                                        <a href="view_receipt.php?order_id=<?php echo $payment['order_id']; ?>" class="text-primary">
+                                            #<?php echo htmlspecialchars($payment['receipt_number']); ?>
+                                        </a>
+                                    <?php else: ?>
+                                        <span class="text-muted">Pending</span>
+                                    <?php endif; ?>
+                                </td>
+                                <td>
+                                    <?php if(!empty($payment['refund_status'])): ?>
+                                        <span class="text-muted"><?php echo htmlspecialchars($payment['refund_status']); ?></span>
+                                    <?php elseif($payment['payment_status'] === 'refund_pending'): ?>
+                                        <span class="text-muted">pending</span>
+                                    <?php else: ?>
+                                        <span class="text-muted">-</span>
+                                    <?php endif; ?>
+                                </td>
                                 <td><?php echo date('M d, Y', strtotime($payment['created_at'])); ?></td>
                                 <td>
                                     <?php if($payment['status'] === 'pending'): ?>
@@ -234,6 +344,14 @@ function payment_badge($status) {
                                             <input type="hidden" name="action" value="reject">
                                             <button type="submit" class="btn btn-danger btn-sm">
                                                 <i class="fas fa-times"></i> Reject
+                                            </button>
+                                        </form>
+                                    <?php elseif($payment['order_status'] === 'cancelled' && in_array($payment['payment_status'], ['paid', 'refund_pending'], true)): ?>
+                                        <form method="POST">
+                                            <input type="hidden" name="payment_id" value="<?php echo $payment['id']; ?>">
+                                            <input type="hidden" name="action" value="refund">
+                                            <button type="submit" class="btn btn-outline-warning btn-sm">
+                                                <i class="fas fa-undo"></i> Mark Refunded
                                             </button>
                                         </form>
                                     <?php else: ?>

@@ -110,6 +110,7 @@ if($_SERVER['REQUEST_METHOD'] === 'POST' && $action !== '') {
             o.order_number,
             o.revision_count,
             o.price,
+            o.payment_status,
             s.owner_id,
             s.shop_name
         FROM orders o
@@ -159,6 +160,49 @@ if($_SERVER['REQUEST_METHOD'] === 'POST' && $action !== '') {
                 ['status' => $order['status'] ?? null],
                 ['status' => STATUS_CANCELLED, 'cancellation_reason' => $reason]
             );
+            
+            if(($order['payment_status'] ?? 'unpaid') === 'paid') {
+                $refund_stmt = $pdo->prepare("
+                    SELECT id, amount FROM payments
+                    WHERE order_id = ? AND status = 'verified'
+                    ORDER BY created_at DESC
+                    LIMIT 1
+                ");
+                $refund_stmt->execute([$order_id]);
+                $payment = $refund_stmt->fetch();
+                $refund_amount = (float) ($payment['amount'] ?? $order['price'] ?? 0);
+
+                $refund_insert = $pdo->prepare("
+                    INSERT INTO payment_refunds (order_id, payment_id, amount, reason, requested_by, status, requested_at)
+                    VALUES (?, ?, ?, ?, ?, 'pending', NOW())
+                ");
+                $refund_insert->execute([
+                    $order_id,
+                    $payment['id'] ?? null,
+                    $refund_amount,
+                    $reason,
+                    $client_id
+                ]);
+
+                $refund_order_stmt = $pdo->prepare("
+                    UPDATE orders SET payment_status = 'refund_pending', updated_at = NOW()
+                    WHERE id = ? AND client_id = ?
+                ");
+                $refund_order_stmt->execute([$order_id, $client_id]);
+
+                if($order['price'] !== null) {
+                    $invoice_status = determine_invoice_status(STATUS_CANCELLED, 'refund_pending');
+                    ensure_order_invoice($pdo, $order_id, $order['order_number'], (float) $order['price'], $invoice_status);
+                }
+
+                create_notification(
+                    $pdo,
+                    (int) $order['owner_id'],
+                    $order_id,
+                    'payment',
+                    'Refund requested for order #' . $order['order_number'] . ' after cancellation.'
+                );
+            }
         }
     } elseif($action === 'approve_design') {
         if(!in_array($order['status'], ['accepted', 'in_progress'], true)) {
@@ -267,6 +311,9 @@ $orders = $orders_stmt->fetchAll();
 
 $order_photos = [];
 $payment_by_order = [];
+$invoice_by_order = [];
+$refund_by_order = [];
+$receipt_by_payment = [];
 if(!empty($orders)) {
     $order_ids = array_column($orders, 'id');
     $placeholders = implode(',', array_fill(0, count($order_ids), '?'));
@@ -296,6 +343,43 @@ if(!empty($orders)) {
             $payment_by_order[$payment['order_id']] = $payment;
         }
     }
+    
+    $invoice_stmt = $pdo->prepare("
+        SELECT * FROM order_invoices
+        WHERE order_id IN ($placeholders)
+    ");
+    $invoice_stmt->execute($order_ids);
+    $invoices = $invoice_stmt->fetchAll();
+    foreach($invoices as $invoice) {
+        $invoice_by_order[$invoice['order_id']] = $invoice;
+    }
+
+    $refund_stmt = $pdo->prepare("
+        SELECT * FROM payment_refunds
+        WHERE order_id IN ($placeholders)
+        ORDER BY requested_at DESC
+    ");
+    $refund_stmt->execute($order_ids);
+    $refunds = $refund_stmt->fetchAll();
+    foreach($refunds as $refund) {
+        if(!isset($refund_by_order[$refund['order_id']])) {
+            $refund_by_order[$refund['order_id']] = $refund;
+        }
+    }
+
+    if(!empty($payments)) {
+        $payment_ids = array_column($payments, 'id');
+        $payment_placeholders = implode(',', array_fill(0, count($payment_ids), '?'));
+        $receipt_stmt = $pdo->prepare("
+            SELECT * FROM payment_receipts
+            WHERE payment_id IN ($payment_placeholders)
+        ");
+        $receipt_stmt->execute($payment_ids);
+        $receipts = $receipt_stmt->fetchAll();
+        foreach($receipts as $receipt) {
+            $receipt_by_payment[$receipt['payment_id']] = $receipt;
+        }
+    }
 }
 
 function status_pill($status) {
@@ -315,10 +399,12 @@ function payment_status_pill($status) {
         'unpaid' => 'payment-unpaid',
         'pending' => 'payment-pending',
         'paid' => 'payment-paid',
-        'rejected' => 'payment-rejected'
+        'rejected' => 'payment-rejected',
+        'refund_pending' => 'payment-refund-pending',
+        'refunded' => 'payment-refunded'
     ];
     $class = $map[$status] ?? 'payment-unpaid';
-    return '<span class="status-pill ' . $class . '">' . ucfirst($status) . '</span>';
+    return '<span class="status-pill ' . $class . '">' . ucfirst(str_replace('_', ' ', $status)) . '</span>';
 }
 ?>
 <!DOCTYPE html>
@@ -366,6 +452,8 @@ function payment_status_pill($status) {
         .payment-pending { background: #e0f2fe; color: #0369a1; }
         .payment-paid { background: #dcfce7; color: #166534; }
         .payment-rejected { background: #fee2e2; color: #991b1b; }
+        .payment-refund-pending { background: #fef9c3; color: #92400e; }
+        .payment-refunded { background: #e2e8f0; color: #475569; }
         .order-card {
             border: 1px solid #e2e8f0;
             border-radius: 12px;
@@ -489,6 +577,8 @@ function payment_status_pill($status) {
                 <li>Orders can be cancelled while they are pending or accepted and before progress exceeds <?php echo $max_cancel_progress; ?>%.</li>
                 <li>Design approval is required before production starts. Approve shared designs or request changes.</li>
                 <li>Each order includes up to <?php echo $max_revision_count; ?> design revision requests while the order is accepted or in progress.</li>
+                <li>Payment proofs are required once a shop accepts your order. Receipts are issued after verification.</li>
+                <li>If a paid order is cancelled, the shop will process a refund and update the payment status.</li>
             </ul>
         </div>
 
@@ -582,8 +672,13 @@ function payment_status_pill($status) {
                         $payment = $payment_by_order[$order['id']] ?? null;
                         $payment_status = $order['payment_status'] ?? 'unpaid';
                         $latest_payment_status = $payment['status'] ?? null;
+                        $invoice = $invoice_by_order[$order['id']] ?? null;
+                        $refund = $refund_by_order[$order['id']] ?? null;
+                        $receipt = $payment ? ($receipt_by_payment[$payment['id']] ?? null) : null;
                         $can_submit_payment = in_array($order['status'], ['accepted', 'in_progress', 'completed'], true)
                             && $payment_status !== 'paid'
+                            && $payment_status !== 'refund_pending'
+                            && $payment_status !== 'refunded'
                             && $latest_payment_status !== 'pending';
                     ?>
                     <div class="mt-3">
@@ -595,8 +690,30 @@ function payment_status_pill($status) {
                             <div class="text-muted small mt-2">Payment proof was rejected. Please upload a new proof.</div>
                         <?php elseif($payment_status === 'paid'): ?>
                             <div class="text-muted small mt-2">Payment verified by the shop.</div>
+                        <?php elseif($payment_status === 'refund_pending'): ?>
+                            <div class="text-muted small mt-2">Refund is pending. The shop will confirm once processed.</div>
+                        <?php elseif($payment_status === 'refunded'): ?>
+                            <div class="text-muted small mt-2">Refund completed.</div>
                         <?php else: ?>
                             <div class="text-muted small mt-2">No payment proof submitted yet.</div>
+                        <?php endif; ?>
+                    </div>
+
+                    <div class="mt-2 text-muted small">
+                        <?php if($invoice): ?>
+                            <div>Invoice #<?php echo htmlspecialchars($invoice['invoice_number']); ?> (<?php echo htmlspecialchars($invoice['status']); ?>)</div>
+                            <a href="view_invoice.php?order_id=<?php echo $order['id']; ?>" class="text-primary">View invoice</a>
+                        <?php else: ?>
+                            <div>Invoice will be issued once the price is finalized.</div>
+                        <?php endif; ?>
+                        <?php if($receipt && $payment_status === 'paid'): ?>
+                            <div class="mt-1">
+                                Receipt #<?php echo htmlspecialchars($receipt['receipt_number']); ?>
+                                <a href="view_receipt.php?order_id=<?php echo $order['id']; ?>" class="text-primary">View receipt</a>
+                            </div>
+                        <?php endif; ?>
+                        <?php if($refund): ?>
+                            <div class="mt-1">Refund status: <?php echo htmlspecialchars($refund['status']); ?></div>
                         <?php endif; ?>
                     </div>
 
