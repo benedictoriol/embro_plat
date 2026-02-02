@@ -99,6 +99,18 @@ function is_design_image(?string $filename): bool {
             height: 100%;
             background: #4361ee;
         }
+        .status-label {
+            font-size: 0.75rem;
+            letter-spacing: 0.04em;
+            text-transform: uppercase;
+            color: #6c757d;
+            margin-bottom: 6px;
+        }
+        .job-progress-label {
+            font-size: 0.8rem;
+            color: #6c757d;
+            margin-bottom: 6px;
+        }
         .design-preview {
             margin-top: 12px;
         }
@@ -162,6 +174,7 @@ function is_design_image(?string $filename): bool {
                             </p>
                         </div>
                         <div class="text-right">
+                            <div class="status-label">Order Status</div>
                             <?php echo job_status_badge($job['status']); ?>
                             <div class="mt-2">
                                 <?php if(!empty($employee_permissions['update_status'])): ?>
@@ -174,6 +187,7 @@ function is_design_image(?string $filename): bool {
                     </div>
 
                     <div class="mt-3">
+                        <div class="job-progress-label">Job Steps Progress</div>
                         <div class="d-flex align-center">
                             <div class="progress-bar-container">
                                 <div class="progress-fill" style="width: <?php echo $job['progress']; ?>%;"></div>

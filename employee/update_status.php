@@ -50,6 +50,21 @@ function is_design_image(?string $filename): bool {
     return in_array($extension, ALLOWED_IMAGE_TYPES, true);
 }
 
+function fetch_order_info(PDO $pdo, int $employee_id, int $order_id): ?array {
+    $order_info_stmt = $pdo->prepare("
+        SELECT o.status, o.progress, o.order_number, o.client_id, s.shop_name, s.owner_id
+        FROM orders o
+        JOIN shops s ON o.shop_id = s.id
+        LEFT JOIN job_schedule js ON js.order_id = o.id AND js.employee_id = ?
+        WHERE o.id = ? AND (o.assigned_to = ? OR js.employee_id = ?)
+        LIMIT 1
+    ");
+    $order_info_stmt->execute([$employee_id, $order_id, $employee_id, $employee_id]);
+    $order_info = $order_info_stmt->fetch();
+
+    return $order_info ?: null;
+}
+
 if(!empty($jobs)) {
     $job_ids = array_column($jobs, 'id');
     $placeholders = implode(',', array_fill(0, count($job_ids), '?'));
@@ -65,6 +80,50 @@ if(!empty($jobs)) {
 }
 
 // Update status
+if(isset($_POST['escalate_issue'])) {
+    $order_id = (int) ($_POST['order_id'] ?? 0);
+    $escalation_type = $_POST['escalate_issue'] ?? '';
+    $escalation_note = sanitize($_POST['escalation_note'] ?? '');
+    $valid_escalations = [
+        'needs_clarification' => 'Needs clarification',
+        'blocked' => 'Blocked',
+    ];
+    $order_info = fetch_order_info($pdo, $employee_id, $order_id);
+
+    if(!$order_info) {
+        $error = "Unable to escalate this order.";
+    } elseif(!array_key_exists($escalation_type, $valid_escalations)) {
+        $error = "Invalid escalation option.";
+    } elseif($escalation_note === '') {
+        $error = "Please add details before escalating.";
+    } else {
+        $label = $valid_escalations[$escalation_type];
+        $note = sprintf('[%s] %s', $label, $escalation_note);
+        $update_stmt = $pdo->prepare("
+            UPDATE orders 
+            SET shop_notes = CONCAT(COALESCE(shop_notes, ''), '\n', ?), updated_at = NOW()
+            WHERE id = ? AND (assigned_to = ? OR EXISTS (
+                SELECT 1 FROM job_schedule js WHERE js.order_id = orders.id AND js.employee_id = ?
+            ))
+        ");
+        $update_stmt->execute([$note, $order_id, $employee_id, $employee_id]);
+
+        $message = sprintf(
+            'Order #%s needs attention: %s.',
+            $order_info['order_number'],
+            strtolower($label)
+        );
+        if(!empty($order_info['owner_id'])) {
+            create_notification($pdo, (int) $order_info['owner_id'], (int) $order_id, 'warning', $message);
+        }
+        if($escalation_type === 'needs_clarification') {
+            create_notification($pdo, (int) $order_info['client_id'], (int) $order_id, 'warning', $message);
+        }
+
+        $success = $label . " request sent successfully.";
+    }
+}
+
 if(isset($_POST['update_status'])) {
     $order_id = (int) ($_POST['order_id'] ?? 0);
     $progress = (int) ($_POST['progress'] ?? 0);
@@ -79,16 +138,7 @@ if(isset($_POST['update_status'])) {
     $photo_check_stmt->execute([$order_id, $employee_id]);
     $photo_count = (int) $photo_check_stmt->fetchColumn();
 
-    $order_info_stmt = $pdo->prepare("
-        SELECT o.status, o.progress, o.order_number, o.client_id, s.shop_name, s.owner_id
-        FROM orders o
-        JOIN shops s ON o.shop_id = s.id
-        LEFT JOIN job_schedule js ON js.order_id = o.id AND js.employee_id = ?
-        WHERE o.id = ? AND (o.assigned_to = ? OR js.employee_id = ?)
-        LIMIT 1
-    ");
-    $order_info_stmt->execute([$employee_id, $order_id, $employee_id, $employee_id]);
-    $order_info = $order_info_stmt->fetch();
+    $order_info = fetch_order_info($pdo, $employee_id, $order_id);
 
     $allowed_statuses = [STATUS_IN_PROGRESS, STATUS_COMPLETED];
 
@@ -207,6 +257,57 @@ if(isset($_POST['update_status'])) {
             background: #4361ee;
             color: white;
         }
+        .section-header {
+            font-weight: 600;
+            margin-bottom: 10px;
+            color: #343a40;
+        }
+        .job-steps {
+            display: grid;
+            gap: 10px;
+            margin-bottom: 20px;
+        }
+        .step-item {
+            display: flex;
+            align-items: center;
+            padding: 10px 12px;
+            border: 1px solid #dee2e6;
+            border-radius: 8px;
+            background: #fff;
+            color: #495057;
+        }
+        .step-item.completed {
+            border-color: #16a34a;
+            background: #ecfdf3;
+            color: #14532d;
+        }
+        .step-index {
+            width: 26px;
+            height: 26px;
+            border-radius: 50%;
+            background: #e9ecef;
+            color: #495057;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 0.75rem;
+            margin-right: 10px;
+        }
+        .step-item.completed .step-index {
+            background: #16a34a;
+            color: white;
+        }
+        .escalation-panel {
+            border: 1px dashed #f59e0b;
+            border-radius: 10px;
+            padding: 16px;
+            background: #fffbeb;
+        }
+        .escalation-actions {
+            display: flex;
+            gap: 10px;
+            flex-wrap: wrap;
+        }
         .photo-upload {
             border: 2px dashed #dee2e6;
             border-radius: 8px;
@@ -312,11 +413,30 @@ if(isset($_POST['update_status'])) {
                 <form method="POST">
                     <input type="hidden" name="order_id" value="<?php echo $job['id']; ?>">
                     
+                    <div class="section-header">Job Steps</div>
+                    <div class="job-steps" data-job-id="<?php echo $job['id']; ?>">
+                        <div class="step-item" data-threshold="10">
+                            <span class="step-index">1</span>Prep materials & layout
+                        </div>
+                        <div class="step-item" data-threshold="30">
+                            <span class="step-index">2</span>Hoop & machine setup
+                        </div>
+                        <div class="step-item" data-threshold="55">
+                            <span class="step-index">3</span>Stitching in progress
+                        </div>
+                        <div class="step-item" data-threshold="80">
+                            <span class="step-index">4</span>Finishing & trimming
+                        </div>
+                        <div class="step-item" data-threshold="100">
+                            <span class="step-index">5</span>Quality check & packaging
+                        </div>
+                    </div>
+
                     <div class="form-group">
                         <label>Progress (%)</label>
                         <input type="range" name="progress" class="progress-slider" 
                                min="0" max="100" value="<?php echo $job['progress']; ?>"
-                               oninput="document.getElementById('progressValue<?php echo $job['id']; ?>').textContent = this.value + '%'">
+                               oninput="document.getElementById('progressValue<?php echo $job['id']; ?>').textContent = this.value + '%'; updateSteps(<?php echo $job['id']; ?>, this.value);">
                         <div class="text-center">
                             <span id="progressValue<?php echo $job['id']; ?>" class="badge badge-primary">
                                 <?php echo $job['progress']; ?>%
@@ -325,7 +445,7 @@ if(isset($_POST['update_status'])) {
                     </div>
 
                     <div class="form-group">
-                        <label>Update Status</label>
+                        <div class="section-header">Order Status</div>
                         <div class="status-options">
                             <div class="status-option" onclick="selectStatus('in_progress', <?php echo $job['id']; ?>)">
                                 <i class="fas fa-spinner fa-2x mb-2"></i>
@@ -362,6 +482,26 @@ if(isset($_POST['update_status'])) {
                         </button>
                     </div>
                 </form>
+                
+                <form method="POST" class="mt-3">
+                    <input type="hidden" name="order_id" value="<?php echo $job['id']; ?>">
+                    <div class="section-header">Escalation Path</div>
+                    <div class="escalation-panel">
+                        <p class="text-muted mb-2">Use this when you need a decision or you're blocked. These requests alert the shop owner (and the client if clarification is needed).</p>
+                        <div class="form-group">
+                            <label>Escalation Details</label>
+                            <textarea name="escalation_note" class="form-control" rows="3" placeholder="Describe what you need to move forward..." required></textarea>
+                        </div>
+                        <div class="escalation-actions">
+                            <button type="submit" name="escalate_issue" value="needs_clarification" class="btn btn-warning">
+                                <i class="fas fa-question-circle"></i> Needs Clarification
+                            </button>
+                            <button type="submit" name="escalate_issue" value="blocked" class="btn btn-danger">
+                                <i class="fas fa-ban"></i> Blocked
+                            </button>
+                        </div>
+                    </div>
+                </form>
             </div>
             <?php endforeach; ?>
         <?php else: ?>
@@ -377,6 +517,18 @@ if(isset($_POST['update_status'])) {
     </div>
 
     <script>
+        function updateSteps(jobId, progress) {
+            const steps = document.querySelectorAll(`.job-steps[data-job-id="${jobId}"] .step-item`);
+            steps.forEach(step => {
+                const threshold = Number(step.getAttribute('data-threshold'));
+                if(progress >= threshold) {
+                    step.classList.add('completed');
+                } else {
+                    step.classList.remove('completed');
+                }
+            });
+        }
+
         // Status selection
         function selectStatus(status, jobId) {
             // Remove selected class from all options in this job
@@ -397,6 +549,10 @@ if(isset($_POST['update_status'])) {
         document.addEventListener('DOMContentLoaded', function() {
             document.querySelectorAll('.status-option input[type="radio"]:checked').forEach(radio => {
                 radio.closest('.status-option').classList.add('selected');
+            });
+            document.querySelectorAll('.progress-slider').forEach(slider => {
+                const jobId = slider.closest('.card').querySelector('input[name="order_id"]').value;
+                updateSteps(jobId, slider.value);
             });
         });
     </script>
