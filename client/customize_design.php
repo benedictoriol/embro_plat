@@ -8,6 +8,20 @@ $client_id = $_SESSION['user']['id'];
 $unread_notifications = fetch_unread_notification_count($pdo, $client_id);
 $error = '';
 $success = '';
+$max_upload_mb = (int) ceil(MAX_FILE_SIZE / (1024 * 1024));
+
+function validate_design_description(string $description): string {
+    $trimmed = trim($description);
+    $length = mb_strlen($trimmed);
+    if ($length < 30) {
+        return 'Design description must be at least 30 characters and include placement, size, and color details.';
+    }
+    if ($length > 1000) {
+        return 'Design description cannot exceed 1000 characters.';
+    }
+
+    return '';
+}
 
 $orders_stmt = $pdo->prepare("
     SELECT o.*, s.shop_name
@@ -34,35 +48,44 @@ if(isset($_POST['update_design'])) {
 
     if(!$order) {
         $error = 'Please select a valid order to update.';
-    } elseif($design_description === '') {
-        $error = 'Design description cannot be empty.';
     } else {
+        $design_error = validate_design_description($design_description);
+        if ($design_error !== '') {
+            $error = $design_error;
+        }
+    }
+
+    if ($error === '') {
         $design_file = $order['design_file'];
         $existing_notes = $order['client_notes'] ?? '';
 
-        if(isset($_FILES['design_file']) && $_FILES['design_file']['error'] === UPLOAD_ERR_OK) {
-            $file = $_FILES['design_file'];
-            $file_size = $file['size'];
-            $file_ext = strtolower(pathinfo($file['name'], PATHINFO_EXTENSION));
-            $allowed_extensions = array_merge(ALLOWED_IMAGE_TYPES, ALLOWED_DOC_TYPES);
-
-            if($file_size > MAX_FILE_SIZE) {
-                $error = 'File size exceeds the 5MB limit.';
-            } elseif(!in_array($file_ext, $allowed_extensions, true)) {
-                $error = 'Only JPG, PNG, GIF, PDF, DOC, and DOCX files are allowed.';
+        if(isset($_FILES['design_file']) && $_FILES['design_file']['error'] !== UPLOAD_ERR_NO_FILE) {
+            if ($_FILES['design_file']['error'] !== UPLOAD_ERR_OK) {
+                $error = 'Design file upload failed. Please try again.';
             } else {
-                $upload_dir = '../assets/uploads/designs/';
-                if(!is_dir($upload_dir)) {
-                    mkdir($upload_dir, 0777, true);
-                }
+                $file = $_FILES['design_file'];
+                $file_size = $file['size'];
+                $file_ext = strtolower(pathinfo($file['name'], PATHINFO_EXTENSION));
+                $allowed_extensions = array_merge(ALLOWED_IMAGE_TYPES, ALLOWED_DOC_TYPES);
 
-                $filename = $order_id . '_' . uniqid('design_', true) . '.' . $file_ext;
-                $target_file = $upload_dir . $filename;
-
-                if(move_uploaded_file($file['tmp_name'], $target_file)) {
-                    $design_file = $filename;
+                if($file_size > MAX_FILE_SIZE) {
+                    $error = 'File size exceeds the ' . $max_upload_mb . 'MB limit.';
+                } elseif(!in_array($file_ext, $allowed_extensions, true)) {
+                    $error = 'Only JPG, PNG, GIF, PDF, DOC, and DOCX files are allowed.';
                 } else {
-                    $error = 'Failed to upload the design file. Please try again.';
+                    $upload_dir = '../assets/uploads/designs/';
+                    if(!is_dir($upload_dir)) {
+                        mkdir($upload_dir, 0777, true);
+                    }
+
+                    $filename = $order_id . '_' . uniqid('design_', true) . '.' . $file_ext;
+                    $target_file = $upload_dir . $filename;
+
+                    if(move_uploaded_file($file['tmp_name'], $target_file)) {
+                        $design_file = $filename;
+                    } else {
+                        $error = 'Failed to upload the design file. Please try again.';
+                    }
                 }
             }
         }
@@ -200,13 +223,15 @@ if(isset($_POST['update_design'])) {
 
                         <div class="form-group">
                             <label>Design Description</label>
-                            <textarea name="design_description" class="form-control" rows="4" required><?php echo htmlspecialchars($order['design_description']); ?></textarea>
+                            <textarea name="design_description" class="form-control" rows="4" required
+                                      placeholder="Placement: (e.g., left chest)&#10;Size: (e.g., 3in x 2in)&#10;Colors/Thread: (e.g., navy + white)&#10;Fabric/Item: (e.g., cotton polo)&#10;Notes: (optional)"><?php echo htmlspecialchars($order['design_description']); ?></textarea>
+                            <small class="text-muted">Provide at least 30 characters with placement, size, and color details for consistent quoting.</small>
                         </div>
 
                         <div class="form-group">
                             <label>Upload Updated Design File (Optional)</label>
                             <input type="file" name="design_file" class="form-control" accept=".jpg,.jpeg,.png,.gif,.pdf,.doc,.docx">
-                            <small class="text-muted">Max size: 5MB. Supported formats: JPG, PNG, GIF, PDF, DOC, DOCX.</small>
+                            <small class="text-muted">Max size: <?php echo $max_upload_mb; ?>MB. Supported formats: JPG, PNG, GIF, PDF, DOC, DOCX.</small>
                         </div>
 
                         <div class="form-group">

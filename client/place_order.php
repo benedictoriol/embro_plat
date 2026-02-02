@@ -1,6 +1,7 @@
 <?php
 session_start();
 require_once '../config/db.php';
+require_once '../config/constants.php';
 require_role('client');
 
 $client_id = $_SESSION['user']['id'];
@@ -35,6 +36,19 @@ $default_pricing_settings = [
         'Applique' => 60,
     ],
 ];
+
+function validate_design_description(string $description): string {
+    $trimmed = trim($description);
+    $length = mb_strlen($trimmed);
+    if ($length < 30) {
+        return 'Design description must be at least 30 characters and include placement, size, and color details.';
+    }
+    if ($length > 1000) {
+        return 'Design description cannot exceed 1000 characters.';
+    }
+
+    return '';
+}
 
 function resolve_pricing_settings(array $shop, array $defaults): array {
     if (!empty($shop['pricing_settings'])) {
@@ -101,15 +115,16 @@ $shops = array_map(function($shop) use ($available_services, $default_pricing_se
     $shop['pricing_settings'] = resolve_pricing_settings($shop, $default_pricing_settings);
     return $shop;
 }, $shops);
+$max_upload_mb = (int) ceil(MAX_FILE_SIZE / (1024 * 1024));
 
 // Place order
 if(isset($_POST['place_order'])) {
-    $shop_id = $_POST['shop_id'];
+    $shop_id = (int) ($_POST['shop_id'] ?? 0);
     $service_type = sanitize($_POST['service_type'] ?? '');
     $custom_service = sanitize($_POST['custom_service'] ?? '');
-    $design_description = sanitize($_POST['design_description']);
-    $quantity = $_POST['quantity'];
-    $client_notes = sanitize($_POST['client_notes']);
+    $design_description = sanitize($_POST['design_description'] ?? '');
+    $quantity = (int) ($_POST['quantity'] ?? 0);
+    $client_notes = sanitize($_POST['client_notes'] ?? '');
     $complexity_level = sanitize($_POST['complexity_level'] ?? 'Standard');
     $requested_add_ons = $_POST['add_ons'] ?? [];
     if (!is_array($requested_add_ons)) {
@@ -128,9 +143,19 @@ if(isset($_POST['place_order'])) {
             throw new RuntimeException('Selected shop is no longer available.');
         }
 
+        if ($shop_id <= 0) {
+            throw new RuntimeException('Please select a service provider.');
+        }
+
         $enabled_services = resolve_shop_services($shop_policy, $available_services);
         $is_custom_allowed = in_array('Custom', $enabled_services, true);
-        if ($custom_service && $is_custom_allowed) {
+        if ($custom_service !== '') {
+            if (!$is_custom_allowed) {
+                throw new RuntimeException('Custom services are not available for this shop.');
+            }
+            if (mb_strlen($custom_service) < 3 || mb_strlen($custom_service) > 60) {
+                throw new RuntimeException('Custom service name must be between 3 and 60 characters.');
+            }
             $service_type = $custom_service;
         }
 
@@ -140,6 +165,15 @@ if(isset($_POST['place_order'])) {
 
         if (!$is_custom_allowed && !in_array($service_type, $enabled_services, true)) {
             throw new RuntimeException('Selected service is not available for this shop.');
+        }
+
+        if ($quantity <= 0 || $quantity > 1000) {
+            throw new RuntimeException('Quantity must be between 1 and 1000.');
+        }
+
+        $design_error = validate_design_description($design_description);
+        if ($design_error !== '') {
+            throw new RuntimeException($design_error);
         }
 
         if (!is_shop_open($shop_policy)) {
@@ -202,18 +236,35 @@ if(isset($_POST['place_order'])) {
         $order_id = $pdo->lastInsertId();
         
         // Handle file upload
-        if(isset($_FILES['design_file']) && $_FILES['design_file']['error'] == 0) {
+        if(isset($_FILES['design_file']) && $_FILES['design_file']['error'] !== UPLOAD_ERR_NO_FILE) {
+            if ($_FILES['design_file']['error'] !== UPLOAD_ERR_OK) {
+                throw new RuntimeException('Design file upload failed. Please try again.');
+            }
+            $file = $_FILES['design_file'];
+            $file_size = $file['size'] ?? 0;
+            $file_ext = strtolower(pathinfo($file['name'] ?? '', PATHINFO_EXTENSION));
+            $allowed_extensions = array_merge(ALLOWED_IMAGE_TYPES, ALLOWED_DOC_TYPES);
+
+            if ($file_size > MAX_FILE_SIZE) {
+                throw new RuntimeException('Design file size exceeds the ' . $max_upload_mb . 'MB limit.');
+            }
+            if (!in_array($file_ext, $allowed_extensions, true)) {
+                throw new RuntimeException('Design file must be a JPG, PNG, GIF, PDF, DOC, or DOCX file.');
+            }
+
             $upload_dir = '../assets/uploads/designs/';
             if(!is_dir($upload_dir)) {
                 mkdir($upload_dir, 0777, true);
             }
             
-            $filename = $order_id . '_' . basename($_FILES['design_file']['name']);
+            $filename = $order_id . '_' . uniqid('design_', true) . '.' . $file_ext;
             $target_file = $upload_dir . $filename;
             
-            if(move_uploaded_file($_FILES['design_file']['tmp_name'], $target_file)) {
+            if(move_uploaded_file($file['tmp_name'], $target_file)) {
                 $update_stmt = $pdo->prepare("UPDATE orders SET design_file = ? WHERE id = ?");
                 $update_stmt->execute([$filename, $order_id]);
+            } else {
+                throw new RuntimeException('Failed to save the design file. Please try again.');
             }
         }
         
@@ -476,13 +527,14 @@ if(isset($_POST['place_order'])) {
                 <div class="form-group">
                     <label>Design Description *</label>
                     <textarea name="design_description" class="form-control" rows="4" required
-                              placeholder="Describe your design in detail..."></textarea>
+                              placeholder="Placement: (e.g., left chest)&#10;Size: (e.g., 3in x 2in)&#10;Colors/Thread: (e.g., navy + white)&#10;Fabric/Item: (e.g., cotton polo)&#10;Notes: (optional)"></textarea>
+                    <small class="text-muted">Provide at least 30 characters with placement, size, and color details for consistent quoting.</small>
                 </div>
                 
                 <div class="form-group">
                     <label>Upload Design File (Optional)</label>
-                    <input type="file" name="design_file" class="form-control" accept=".jpg,.jpeg,.png,.pdf,.ai,.eps">
-                    <small class="text-muted">Accepted formats: JPG, PNG, PDF, AI, EPS (Max 10MB)</small>
+                    <input type="file" name="design_file" class="form-control" accept=".jpg,.jpeg,.png,.gif,.pdf,.doc,.docx">
+                    <small class="text-muted">Accepted formats: JPG, PNG, GIF, PDF, DOC, DOCX (Max <?php echo $max_upload_mb; ?>MB)</small>
                 </div>
                 
                 <div class="row" style="display: flex; gap: 15px;">
