@@ -15,6 +15,31 @@ if(!$shop) {
 
 $success = '';
 $error = '';
+$weekdays = [
+    0 => 'Sunday',
+    1 => 'Monday',
+    2 => 'Tuesday',
+    3 => 'Wednesday',
+    4 => 'Thursday',
+    5 => 'Friday',
+    6 => 'Saturday',
+];
+$available_services = [
+    'T-shirt Embroidery',
+    'Logo Embroidery',
+    'Cap Embroidery',
+    'Bag Embroidery',
+    'Custom',
+];
+
+$current_operating_days = $shop['operating_days']
+    ? json_decode($shop['operating_days'], true)
+    : [1, 2, 3, 4, 5, 6];
+$current_services = $shop['service_settings']
+    ? json_decode($shop['service_settings'], true)
+    : $available_services;
+$current_opening_time = $shop['opening_time'] ?: '08:00';
+$current_closing_time = $shop['closing_time'] ?: '18:00';
 
 if($_SERVER['REQUEST_METHOD'] === 'POST') {
     $shop_name = sanitize($_POST['shop_name']);
@@ -23,11 +48,28 @@ if($_SERVER['REQUEST_METHOD'] === 'POST') {
     $phone = sanitize($_POST['phone']);
     $email = sanitize($_POST['email']);
     $business_permit = sanitize($_POST['business_permit']);
+    $opening_time = sanitize($_POST['opening_time']);
+    $closing_time = sanitize($_POST['closing_time']);
+    $operating_days = array_map('intval', $_POST['operating_days'] ?? []);
+    $enabled_services = array_values(array_intersect($available_services, $_POST['enabled_services'] ?? []));
 
     try {
+        if (empty($operating_days)) {
+            throw new RuntimeException('Please select at least one operating day.');
+        }
+        if (empty($enabled_services)) {
+            throw new RuntimeException('Please enable at least one service.');
+        }
+        $opening_timestamp = strtotime($opening_time);
+        $closing_timestamp = strtotime($closing_time);
+        if ($opening_timestamp === false || $closing_timestamp === false || $opening_timestamp >= $closing_timestamp) {
+            throw new RuntimeException('Please provide valid operating hours (opening time must be before closing time).');
+        }
+
         $update_stmt = $pdo->prepare("
             UPDATE shops 
-            SET shop_name = ?, shop_description = ?, address = ?, phone = ?, email = ?, business_permit = ?
+            SET shop_name = ?, shop_description = ?, address = ?, phone = ?, email = ?, business_permit = ?,
+                opening_time = ?, closing_time = ?, operating_days = ?, service_settings = ?
             WHERE id = ?
         ");
         $update_stmt->execute([
@@ -37,12 +79,26 @@ if($_SERVER['REQUEST_METHOD'] === 'POST') {
             $phone,
             $email,
             $business_permit,
+            $opening_time,
+            $closing_time,
+            json_encode(array_values($operating_days)),
+            json_encode(array_values($enabled_services)),
             $shop['id']
         ]);
 
         $shop_stmt->execute([$owner_id]);
         $shop = $shop_stmt->fetch();
+        $current_operating_days = $shop['operating_days']
+            ? json_decode($shop['operating_days'], true)
+            : $current_operating_days;
+        $current_services = $shop['service_settings']
+            ? json_decode($shop['service_settings'], true)
+            : $current_services;
+        $current_opening_time = $shop['opening_time'] ?: $current_opening_time;
+        $current_closing_time = $shop['closing_time'] ?: $current_closing_time;
         $success = 'Shop profile updated successfully.';
+    } catch(RuntimeException $e) {
+        $error = $e->getMessage();
     } catch(PDOException $e) {
         $error = 'Failed to update shop profile: ' . $e->getMessage();
     }
@@ -133,6 +189,51 @@ if($_SERVER['REQUEST_METHOD'] === 'POST') {
                     <label>Business Permit Number</label>
                     <input type="text" name="business_permit" class="form-control"
                            value="<?php echo htmlspecialchars($shop['business_permit']); ?>">
+                </div>
+
+                <div class="card" style="background: #f8fafc;">
+                    <h4>Operating Hours</h4>
+                    <p class="text-muted">Set when your shop accepts new orders.</p>
+                    <div class="row" style="display: flex; gap: 15px; flex-wrap: wrap;">
+                        <div class="form-group" style="flex: 1; min-width: 200px;">
+                            <label>Opening Time</label>
+                            <input type="time" name="opening_time" class="form-control" required
+                                   value="<?php echo htmlspecialchars($current_opening_time); ?>">
+                        </div>
+                        <div class="form-group" style="flex: 1; min-width: 200px;">
+                            <label>Closing Time</label>
+                            <input type="time" name="closing_time" class="form-control" required
+                                   value="<?php echo htmlspecialchars($current_closing_time); ?>">
+                        </div>
+                    </div>
+                    <div class="form-group">
+                        <label>Operating Days</label>
+                        <div class="row" style="display: flex; flex-wrap: wrap; gap: 12px;">
+                            <?php foreach ($weekdays as $dayIndex => $dayLabel): ?>
+                                <label style="display: flex; align-items: center; gap: 6px;">
+                                    <input type="checkbox" name="operating_days[]"
+                                           value="<?php echo $dayIndex; ?>"
+                                           <?php echo in_array($dayIndex, $current_operating_days, true) ? 'checked' : ''; ?>>
+                                    <span><?php echo htmlspecialchars($dayLabel); ?></span>
+                                </label>
+                            <?php endforeach; ?>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="card" style="background: #f8fafc;">
+                    <h4>Service Availability</h4>
+                    <p class="text-muted">Choose which services clients can request from your shop.</p>
+                    <div class="row" style="display: flex; flex-wrap: wrap; gap: 12px;">
+                        <?php foreach ($available_services as $service): ?>
+                            <label style="display: flex; align-items: center; gap: 6px;">
+                                <input type="checkbox" name="enabled_services[]"
+                                       value="<?php echo htmlspecialchars($service); ?>"
+                                       <?php echo in_array($service, $current_services, true) ? 'checked' : ''; ?>>
+                                <span><?php echo htmlspecialchars($service); ?></span>
+                            </label>
+                        <?php endforeach; ?>
+                    </div>
                 </div>
 
                 <div class="row" style="display: flex; gap: 15px;">

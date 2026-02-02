@@ -621,6 +621,10 @@ CREATE TABLE `shops` (
   `business_permit` varchar(100) DEFAULT NULL,
   `permit_file` varchar(255) DEFAULT NULL,
   `logo` varchar(255) DEFAULT NULL,
+  `opening_time` time DEFAULT NULL,
+  `closing_time` time DEFAULT NULL,
+  `operating_days` longtext CHARACTER SET utf8mb4 COLLATE utf8mb4_bin DEFAULT NULL CHECK (json_valid(`operating_days`)),
+  `service_settings` longtext CHARACTER SET utf8mb4 COLLATE utf8mb4_bin DEFAULT NULL CHECK (json_valid(`service_settings`)),
   `status` enum('pending','active','suspended','rejected') DEFAULT 'pending',
   `rejection_reason` text DEFAULT NULL,
   `rejected_at` timestamp NULL DEFAULT NULL,
@@ -635,10 +639,10 @@ CREATE TABLE `shops` (
 -- Dumping data for table `shops`
 --
 
-INSERT INTO `shops` (`id`, `owner_id`, `shop_name`, `shop_description`, `address`, `phone`, `email`, `business_permit`, `permit_file`, `logo`, `status`, `rejection_reason`, `rejected_at`, `rating`, `total_orders`, `total_earnings`, `created_at`, `updated_at`) VALUES
-(1, 5, 'Thread & Needle Studio', 'Custom embroidery and uniform design services.', '123 Market Street', '09171234567', 'owner@embroidery.com', NULL, NULL, NULL, 'active', NULL, NULL, 4.50, 5, 6400.00, '2026-01-22 12:20:00', '2026-01-22 12:20:00'),
-(2, 14, 'Ailly Mae Ramil\'s Shop', NULL, NULL, NULL, NULL, NULL, NULL, NULL, 'active', NULL, NULL, 5.00, 4, 0.00, '2026-01-30 13:17:57', '2026-01-31 01:31:26'),
-(3, 17, 'sean\'s Shop', NULL, NULL, NULL, NULL, NULL, NULL, NULL, 'active', NULL, NULL, 0.00, 1, 0.00, '2026-01-31 05:59:47', '2026-01-31 06:00:59');
+INSERT INTO `shops` (`id`, `owner_id`, `shop_name`, `shop_description`, `address`, `phone`, `email`, `business_permit`, `permit_file`, `logo`, `opening_time`, `closing_time`, `operating_days`, `service_settings`, `status`, `rejection_reason`, `rejected_at`, `rating`, `total_orders`, `total_earnings`, `created_at`, `updated_at`) VALUES
+(1, 5, 'Thread & Needle Studio', 'Custom embroidery and uniform design services.', '123 Market Street', '09171234567', 'owner@embroidery.com', NULL, NULL, NULL, '08:00:00', '18:00:00', '[1,2,3,4,5,6]', '[\"T-shirt Embroidery\",\"Logo Embroidery\",\"Cap Embroidery\",\"Bag Embroidery\",\"Custom\"]', 'active', NULL, NULL, 4.50, 5, 6400.00, '2026-01-22 12:20:00', '2026-01-22 12:20:00'),
+(2, 14, 'Ailly Mae Ramil\'s Shop', NULL, NULL, NULL, NULL, NULL, NULL, NULL, '09:00:00', '17:00:00', '[1,2,3,4,5]', '[\"T-shirt Embroidery\",\"Logo Embroidery\",\"Custom\"]', 'active', NULL, NULL, 5.00, 4, 0.00, '2026-01-30 13:17:57', '2026-01-31 01:31:26'),
+(3, 17, 'sean\'s Shop', NULL, NULL, NULL, NULL, NULL, NULL, NULL, '10:00:00', '19:00:00', '[2,3,4,5,6]', '[\"Cap Embroidery\",\"Bag Embroidery\",\"Custom\"]', 'active', NULL, NULL, 0.00, 1, 0.00, '2026-01-31 05:59:47', '2026-01-31 06:00:59');
 
 -- --------------------------------------------------------
 
