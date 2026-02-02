@@ -157,7 +157,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 }
 
 $pendingShops = $pdo->query("
-    SELECT s.id, s.shop_name, s.owner_id, s.address, s.phone, s.created_at, u.fullname as owner_name, u.email as owner_email
+    SELECT s.id, s.shop_name, s.owner_id, s.address, s.phone, s.created_at, s.business_permit, s.permit_file,
+        u.fullname as owner_name, u.email as owner_email
     FROM shops s
     JOIN users u ON s.owner_id = u.id
     WHERE s.status = 'pending'
@@ -235,6 +236,7 @@ $pendingShops = $pdo->query("
                                 <th>Shop</th>
                                 <th>Owner</th>
                                 <th>Contact</th>
+                                <th>Business Permit</th>
                                 <th>Requested</th>
                                 <th>Action</th>
                             </tr>
@@ -250,6 +252,16 @@ $pendingShops = $pdo->query("
                                     <td>
                                         <div><?php echo htmlspecialchars($shop['owner_email']); ?></div>
                                         <small class="text-muted"><?php echo htmlspecialchars($shop['phone'] ?? 'N/A'); ?></small>
+                                    </td>
+                                    <td>
+                                        <div><?php echo htmlspecialchars($shop['business_permit'] ?: 'Permit number not provided'); ?></div>
+                                        <?php if (!empty($shop['permit_file'])): ?>
+                                            <a href="../assets/uploads/permits/<?php echo htmlspecialchars($shop['permit_file']); ?>" target="_blank" rel="noopener noreferrer">
+                                                View permit file
+                                            </a>
+                                        <?php else: ?>
+                                            <div class="text-muted small">No permit file uploaded</div>
+                                        <?php endif; ?>
                                     </td>
                                     <td><?php echo $shop['created_at'] ? date('M d, Y', strtotime($shop['created_at'])) : '—'; ?></td>
                                     <td>

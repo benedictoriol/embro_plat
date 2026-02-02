@@ -42,59 +42,98 @@ if($_SERVER['REQUEST_METHOD'] == 'POST') {
     } elseif($password !== $confirm_password) {
         $error = "Passwords do not match!";
     } else {
-        try {
-            // Check if email exists
-            $check_stmt = $pdo->prepare("SELECT id FROM users WHERE email = ?");
-            $check_stmt->execute([$email]);
-            
-            if($check_stmt->rowCount() > 0) {
-                $error = "Email already registered!";
+        $permitFilename = null;
+        $permitFilePath = null;
+        $permitNumber = '';
+        if ($user_type === 'owner') {
+            $permitNumber = sanitize($_POST['business_permit'] ?? '');
+            $permitFile = $_FILES['business_permit_file'] ?? null;
+            if (!$permitFile || $permitFile['error'] !== UPLOAD_ERR_OK) {
+                $error = "Please upload a valid business permit file.";
             } else {
-                // Hash password
-                $hashed_password = password_hash($password, PASSWORD_DEFAULT);
+                $allowed_ext = ['jpg', 'jpeg', 'png', 'pdf'];
+                $file_ext = strtolower(pathinfo($permitFile['name'], PATHINFO_EXTENSION));
+                $file_size = (int) $permitFile['size'];
+
+                if (!in_array($file_ext, $allowed_ext, true)) {
+                    $error = "Business permit files must be JPG, PNG, or PDF files.";
+                } elseif ($file_size > 5 * 1024 * 1024) {
+                    $error = "Business permit files must be smaller than 5MB.";
+                } else {
+                    $permit_upload_dir = '../assets/uploads/permits/';
+                    if (!is_dir($permit_upload_dir)) {
+                        mkdir($permit_upload_dir, 0755, true);
+                    }
+                    $permitFilename = 'permit_' . uniqid('owner_', true) . '.' . $file_ext;
+                    $destination = $permit_upload_dir . $permitFilename;
+                    if (!move_uploaded_file($permitFile['tmp_name'], $destination)) {
+                        $error = "Unable to upload the business permit. Please try again.";
+                    } else {
+                        $permitFilePath = $destination;
+                    }
+                }
+            }
+        }
+        if (!$error) {
+            try {
+                // Check if email exists
+                $check_stmt = $pdo->prepare("SELECT id FROM users WHERE email = ?");
+                $check_stmt->execute([$email]);
                 
-                // Insert user
+                if($check_stmt->rowCount() > 0) {
+                    if ($permitFilePath && is_file($permitFilePath)) {
+                        unlink($permitFilePath);
+                    }
+                    $error = "Email already registered!";
+                } else {
+                    // Hash password
+                    $hashed_password = password_hash($password, PASSWORD_DEFAULT);
+                    
+                    // Insert user
 
                  $user_status = $user_type === 'owner' ? 'pending' : 'active';
-                $stmt = $pdo->prepare("
-                    INSERT INTO users (fullname, email, password, phone, role, status) 
-                     VALUES (?, ?, ?, ?, ?, ?)
+                    $stmt = $pdo->prepare("
+                        INSERT INTO users (fullname, email, password, phone, role, status) 
+                         VALUES (?, ?, ?, ?, ?, ?)
 
                
                 ");
-                
-                $stmt->execute([
-                    $fullname, 
-                    $email, 
-                    $hashed_password, 
-                    $phone, 
-
-                    $user_type,
-                    $user_status
+                    
+                    $stmt->execute([
+                        $fullname, 
+                        $email, 
+                        $hashed_password, 
+                        $phone,
+                        $user_type,
+                        $user_status
 
 
                 ]);
-                
-                $user_id = $pdo->lastInsertId();
-                
-                // If registering as owner, create shop entry
-                if($user_type == 'owner') {
-                    $shop_name = $fullname . "'s Shop";
-                    $shop_stmt = $pdo->prepare("
-                        INSERT INTO shops (owner_id, shop_name, status) 
-                        VALUES (?, ?, 'pending')
-                    ");
-                    $shop_stmt->execute([$user_id, $shop_name]);
-                }
-                
+                    
+                    $user_id = $pdo->lastInsertId();
+                    
+                    // If registering as owner, create shop entry
+                    if($user_type == 'owner') {
+                        $shop_name = $fullname . "'s Shop";
+                        $shop_stmt = $pdo->prepare("
+                            INSERT INTO shops (owner_id, shop_name, status, business_permit, permit_file) 
+                            VALUES (?, ?, 'pending', ?, ?)
+                        ");
+                        $shop_stmt->execute([$user_id, $shop_name, $permitNumber, $permitFilename]);
+                    }
+                    
 
                 $success = $user_status === 'pending'
-                    ? "Registration successful! Your account is pending approval."
-                    : "Registration successful! You can now log in.";
+                        ? "Registration successful! Your account is pending approval."
+                        : "Registration successful! You can now log in.";
+                        }
+            } catch(PDOException $e) {
+                if ($permitFilePath && is_file($permitFilePath)) {
+                    unlink($permitFilePath);
+                }
+                $error = "Registration failed: " . $e->getMessage();
 
             }
-        } catch(PDOException $e) {
-            $error = "Registration failed: " . $e->getMessage();
         }
     }
     }
@@ -142,7 +181,7 @@ if($_SERVER['REQUEST_METHOD'] == 'POST') {
                             <i class="fas fa-ban"></i> Registrations are currently disabled by system administrators.
                         </div>
                     <?php else: ?>
-                <form method="POST">
+                <form method="POST" enctype="multipart/form-data">
                     <input type="hidden" name="type" value="<?php echo $type; ?>">
                     
                     <div class="form-group">
@@ -177,9 +216,20 @@ if($_SERVER['REQUEST_METHOD'] == 'POST') {
                 </div>
                 
                 <?php if($type == 'owner'): ?>
+                    <div class="form-group">
+                            <label class="form-label" for="business_permit">Business Permit Number (optional)</label>
+                            <input type="text" name="business_permit" class="form-control"
+                                   placeholder="Enter business permit number" id="business_permit">
+                        </div>
+                        <div class="form-group">
+                            <label class="form-label" for="business_permit_file">Business Permit File *</label>
+                            <input type="file" name="business_permit_file" class="form-control" required
+                                   accept=".jpg,.jpeg,.png,.pdf" id="business_permit_file">
+                            <small class="text-muted">Upload a clear photo or PDF of your business permit (max 5MB).</small>
+                        </div>
                         <div class="alert alert-info">
                             <h6><i class="fas fa-info-circle"></i> Shop Owner Registration</h6>
-                            <p class="mb-0">After registration, you'll need to provide business details and documents for verification.</p>
+                            <p class="mb-0">Your business permit will be reviewed by administrators before approval.</p>
                         </div>
                     <?php endif; ?>
                     <button type="submit" class="btn btn-primary btn-lg w-100">
