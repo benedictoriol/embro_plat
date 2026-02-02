@@ -14,7 +14,7 @@ if(!$shop) {
 }
 
 $shop_id = $shop['id'];
-$allowed_filters = ['pending', 'accepted', 'in_progress', 'completed'];
+$allowed_filters = ['pending', 'accepted', 'in_progress', 'completed', 'cancelled'];
 $filter = isset($_GET['filter']) ? $_GET['filter'] : 'all';
 
 $active_staff_stmt = $pdo->prepare("
@@ -230,6 +230,7 @@ function format_quote_details(?array $quote_details): array {
         .status-accepted { background: #ede9fe; color: #5b21b6; }
         .status-in_progress { background: #e0f2fe; color: #0369a1; }
         .status-completed { background: #dcfce7; color: #166534; }
+        .status-cancelled { background: #fee2e2; color: #991b1b; }
         .payment-unpaid { background: #fef3c7; color: #92400e; }
         .payment-pending { background: #e0f2fe; color: #0369a1; }
         .payment-paid { background: #dcfce7; color: #166534; }
@@ -304,6 +305,7 @@ function format_quote_details(?array $quote_details): array {
             <a href="shop_orders.php?filter=accepted" class="<?php echo $filter === 'accepted' ? 'active' : ''; ?>">Accepted</a>
             <a href="shop_orders.php?filter=in_progress" class="<?php echo $filter === 'in_progress' ? 'active' : ''; ?>">In Progress</a>
             <a href="shop_orders.php?filter=completed" class="<?php echo $filter === 'completed' ? 'active' : ''; ?>">Completed</a>
+            <a href="shop_orders.php?filter=cancelled" class="<?php echo $filter === 'cancelled' ? 'active' : ''; ?>">Cancelled</a>
         </div>
 
         <div class="card">

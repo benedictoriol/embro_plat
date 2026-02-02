@@ -123,7 +123,7 @@ if($_SERVER['REQUEST_METHOD'] === 'POST' && $action !== '') {
         $error = 'Unable to locate the order for this action.';
     } elseif($action === 'cancel_order') {
         $reason = sanitize($_POST['cancellation_reason'] ?? '');
-        if(!in_array($order['status'], ['pending', 'accepted'], true) || (int) $order['progress'] > $max_cancel_progress) {
+        if(!can_transition_order_status($order['status'], STATUS_CANCELLED) || (int) $order['progress'] > $max_cancel_progress) {
             $error = 'This order can no longer be cancelled.';
         } else {
             $cancel_stmt = $pdo->prepare("
@@ -139,6 +139,25 @@ if($_SERVER['REQUEST_METHOD'] === 'POST' && $action !== '') {
                 $order_id,
                 'warning',
                 'Order #' . $order['order_number'] . ' was cancelled per your request.'
+            );
+            if(!empty($order['owner_id'])) {
+                create_notification(
+                    $pdo,
+                    (int) $order['owner_id'],
+                    $order_id,
+                    'order_status',
+                    'Order #' . $order['order_number'] . ' was cancelled by the client.'
+                );
+            }
+            log_audit(
+                $pdo,
+                $client_id,
+                $_SESSION['user']['role'] ?? null,
+                'cancel_order',
+                'orders',
+                $order_id,
+                ['status' => $order['status'] ?? null],
+                ['status' => STATUS_CANCELLED, 'cancellation_reason' => $reason]
             );
         }
     } elseif($action === 'approve_design') {

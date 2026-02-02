@@ -90,10 +90,16 @@ if(isset($_POST['update_status'])) {
     $order_info_stmt->execute([$employee_id, $order_id, $employee_id, $employee_id]);
     $order_info = $order_info_stmt->fetch();
 
+    $allowed_statuses = [STATUS_IN_PROGRESS, STATUS_COMPLETED];
+
     if(!$order_info) {
         $error = "Unable to update this order.";
-        } elseif($photo_count === 0) {
+    } elseif($photo_count === 0) {
         $error = "Please upload a progress photo before updating the status.";
+    } elseif(!in_array($status, $allowed_statuses, true)) {
+        $error = "Invalid status selection.";
+    } elseif(!can_transition_order_status($order_info['status'], $status)) {
+        $error = "Status transition not allowed from the current state.";
     } else {
         try {
             $update_stmt = $pdo->prepare("

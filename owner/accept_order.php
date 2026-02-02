@@ -35,7 +35,7 @@ if(!$order || $order['status'] !== 'pending') {
     exit();
 }
 
-$update_stmt = $pdo->prepare("UPDATE orders SET status = 'accepted' WHERE id = ? AND shop_id = ?");
+$update_stmt = $pdo->prepare("UPDATE orders SET status = 'accepted', updated_at = NOW() WHERE id = ? AND shop_id = ?");
 $update_stmt->execute([$order_id, $shop['id']]);
 
 if($order) {
