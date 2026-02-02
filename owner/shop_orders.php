@@ -18,7 +18,21 @@ $allowed_filters = ['pending', 'accepted', 'in_progress', 'completed'];
 $filter = isset($_GET['filter']) ? $_GET['filter'] : 'all';
 
 $active_staff_stmt = $pdo->prepare("
-    SELECT se.user_id, u.fullname, se.position
+    SELECT 
+        se.user_id, 
+        u.fullname, 
+        se.position,
+        se.availability_days,
+        se.availability_start,
+        se.availability_end,
+        se.max_active_orders,
+        (
+            SELECT COUNT(*) 
+            FROM orders o 
+            WHERE o.shop_id = se.shop_id 
+              AND o.assigned_to = se.user_id 
+              AND o.status IN ('pending', 'accepted', 'in_progress')
+        ) as active_orders
     FROM shop_employees se
     JOIN users u ON se.user_id = u.id
     WHERE se.shop_id = ? AND se.status = 'active'
@@ -72,7 +86,7 @@ if(isset($_POST['assign_order'])) {
     $order_id = (int) $_POST['order_id'];
     $employee_id = (int) $_POST['employee_id'];
 
-    $order_stmt = $pdo->prepare("SELECT id, status FROM orders WHERE id = ? AND shop_id = ?");
+    $order_stmt = $pdo->prepare("SELECT id, status, assigned_to, scheduled_date FROM orders WHERE id = ? AND shop_id = ?");
     $order_stmt->execute([$order_id, $shop_id]);
     $order = $order_stmt->fetch();
 
@@ -83,7 +97,19 @@ if(isset($_POST['assign_order'])) {
     } else {
         if($employee_id > 0) {
             $employee_stmt = $pdo->prepare("
-                SELECT se.user_id 
+                SELECT 
+                    se.user_id,
+                    se.availability_days,
+                    se.availability_start,
+                    se.availability_end,
+                    se.max_active_orders,
+                    (
+                        SELECT COUNT(*) 
+                        FROM orders o 
+                        WHERE o.shop_id = se.shop_id 
+                          AND o.assigned_to = se.user_id 
+                          AND o.status IN ('pending', 'accepted', 'in_progress')
+                    ) as active_orders 
                 FROM shop_employees se 
                 WHERE se.shop_id = ? AND se.user_id = ? AND se.status = 'active'
             ");
@@ -91,9 +117,34 @@ if(isset($_POST['assign_order'])) {
             $employee = $employee_stmt->fetch();
 
             if($employee) {
-                $assign_stmt = $pdo->prepare("UPDATE orders SET assigned_to = ? WHERE id = ? AND shop_id = ?");
-                $assign_stmt->execute([$employee_id, $order_id, $shop_id]);
-                $success = "Order assignment updated.";
+                $availability_days = [];
+                if(!empty($employee['availability_days'])) {
+                    $decoded_days = json_decode($employee['availability_days'], true);
+                    if(is_array($decoded_days)) {
+                        $availability_days = array_map('intval', $decoded_days);
+                    }
+                }
+
+                $schedule_date = $order['scheduled_date'] ? date('Y-m-d', strtotime($order['scheduled_date'])) : date('Y-m-d');
+                $schedule_day = (int) date('N', strtotime($schedule_date));
+                $current_time = date('H:i:s');
+
+                $max_active_orders = (int) ($employee['max_active_orders'] ?? 0);
+                $active_orders = (int) ($employee['active_orders'] ?? 0);
+                $is_same_assignee = !empty($order['assigned_to']) && (int) $order['assigned_to'] === $employee_id;
+
+                if($max_active_orders > 0 && $active_orders >= $max_active_orders && !$is_same_assignee) {
+                    $error = "This staff member is already at their active order capacity.";
+                } elseif(!empty($availability_days) && !in_array($schedule_day, $availability_days, true)) {
+                    $error = "This staff member is not available on the scheduled day.";
+                } elseif($employee['availability_start'] && $employee['availability_end']
+                    && ($current_time < $employee['availability_start'] || $current_time > $employee['availability_end'])) {
+                    $error = "This staff member is outside their availability hours right now.";
+                } else {
+                    $assign_stmt = $pdo->prepare("UPDATE orders SET assigned_to = ? WHERE id = ? AND shop_id = ?");
+                    $assign_stmt->execute([$employee_id, $order_id, $shop_id]);
+                    $success = "Order assignment updated.";
+                }
             } else {
                 $error = "Selected employee is not active for this shop.";
             }
@@ -313,9 +364,16 @@ $orders = $orders_stmt->fetchAll();
                                             <select name="employee_id" class="form-control" <?php echo empty($active_staff) ? 'disabled' : ''; ?>>
                                                 <option value="">Unassigned</option>
                                                 <?php foreach($active_staff as $staff): ?>
+                                                    <?php
+                                                        $max_capacity = (int) ($staff['max_active_orders'] ?? 0);
+                                                        $active_orders = (int) ($staff['active_orders'] ?? 0);
+                                                        $at_capacity = $max_capacity > 0 && $active_orders >= $max_capacity;
+                                                        $capacity_label = $max_capacity > 0 ? ' (' . $active_orders . '/' . $max_capacity . ' active)' : '';
+                                                    ?>
                                                     <option value="<?php echo $staff['user_id']; ?>"
-                                                        <?php echo ($order['assigned_to'] == $staff['user_id']) ? 'selected' : ''; ?>>
-                                                        <?php echo htmlspecialchars($staff['fullname']); ?>
+                                                        <?php echo ($order['assigned_to'] == $staff['user_id']) ? 'selected' : ''; ?>
+                                                        <?php echo $at_capacity && $order['assigned_to'] != $staff['user_id'] ? 'disabled' : ''; ?>>
+                                                        <?php echo htmlspecialchars($staff['fullname']) . $capacity_label; ?>
                                                     </option>
                                                 <?php endforeach; ?>
                                             </select>

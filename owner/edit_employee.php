@@ -9,6 +9,15 @@ $available_permissions = [
     'update_status' => 'Update job status',
     'upload_photos' => 'Upload output photos',
 ];
+$availability_days = [
+    1 => 'Monday',
+    2 => 'Tuesday',
+    3 => 'Wednesday',
+    4 => 'Thursday',
+    5 => 'Friday',
+    6 => 'Saturday',
+    7 => 'Sunday',
+];
 
 $shop_stmt = $pdo->prepare("SELECT * FROM shops WHERE owner_id = ?");
 $shop_stmt->execute([$owner_id]);
@@ -43,15 +52,29 @@ if($employee && isset($_POST['update_employee'])) {
     $email = sanitize($_POST['email'] ?? '');
     $phone = sanitize($_POST['phone'] ?? '');
     $position = sanitize($_POST['position'] ?? '');
+    $selected_days = array_map('intval', $_POST['availability_days'] ?? []);
+    $availability_start = $_POST['availability_start'] ?? null;
+    $availability_end = $_POST['availability_end'] ?? null;
+    $max_active_orders = isset($_POST['max_active_orders']) ? (int) $_POST['max_active_orders'] : 0;
     $selected_permissions = $_POST['permissions'] ?? [];
     $permissions_map = [];
     foreach ($available_permissions as $permission_key => $permission_label) {
         $permissions_map[$permission_key] = in_array($permission_key, $selected_permissions, true);
     }
     $permissions = json_encode($permissions_map);
+    $availability_days_json = !empty($selected_days) ? json_encode(array_values($selected_days)) : null;
 
     if(!$fullname || !$email || !$position) {
         $message = 'Full name, email, and position are required.';
+        $message_type = 'danger';
+    } elseif($max_active_orders < 1) {
+        $message = 'Please set a staff capacity of at least 1 active order.';
+        $message_type = 'danger';
+    } elseif(empty($selected_days)) {
+        $message = 'Please select at least one availability day.';
+        $message_type = 'danger';
+    } elseif($availability_start && $availability_end && $availability_start >= $availability_end) {
+        $message = 'Availability end time must be later than start time.';
         $message_type = 'danger';
     } else {
         try {
@@ -65,8 +88,21 @@ if($employee && isset($_POST['update_employee'])) {
                 $update_user = $pdo->prepare("UPDATE users SET fullname = ?, email = ?, phone = ? WHERE id = ?");
                 $update_user->execute([$fullname, $email, $phone, $employee['user_id']]);
 
-                $update_employee = $pdo->prepare("UPDATE shop_employees SET position = ?, permissions = ? WHERE id = ? AND shop_id = ?");
-                $update_employee->execute([$position, $permissions, $employee_id, $shop_id]);
+                $update_employee = $pdo->prepare("
+                    UPDATE shop_employees 
+                    SET position = ?, permissions = ?, availability_days = ?, availability_start = ?, availability_end = ?, max_active_orders = ?
+                    WHERE id = ? AND shop_id = ?
+                ");
+                $update_employee->execute([
+                    $position,
+                    $permissions,
+                    $availability_days_json,
+                    $availability_start ?: null,
+                    $availability_end ?: null,
+                    $max_active_orders,
+                    $employee_id,
+                    $shop_id
+                ]);
 
                 $message = 'Employee updated successfully!';
                 $message_type = 'success';
@@ -94,6 +130,20 @@ foreach ($available_permissions as $permission_key => $permission_label) {
         $current_permissions[$permission_key] = false;
     }
 }
+
+$current_availability_days = [];
+if($employee && !empty($employee['availability_days'])) {
+    $decoded_days = json_decode($employee['availability_days'], true);
+    if(is_array($decoded_days)) {
+        $current_availability_days = array_map('intval', $decoded_days);
+    }
+}
+if(empty($current_availability_days)) {
+    $current_availability_days = array_keys($availability_days);
+}
+$availability_start_value = $employee['availability_start'] ?? '09:00';
+$availability_end_value = $employee['availability_end'] ?? '18:00';
+$max_active_orders_value = $employee['max_active_orders'] ?? 3;
 ?>
 <!DOCTYPE html>
 <html lang="en">
@@ -181,6 +231,42 @@ foreach ($available_permissions as $permission_key => $permission_label) {
                                 </option>
                             <?php endforeach; ?>
                         </select>
+                    </div>
+
+                    <div class="form-group">
+                        <label>Availability Days *</label>
+                        <div class="d-flex flex-wrap gap-2">
+                            <?php foreach ($availability_days as $day_number => $day_label): ?>
+                                <label class="form-check mr-3" style="min-width: 120px;">
+                                    <input
+                                        type="checkbox"
+                                        class="form-check-input"
+                                        name="availability_days[]"
+                                        value="<?php echo $day_number; ?>"
+                                        <?php echo in_array($day_number, $current_availability_days, true) ? 'checked' : ''; ?>
+                                    >
+                                    <span class="form-check-label"><?php echo htmlspecialchars($day_label); ?></span>
+                                </label>
+                            <?php endforeach; ?>
+                        </div>
+                        <small class="text-muted">Select working days for this staff member.</small>
+                    </div>
+
+                    <div class="form-group d-flex justify-between align-center" style="gap: 16px;">
+                        <div style="flex: 1;">
+                            <label>Availability Start Time</label>
+                            <input type="time" name="availability_start" class="form-control" value="<?php echo htmlspecialchars($availability_start_value); ?>">
+                        </div>
+                        <div style="flex: 1;">
+                            <label>Availability End Time</label>
+                            <input type="time" name="availability_end" class="form-control" value="<?php echo htmlspecialchars($availability_end_value); ?>">
+                        </div>
+                    </div>
+
+                    <div class="form-group">
+                        <label>Max Active Orders *</label>
+                        <input type="number" name="max_active_orders" class="form-control" min="1" required value="<?php echo (int) $max_active_orders_value; ?>">
+                        <small class="text-muted">Orders above this limit cannot be assigned automatically.</small>
                     </div>
 
                     <div class="form-group">

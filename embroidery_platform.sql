@@ -656,6 +656,10 @@ CREATE TABLE `shop_employees` (
   `user_id` int(11) NOT NULL,
   `position` varchar(100) DEFAULT NULL,
   `permissions` longtext CHARACTER SET utf8mb4 COLLATE utf8mb4_bin DEFAULT NULL CHECK (json_valid(`permissions`)),
+  `availability_days` longtext CHARACTER SET utf8mb4 COLLATE utf8mb4_bin DEFAULT NULL CHECK (json_valid(`availability_days`)),
+  `availability_start` time DEFAULT NULL,
+  `availability_end` time DEFAULT NULL,
+  `max_active_orders` int(11) DEFAULT 3,
   `hired_date` date DEFAULT NULL,
   `status` enum('active','inactive') DEFAULT 'active',
   `created_at` timestamp NOT NULL DEFAULT current_timestamp()
@@ -665,9 +669,9 @@ CREATE TABLE `shop_employees` (
 -- Dumping data for table `shop_employees`
 --
 
-INSERT INTO `shop_employees` (`id`, `shop_id`, `user_id`, `position`, `permissions`, `hired_date`, `status`, `created_at`) VALUES
-(1, 2, 13, 'Designer', '{\"view_jobs\":true,\"update_status\":true,\"upload_photos\":true}', '2026-01-30', 'active', '2026-01-30 13:18:40'),
-(2, 3, 18, 'Designer', '{\"view_jobs\":true,\"update_status\":true,\"upload_photos\":true}', '2026-01-31', 'active', '2026-01-31 06:03:26');
+INSERT INTO `shop_employees` (`id`, `shop_id`, `user_id`, `position`, `permissions`, `availability_days`, `availability_start`, `availability_end`, `max_active_orders`, `hired_date`, `status`, `created_at`) VALUES
+(1, 2, 13, 'Designer', '{\"view_jobs\":true,\"update_status\":true,\"upload_photos\":true}', '[1,2,3,4,5]', '09:00:00', '18:00:00', 3, '2026-01-30', 'active', '2026-01-30 13:18:40'),
+(2, 3, 18, 'Designer', '{\"view_jobs\":true,\"update_status\":true,\"upload_photos\":true}', '[2,3,4,5,6]', '10:00:00', '19:00:00', 3, '2026-01-31', 'active', '2026-01-31 06:03:26');
 
 -- --------------------------------------------------------
 

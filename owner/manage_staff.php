@@ -9,6 +9,15 @@ $available_permissions = [
     'update_status' => 'Update job status',
     'upload_photos' => 'Upload output photos',
 ];
+$availability_days = [
+    1 => 'Monday',
+    2 => 'Tuesday',
+    3 => 'Wednesday',
+    4 => 'Thursday',
+    5 => 'Friday',
+    6 => 'Saturday',
+    7 => 'Sunday',
+];
 
 // Get shop details
 $shop_stmt = $pdo->prepare("SELECT * FROM shops WHERE owner_id = ?");
@@ -30,18 +39,29 @@ if(isset($_POST['add_employee'])) {
     $password = $_POST['password'];
     $confirm_password = $_POST['confirm_password'];
     $position = sanitize($_POST['position']);
+    $selected_days = array_map('intval', $_POST['availability_days'] ?? []);
+    $availability_start = $_POST['availability_start'] ?? null;
+    $availability_end = $_POST['availability_end'] ?? null;
+    $max_active_orders = isset($_POST['max_active_orders']) ? (int) $_POST['max_active_orders'] : 0;
     $selected_permissions = $_POST['permissions'] ?? [];
     $permissions_map = [];
     foreach ($available_permissions as $permission_key => $permission_label) {
         $permissions_map[$permission_key] = in_array($permission_key, $selected_permissions, true);
     }
-    $permissions = json_encode($permissions_map);    
+    $permissions = json_encode($permissions_map);
+    $availability_days_json = !empty($selected_days) ? json_encode(array_values($selected_days)) : null;    
 
     try {
         if($password !== $confirm_password) {
             $error = "Passwords do not match!";
         } elseif(strlen($password) < 8) {
             $error = "Password must be at least 8 characters long!";
+        } elseif($max_active_orders < 1) {
+            $error = "Please set a staff capacity of at least 1 active order.";
+        } elseif(empty($selected_days)) {
+            $error = "Please select at least one availability day.";
+        } elseif($availability_start && $availability_end && $availability_start >= $availability_end) {
+            $error = "Availability end time must be later than start time.";
         } else {
             // Check if user exists
             $user_stmt = $pdo->prepare("SELECT id, role FROM users WHERE email = ?");
@@ -60,19 +80,37 @@ if(isset($_POST['add_employee'])) {
                     if(!$existing) {
                         // Add as employee
                         $add_stmt = $pdo->prepare("
-                            INSERT INTO shop_employees (shop_id, user_id, position, permissions, hired_date) 
-                            VALUES (?, ?, ?, ?, CURDATE())
+                            INSERT INTO shop_employees (shop_id, user_id, position, permissions, availability_days, availability_start, availability_end, max_active_orders, hired_date) 
+                            VALUES (?, ?, ?, ?, ?, ?, ?, ?, CURDATE())
                         ");
-                        $add_stmt->execute([$shop_id, $user['id'], $position, $permissions]);
+                        $add_stmt->execute([
+                            $shop_id,
+                            $user['id'],
+                            $position,
+                            $permissions,
+                            $availability_days_json,
+                            $availability_start ?: null,
+                            $availability_end ?: null,
+                            $max_active_orders
+                        ]);
                         
                         $success = "Employee added successfully!";
                     } elseif($existing['status'] === 'inactive') {
                         $reactivate_stmt = $pdo->prepare("
                             UPDATE shop_employees 
-                            SET status = 'active', position = ?, permissions = ?, hired_date = CURDATE() 
+                            SET status = 'active', position = ?, permissions = ?, availability_days = ?, availability_start = ?, availability_end = ?, max_active_orders = ?, hired_date = CURDATE() 
                             WHERE id = ? AND shop_id = ?
                         ");
-                        $reactivate_stmt->execute([$position, $permissions, $existing['id'], $shop_id]);
+                        $reactivate_stmt->execute([
+                            $position,
+                            $permissions,
+                            $availability_days_json,
+                            $availability_start ?: null,
+                            $availability_end ?: null,
+                            $max_active_orders,
+                            $existing['id'],
+                            $shop_id
+                        ]);
                         
                         $success = "Employee reactivated successfully!";
                     } else {
@@ -89,10 +127,19 @@ if(isset($_POST['add_employee'])) {
                 $user_id = $pdo->lastInsertId();
 
                 $add_stmt = $pdo->prepare("
-                    INSERT INTO shop_employees (shop_id, user_id, position, permissions, hired_date) 
-                    VALUES (?, ?, ?, ?, CURDATE())
+                    INSERT INTO shop_employees (shop_id, user_id, position, permissions, availability_days, availability_start, availability_end, max_active_orders, hired_date) 
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, CURDATE())
                 ");
-                $add_stmt->execute([$shop_id, $user_id, $position, $permissions]);
+                $add_stmt->execute([
+                    $shop_id,
+                    $user_id,
+                    $position,
+                    $permissions,
+                    $availability_days_json,
+                    $availability_start ?: null,
+                    $availability_end ?: null,
+                    $max_active_orders
+                ]);
 
                 $success = "Employee account created and added successfully!";
             }
@@ -157,7 +204,19 @@ if(isset($_GET['reactivate'])) {
 
 // Get all employees
 $employees_stmt = $pdo->prepare("
-    SELECT se.*, u.fullname, u.email, u.phone, u.created_at as joined_date
+    SELECT 
+        se.*, 
+        u.fullname, 
+        u.email, 
+        u.phone, 
+        u.created_at as joined_date,
+        (
+            SELECT COUNT(*) 
+            FROM orders o 
+            WHERE o.shop_id = se.shop_id 
+              AND o.assigned_to = se.user_id 
+              AND o.status IN ('pending', 'accepted', 'in_progress')
+        ) as active_orders
     FROM shop_employees se 
     JOIN users u ON se.user_id = u.id 
     WHERE se.shop_id = ? 
@@ -230,11 +289,37 @@ $employees = $employees_stmt->fetchAll();
                             <th>Contact</th>
                             <th>Joined</th>
                             <th>Status</th>
+                            <th>Availability</th>
+                            <th>Capacity</th>
                             <th>Actions</th>
                         </tr>
                     </thead>
                     <tbody>
                         <?php foreach($employees as $emp): ?>
+                        <?php
+                            $availability_summary = 'Not set';
+                            $availability_days_list = [];
+                            if(!empty($emp['availability_days'])) {
+                                $decoded_days = json_decode($emp['availability_days'], true);
+                                if(is_array($decoded_days)) {
+                                    foreach ($decoded_days as $day_number) {
+                                        if(isset($availability_days[$day_number])) {
+                                            $availability_days_list[] = $availability_days[$day_number];
+                                        }
+                                    }
+                                }
+                            }
+                            if(!empty($availability_days_list)) {
+                                $availability_summary = implode(', ', $availability_days_list);
+                            }
+                            if(!empty($emp['availability_start']) || !empty($emp['availability_end'])) {
+                                $start_time = !empty($emp['availability_start']) ? date('h:i A', strtotime($emp['availability_start'])) : 'Any time';
+                                $end_time = !empty($emp['availability_end']) ? date('h:i A', strtotime($emp['availability_end'])) : 'Any time';
+                                $availability_summary .= '<br><small class="text-muted">' . $start_time . ' - ' . $end_time . '</small>';
+                            }
+                            $max_capacity = (int) ($emp['max_active_orders'] ?? 0);
+                            $active_orders = (int) ($emp['active_orders'] ?? 0);
+                        ?>
                         <tr>
                             <td>
                                 <strong><?php echo htmlspecialchars($emp['fullname']); ?></strong><br>
@@ -251,6 +336,17 @@ $employees = $employees_stmt->fetchAll();
                                     <span class="badge badge-success">Active</span>
                                 <?php else: ?>
                                     <span class="badge badge-warning">Inactive</span>
+                                <?php endif; ?>
+                            </td>
+                            <td><?php echo $availability_summary; ?></td>
+                            <td>
+                                <?php if($max_capacity > 0): ?>
+                                    <span class="badge <?php echo $active_orders >= $max_capacity ? 'badge-danger' : 'badge-info'; ?>">
+                                        <?php echo $active_orders; ?> / <?php echo $max_capacity; ?>
+                                    </span>
+                                    <div><small class="text-muted">Active orders</small></div>
+                                <?php else: ?>
+                                    <span class="text-muted">Not set</span>
                                 <?php endif; ?>
                             </td>
                             <td>
@@ -354,7 +450,42 @@ $employees = $employees_stmt->fetchAll();
                         <option value="Production Manager">Production Manager</option>
                     </select>
                 </div>
-                
+
+                <div class="form-group">
+                    <label>Availability Days *</label>
+                    <div class="d-flex flex-wrap gap-2">
+                        <?php foreach ($availability_days as $day_number => $day_label): ?>
+                            <label class="form-check mr-3" style="min-width: 120px;">
+                                <input
+                                    type="checkbox"
+                                    class="form-check-input"
+                                    name="availability_days[]"
+                                    value="<?php echo $day_number; ?>"
+                                    checked
+                                >
+                                <span class="form-check-label"><?php echo htmlspecialchars($day_label); ?></span>
+                            </label>
+                        <?php endforeach; ?>
+                    </div>
+                    <small class="text-muted">Select working days for this staff member.</small>
+                </div>
+
+                <div class="form-group d-flex justify-between align-center" style="gap: 16px;">
+                    <div style="flex: 1;">
+                        <label>Availability Start Time</label>
+                        <input type="time" name="availability_start" class="form-control" value="09:00">
+                    </div>
+                    <div style="flex: 1;">
+                        <label>Availability End Time</label>
+                        <input type="time" name="availability_end" class="form-control" value="18:00">
+                    </div>
+                </div>
+
+                <div class="form-group">
+                    <label>Max Active Orders *</label>
+                    <input type="number" name="max_active_orders" class="form-control" min="1" value="3" required>
+                    <small class="text-muted">Orders above this limit cannot be assigned automatically.</small>
+                </div>
                 <div class="form-group">
                     <label>Permissions</label>
                     <p class="text-muted mb-2">Select the permissions this staff member should have.</p>
