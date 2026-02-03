@@ -2,6 +2,7 @@
 session_start();
 require_once '../config/db.php';
 require_once '../config/constants.php';
+require_once '../includes/media_manager.php';
 require_role('employee');
 
 $employee_id = $_SESSION['user']['id'];
@@ -63,33 +64,27 @@ if(isset($_POST['upload_photo'])) {
         $error = 'Please upload a valid image file.';
     } else {
         $file = $_FILES['photo'];
-        $file_size = $file['size'];
-        $file_ext = strtolower(pathinfo($file['name'], PATHINFO_EXTENSION));
-
-        if($file_size > MAX_FILE_SIZE) {
-            $error = 'File size exceeds the 5MB limit.';
-        } elseif(!in_array($file_ext, ALLOWED_IMAGE_TYPES, true)) {
-            $error = 'Only JPG, JPEG, PNG, and GIF files are allowed.';
+        $upload = save_uploaded_media(
+            $file,
+            ALLOWED_IMAGE_TYPES,
+            MAX_FILE_SIZE,
+            'job_photos',
+            'job',
+            $order_id . '_' . $employee_id
+        );
+        if (!$upload['success']) {
+            $error = $upload['error'] === 'File size exceeds the limit.'
+                ? 'File size exceeds the 5MB limit.'
+                : 'Only JPG, JPEG, PNG, and GIF files are allowed.';
         } else {
-            $upload_dir = '../assets/uploads/job_photos/';
-            if(!is_dir($upload_dir)) {
-                mkdir($upload_dir, 0777, true);
-            }
-
-            $filename = $order_id . '_' . $employee_id . '_' . uniqid('job_', true) . '.' . $file_ext;
-            $target_file = $upload_dir . $filename;
-
-            if(move_uploaded_file($file['tmp_name'], $target_file)) {
-                $photo_path = 'job_photos/' . $filename;
-                $photo_stmt = $pdo->prepare("
-                    INSERT INTO order_photos (order_id, employee_id, photo_url, caption)
-                    VALUES (?, ?, ?, ?)
-                ");
-                $photo_stmt->execute([$order_id, $employee_id, $photo_path, $caption]);
-                $success = 'Photo uploaded successfully!';
-            } else {
-                $error = 'Failed to upload the photo. Please try again.';
-            }
+            $photo_path = media_public_path('job_photos', $upload['filename']);
+            $photo_stmt = $pdo->prepare("
+                INSERT INTO order_photos (order_id, employee_id, photo_url, caption)
+                VALUES (?, ?, ?, ?)
+            ");
+            $photo_stmt->execute([$order_id, $employee_id, $photo_path, $caption]);
+            $success = 'Photo uploaded successfully!';
+            cleanup_media($pdo);
         }
     }
 }

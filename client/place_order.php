@@ -2,6 +2,7 @@
 session_start();
 require_once '../config/db.php';
 require_once '../config/constants.php';
+require_once '../includes/media_manager.php';
 require_role('client');
 
 $client_id = $_SESSION['user']['id'];
@@ -237,35 +238,24 @@ if(isset($_POST['place_order'])) {
         
         // Handle file upload
         if(isset($_FILES['design_file']) && $_FILES['design_file']['error'] !== UPLOAD_ERR_NO_FILE) {
-            if ($_FILES['design_file']['error'] !== UPLOAD_ERR_OK) {
-                throw new RuntimeException('Design file upload failed. Please try again.');
-            }
             $file = $_FILES['design_file'];
-            $file_size = $file['size'] ?? 0;
-            $file_ext = strtolower(pathinfo($file['name'] ?? '', PATHINFO_EXTENSION));
             $allowed_extensions = array_merge(ALLOWED_IMAGE_TYPES, ALLOWED_DOC_TYPES);
+$upload = save_uploaded_media(
+                $file,
+                $allowed_extensions,
+                MAX_FILE_SIZE,
+                'designs',
+                'design',
+                (string) $order_id
+            );
+            if (!$upload['success']) {
+                throw new RuntimeException($upload['error'] === 'File size exceeds the limit.'
+                    ? 'Design file size exceeds the ' . $max_upload_mb . 'MB limit.'
+                    : 'Design file must be a JPG, PNG, GIF, PDF, DOC, or DOCX file.');
+            }
 
-            if ($file_size > MAX_FILE_SIZE) {
-                throw new RuntimeException('Design file size exceeds the ' . $max_upload_mb . 'MB limit.');
-            }
-            if (!in_array($file_ext, $allowed_extensions, true)) {
-                throw new RuntimeException('Design file must be a JPG, PNG, GIF, PDF, DOC, or DOCX file.');
-            }
-
-            $upload_dir = '../assets/uploads/designs/';
-            if(!is_dir($upload_dir)) {
-                mkdir($upload_dir, 0777, true);
-            }
-            
-            $filename = $order_id . '_' . uniqid('design_', true) . '.' . $file_ext;
-            $target_file = $upload_dir . $filename;
-            
-            if(move_uploaded_file($file['tmp_name'], $target_file)) {
-                $update_stmt = $pdo->prepare("UPDATE orders SET design_file = ? WHERE id = ?");
-                $update_stmt->execute([$filename, $order_id]);
-            } else {
-                throw new RuntimeException('Failed to save the design file. Please try again.');
-            }
+            $update_stmt = $pdo->prepare("UPDATE orders SET design_file = ? WHERE id = ?");
+            $update_stmt->execute([$upload['filename'], $order_id]);
         }
         
         // Update shop statistics
@@ -286,6 +276,8 @@ if(isset($_POST['place_order'])) {
             'order_status',
             'New order #' . $order_number . ' has been placed and is awaiting your review.'
         );
+
+        cleanup_media($pdo);
 
         $pdo->commit();
         

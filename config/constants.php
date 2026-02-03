@@ -35,4 +35,5 @@ define('SHOP_SUSPENDED', 'suspended');
 define('MAX_FILE_SIZE', 5 * 1024 * 1024); // 5MB
 define('ALLOWED_IMAGE_TYPES', ['jpg', 'jpeg', 'png', 'gif']);
 define('ALLOWED_DOC_TYPES', ['pdf', 'doc', 'docx']);
+define('MEDIA_RETENTION_DAYS', 180);
 ?>

@@ -2,6 +2,7 @@
 session_start();
 require_once '../config/db.php';
 require_once '../config/constants.php';
+require_once '../includes/media_manager.php';
 
 header('Content-Type: application/json');
 
@@ -31,37 +32,19 @@ if ($file['error'] !== UPLOAD_ERR_OK) {
     exit();
 }
 
-if ($file['size'] > MAX_FILE_SIZE) {
+$upload = save_uploaded_media($file, ALLOWED_IMAGE_TYPES, MAX_FILE_SIZE, '', 'upload');
+if (!$upload['success']) {
     http_response_code(422);
-    echo json_encode(['error' => 'File exceeds size limit']);
+    echo json_encode(['error' => $upload['error']]);
     exit();
 }
 
-$extension = strtolower(pathinfo($file['name'], PATHINFO_EXTENSION));
-if (!in_array($extension, ALLOWED_IMAGE_TYPES, true)) {
-    http_response_code(422);
-    echo json_encode(['error' => 'Unsupported file type']);
-    exit();
-}
-
-$upload_dir = __DIR__ . '/../assets/uploads';
-if (!is_dir($upload_dir)) {
-    mkdir($upload_dir, 0755, true);
-}
-
-$filename = uniqid('upload_', true) . '.' . $extension;
-$destination = $upload_dir . '/' . $filename;
-
-if (!move_uploaded_file($file['tmp_name'], $destination)) {
-    http_response_code(500);
-    echo json_encode(['error' => 'Failed to save file']);
-    exit();
-}
+cleanup_media($pdo);
 
 echo json_encode([
     'message' => 'Upload successful',
     'file' => [
-        'name' => $filename,
-        'path' => 'assets/uploads/' . $filename
+        'name' => $upload['filename'],
+        'path' => 'assets/uploads/' . $upload['path']
     ]
 ]);

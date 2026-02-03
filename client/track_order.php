@@ -1,13 +1,14 @@
 <?php
 session_start();
 require_once '../config/db.php';
+require_once '../config/constants.php';
+require_once '../includes/media_manager.php';
 require_role('client');
 
 $client_id = $_SESSION['user']['id'];
 $success = null;
 $error = null;
 
-$payment_upload_dir = '../assets/uploads/payments/';
 
 if(isset($_POST['submit_payment'])) {
     $order_id = (int) ($_POST['order_id'] ?? 0);
@@ -42,50 +43,45 @@ if(isset($_POST['submit_payment'])) {
             $error = 'Please upload a valid payment proof file.';
         } else {
             $allowed_ext = ['jpg', 'jpeg', 'png', 'pdf'];
-            $file_ext = strtolower(pathinfo($proof_file['name'], PATHINFO_EXTENSION));
-            $file_size = (int) $proof_file['size'];
-
-            if(!in_array($file_ext, $allowed_ext, true)) {
-                $error = 'Payment proofs must be JPG, PNG, or PDF files.';
-            } elseif ($file_size > 5 * 1024 * 1024) {
-                $error = 'Payment proof files must be smaller than 5MB.';
+            $upload = save_uploaded_media(
+                $proof_file,
+                $allowed_ext,
+                MAX_FILE_SIZE,
+                'payments',
+                'payment',
+                (string) $order_id
+            );
+            if (!$upload['success']) {
+                $error = $upload['error'] === 'File size exceeds the limit.'
+                    ? 'Payment proof files must be smaller than 5MB.'
+                    : 'Payment proofs must be JPG, PNG, or PDF files.';
             } else {
-                if(!is_dir($payment_upload_dir)) {
-                    mkdir($payment_upload_dir, 0755, true);
-                }
+                $payment_stmt = $pdo->prepare("
+                    INSERT INTO payments (order_id, client_id, shop_id, amount, proof_file, status)
+                    VALUES (?, ?, ?, ?, ?, 'pending')
+                ");
+                $payment_stmt->execute([
+                    $order_id,
+                    $client_id,
+                    $order['shop_id'],
+                    $order['price'],
+                    $upload['filename']
+                ]);
 
-                $filename = 'payment_' . $order_id . '_' . uniqid('proof_', true) . '.' . $file_ext;
-                $destination = $payment_upload_dir . $filename;
+                $order_update_stmt = $pdo->prepare("
+                    UPDATE orders SET payment_status = 'pending' WHERE id = ? AND client_id = ?
+                ");
+                $order_update_stmt->execute([$order_id, $client_id]);
 
-                if(move_uploaded_file($proof_file['tmp_name'], $destination)) {
-                    $payment_stmt = $pdo->prepare("
-                        INSERT INTO payments (order_id, client_id, shop_id, amount, proof_file, status)
-                        VALUES (?, ?, ?, ?, ?, 'pending')
-                    ");
-                    $payment_stmt->execute([
-                        $order_id,
-                        $client_id,
-                        $order['shop_id'],
-                        $order['price'],
-                        $filename
-                    ]);
+                $message = sprintf(
+                    'New payment proof submitted for order #%s (%s).',
+                    $order['order_number'],
+                    $order['shop_name']
+                );
+                create_notification($pdo, (int) $order['owner_id'], $order_id, 'payment', $message);
 
-                    $order_update_stmt = $pdo->prepare("
-                        UPDATE orders SET payment_status = 'pending' WHERE id = ? AND client_id = ?
-                    ");
-                    $order_update_stmt->execute([$order_id, $client_id]);
-
-                    $message = sprintf(
-                        'New payment proof submitted for order #%s (%s).',
-                        $order['order_number'],
-                        $order['shop_name']
-                    );
-                    create_notification($pdo, (int) $order['owner_id'], $order_id, 'payment', $message);
-
-                    $success = 'Payment proof submitted successfully. Awaiting verification.';
-                } else {
-                    $error = 'Unable to upload payment proof. Please try again.';
-                }
+                $success = 'Payment proof submitted successfully. Awaiting verification.';
+                cleanup_media($pdo);
             }
         }
     }

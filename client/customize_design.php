@@ -2,6 +2,7 @@
 session_start();
 require_once '../config/db.php';
 require_once '../config/constants.php';
+require_once '../includes/media_manager.php';
 require_role('client');
 
 $client_id = $_SESSION['user']['id'];
@@ -60,33 +61,23 @@ if(isset($_POST['update_design'])) {
         $existing_notes = $order['client_notes'] ?? '';
 
         if(isset($_FILES['design_file']) && $_FILES['design_file']['error'] !== UPLOAD_ERR_NO_FILE) {
-            if ($_FILES['design_file']['error'] !== UPLOAD_ERR_OK) {
-                $error = 'Design file upload failed. Please try again.';
+            $file = $_FILES['design_file'];
+            $allowed_extensions = array_merge(ALLOWED_IMAGE_TYPES, ALLOWED_DOC_TYPES);
+            $upload = save_uploaded_media(
+                $file,
+                $allowed_extensions,
+                MAX_FILE_SIZE,
+                'designs',
+                'design',
+                (string) $order_id,
+                $order['design_file']
+            );
+            if (!$upload['success']) {
+                $error = $upload['error'] === 'File size exceeds the limit.'
+                    ? 'File size exceeds the ' . $max_upload_mb . 'MB limit.'
+                    : 'Only JPG, PNG, GIF, PDF, DOC, and DOCX files are allowed.';
             } else {
-                $file = $_FILES['design_file'];
-                $file_size = $file['size'];
-                $file_ext = strtolower(pathinfo($file['name'], PATHINFO_EXTENSION));
-                $allowed_extensions = array_merge(ALLOWED_IMAGE_TYPES, ALLOWED_DOC_TYPES);
-
-                if($file_size > MAX_FILE_SIZE) {
-                    $error = 'File size exceeds the ' . $max_upload_mb . 'MB limit.';
-                } elseif(!in_array($file_ext, $allowed_extensions, true)) {
-                    $error = 'Only JPG, PNG, GIF, PDF, DOC, and DOCX files are allowed.';
-                } else {
-                    $upload_dir = '../assets/uploads/designs/';
-                    if(!is_dir($upload_dir)) {
-                        mkdir($upload_dir, 0777, true);
-                    }
-
-                    $filename = $order_id . '_' . uniqid('design_', true) . '.' . $file_ext;
-                    $target_file = $upload_dir . $filename;
-
-                    if(move_uploaded_file($file['tmp_name'], $target_file)) {
-                        $design_file = $filename;
-                    } else {
-                        $error = 'Failed to upload the design file. Please try again.';
-                    }
-                }
+                $design_file = $upload['filename'];
             }
         }
 
@@ -103,6 +94,7 @@ if(isset($_POST['update_design'])) {
             ");
             $update_stmt->execute([$design_description, $design_file, $combined_notes, $order_id, $client_id]);
             $success = 'Design details updated successfully.';
+            cleanup_media($pdo);
         }
     }
 
@@ -261,4 +253,3 @@ if(isset($_POST['update_design'])) {
     </div>
 </body>
 </html>
-

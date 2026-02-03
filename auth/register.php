@@ -1,6 +1,8 @@
 <?php
 session_start();
 require_once '../config/db.php';
+require_once '../config/constants.php';
+require_once '../includes/media_manager.php';
 
 $error = '';
 $success = '';
@@ -43,7 +45,6 @@ if($_SERVER['REQUEST_METHOD'] == 'POST') {
         $error = "Passwords do not match!";
     } else {
         $permitFilename = null;
-        $permitFilePath = null;
         $permitNumber = '';
         if ($user_type === 'owner') {
             $permitNumber = sanitize($_POST['business_permit'] ?? '');
@@ -52,25 +53,20 @@ if($_SERVER['REQUEST_METHOD'] == 'POST') {
                 $error = "Please upload a valid business permit file.";
             } else {
                 $allowed_ext = ['jpg', 'jpeg', 'png', 'pdf'];
-                $file_ext = strtolower(pathinfo($permitFile['name'], PATHINFO_EXTENSION));
-                $file_size = (int) $permitFile['size'];
-
-                if (!in_array($file_ext, $allowed_ext, true)) {
-                    $error = "Business permit files must be JPG, PNG, or PDF files.";
-                } elseif ($file_size > 5 * 1024 * 1024) {
-                    $error = "Business permit files must be smaller than 5MB.";
+                $upload = save_uploaded_media(
+                    $permitFile,
+                    $allowed_ext,
+                    MAX_FILE_SIZE,
+                    'permits',
+                    'permit',
+                    'owner'
+                );
+                if (!$upload['success']) {
+                    $error = $upload['error'] === 'File size exceeds the limit.'
+                        ? "Business permit files must be smaller than 5MB."
+                        : "Business permit files must be JPG, PNG, or PDF files.";
                 } else {
-                    $permit_upload_dir = '../assets/uploads/permits/';
-                    if (!is_dir($permit_upload_dir)) {
-                        mkdir($permit_upload_dir, 0755, true);
-                    }
-                    $permitFilename = 'permit_' . uniqid('owner_', true) . '.' . $file_ext;
-                    $destination = $permit_upload_dir . $permitFilename;
-                    if (!move_uploaded_file($permitFile['tmp_name'], $destination)) {
-                        $error = "Unable to upload the business permit. Please try again.";
-                    } else {
-                        $permitFilePath = $destination;
-                    }
+                    $permitFilename = $upload['filename'];
                 }
             }
         }
@@ -81,9 +77,7 @@ if($_SERVER['REQUEST_METHOD'] == 'POST') {
                 $check_stmt->execute([$email]);
                 
                 if($check_stmt->rowCount() > 0) {
-                    if ($permitFilePath && is_file($permitFilePath)) {
-                        unlink($permitFilePath);
-                    }
+                    delete_media_file('permits', $permitFilename);
                     $error = "Email already registered!";
                 } else {
                     // Hash password
@@ -143,9 +137,7 @@ if($_SERVER['REQUEST_METHOD'] == 'POST') {
                         : "Registration successful! You can now log in.";
                         }
             } catch(PDOException $e) {
-                if ($permitFilePath && is_file($permitFilePath)) {
-                    unlink($permitFilePath);
-                }
+                delete_media_file('permits', $permitFilename);
                 $error = "Registration failed: " . $e->getMessage();
 
             }
