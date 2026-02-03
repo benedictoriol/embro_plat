@@ -412,6 +412,7 @@ $is_design_image = $design_file_name && in_array($design_file_extension, ALLOWED
                 <li><a href="shop_profile.php" class="nav-link">Shop Profile</a></li>
                 <li><a href="manage_staff.php" class="nav-link">Staff</a></li>
                 <li><a href="shop_orders.php" class="nav-link active">Orders</a></li>
+                <li><a href="messages.php" class="nav-link">Messages</a></li>
                 <li><a href="payment_verifications.php" class="nav-link">Payments</a></li>
                 <li><a href="earnings.php" class="nav-link">Earnings</a></li>
                 <li class="dropdown">

@@ -297,6 +297,7 @@ function fulfillment_pill(?string $status): string {
             <ul class="navbar-nav">
                 <li><a href="dashboard.php" class="nav-link">Dashboard</a></li>
                 <li><a href="shop_orders.php" class="nav-link">Orders</a></li>
+                <li><a href="messages.php" class="nav-link">Messages</a></li>
                 <li><a href="delivery_management.php" class="nav-link active">Delivery & Pickup</a></li>
                 <li><a href="manage_staff.php" class="nav-link">Staff</a></li>
                 <li><a href="profile.php" class="nav-link">Profile</a></li>

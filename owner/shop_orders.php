@@ -269,6 +269,7 @@ function format_quote_details(?array $quote_details): array {
                 <li><a href="shop_profile.php" class="nav-link">Shop Profile</a></li>
                 <li><a href="manage_staff.php" class="nav-link">Staff</a></li>
                 <li><a href="shop_orders.php" class="nav-link active">Orders</a></li>
+                <li><a href="messages.php" class="nav-link">Messages</a></li>
                 <li><a href="delivery_management.php" class="nav-link">Delivery & Pickup</a></li>
                 <li><a href="payment_verifications.php" class="nav-link">Payments</a></li>
                 <li><a href="earnings.php" class="nav-link">Earnings</a></li>

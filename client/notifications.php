@@ -94,6 +94,7 @@ function notification_badge($type) {
                         <a href="rate_provider.php" class="dropdown-item"><i class="fas fa-star"></i> Rate Provider</a>
                     </div>
                 </li>
+                <li><a href="messages.php" class="nav-link">Messages</a></li>
                 <li><a href="notifications.php" class="nav-link active">Notifications
                     <?php if($unread_notifications > 0): ?>
                         <span class="badge badge-danger"><?php echo $unread_notifications; ?></span>

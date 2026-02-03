@@ -81,6 +81,7 @@ if ($order['price'] !== null) {
             <ul class="navbar-nav">
                 <li><a href="dashboard.php" class="nav-link">Dashboard</a></li>
                 <li><a href="shop_orders.php" class="nav-link">Orders</a></li>
+                <li><a href="messages.php" class="nav-link">Messages</a></li>
                 <li><a href="payment_verifications.php" class="nav-link">Payments</a></li>
                 <li><a href="../auth/logout.php" class="nav-link">Logout</a></li>
             </ul>
