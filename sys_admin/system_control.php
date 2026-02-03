@@ -106,6 +106,26 @@ $systemStatus = [
     ['label' => 'Notification Queue', 'status' => 'Monitoring', 'badge' => 'warning'],
     ['label' => 'Payment Gateway', 'status' => 'Operational', 'badge' => 'success'],
 ];
+
+$monitoringOverview = [
+    ['label' => 'Platform Uptime', 'value' => '99.96%', 'trend' => 'Stable', 'status' => 'success'],
+    ['label' => 'API Latency', 'value' => '182 ms', 'trend' => 'Within SLA', 'status' => 'info'],
+    ['label' => 'Error Rate', 'value' => '0.9%', 'trend' => 'Down 0.3%', 'status' => 'success'],
+    ['label' => 'Queue Backlog', 'value' => '37 jobs', 'trend' => 'Needs attention', 'status' => 'warning'],
+];
+
+$controlCoverage = [
+    ['area' => 'User Access', 'coverage' => 'Complete', 'detail' => 'RBAC enforced, MFA pending rollout.', 'status' => 'success'],
+    ['area' => 'Order & Fulfillment', 'coverage' => 'Complete', 'detail' => 'Automated alerts on stalled orders.', 'status' => 'success'],
+    ['area' => 'Payments', 'coverage' => 'Partial', 'detail' => 'Monitor chargebacks weekly.', 'status' => 'warning'],
+    ['area' => 'Infrastructure', 'coverage' => 'Partial', 'detail' => 'Add proactive scaling triggers.', 'status' => 'warning'],
+    ['area' => 'Data Protection', 'coverage' => 'Complete', 'detail' => 'Backup + retention policies active.', 'status' => 'success'],
+];
+
+$activeAlerts = [
+    ['title' => 'Queue backlog above threshold', 'detail' => 'Current backlog is 37 jobs (limit 30).', 'time' => '10 mins ago', 'status' => 'warning'],
+    ['title' => 'Payment gateway latency spike', 'detail' => 'Latency peaked at 420 ms at 9:40 AM.', 'time' => '1 hour ago', 'status' => 'info'],
+];
 ?>
 <!DOCTYPE html>
 <html lang="en">
@@ -163,6 +183,65 @@ $systemStatus = [
             padding: 1rem;
             border: 1px solid var(--gray-200);
             border-radius: var(--radius);
+            background: white;
+        }
+        
+        .monitoring-grid {
+            display: grid;
+            grid-template-columns: repeat(12, 1fr);
+            gap: 1.5rem;
+            margin-bottom: 2rem;
+        }
+
+        .monitoring-card {
+            grid-column: span 7;
+        }
+
+        .coverage-card {
+            grid-column: span 5;
+        }
+
+        .monitoring-metrics {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+            gap: 1rem;
+        }
+
+        .metric-tile {
+            border: 1px solid var(--gray-200);
+            border-radius: var(--radius);
+            padding: 1rem;
+            background: var(--bg-primary);
+        }
+
+        .metric-tile .metric-value {
+            font-size: 1.35rem;
+            font-weight: 700;
+            margin: 0.25rem 0;
+        }
+
+        .coverage-table {
+            width: 100%;
+            border-collapse: collapse;
+        }
+
+        .coverage-table th,
+        .coverage-table td {
+            text-align: left;
+            padding: 0.75rem 0;
+            border-bottom: 1px solid var(--gray-100);
+        }
+
+        .alert-list {
+            display: flex;
+            flex-direction: column;
+            gap: 1rem;
+        }
+
+        .alert-item {
+            border: 1px solid var(--gray-200);
+            border-radius: var(--radius);
+            padding: 1rem;
             background: white;
         }
     </style>
@@ -266,6 +345,78 @@ $systemStatus = [
                             <span class="badge badge-<?php echo $status['badge']; ?>"><?php echo $status['status']; ?></span>
                         </div>
                     <?php endforeach; ?>
+                </div>
+            </div>
+        </div>
+
+        <div class="monitoring-grid">
+            <div class="card monitoring-card">
+                <div class="card-header">
+                    <h3><i class="fas fa-chart-line text-info"></i> Platform Monitoring</h3>
+                    <p class="text-muted">Real-time service health and alert thresholds.</p>
+                </div>
+                <div class="monitoring-metrics">
+                    <?php foreach ($monitoringOverview as $metric): ?>
+                        <div class="metric-tile">
+                            <div class="d-flex justify-between align-center">
+                                <strong><?php echo $metric['label']; ?></strong>
+                                <span class="badge badge-<?php echo $metric['status']; ?>"><?php echo $metric['trend']; ?></span>
+                            </div>
+                            <div class="metric-value"><?php echo $metric['value']; ?></div>
+                            <p class="text-muted mb-0">Alert threshold: <?php echo (int) $settings['alert_threshold']; ?>%</p>
+                        </div>
+                    <?php endforeach; ?>
+                </div>
+                <div class="mt-3">
+                    <h4 class="mb-2">Active Alerts</h4>
+                    <div class="alert-list">
+                        <?php foreach ($activeAlerts as $alert): ?>
+                            <div class="alert-item">
+                                <div class="d-flex justify-between align-center">
+                                    <strong><?php echo $alert['title']; ?></strong>
+                                    <span class="badge badge-<?php echo $alert['status']; ?>"><?php echo ucfirst($alert['status']); ?></span>
+                                </div>
+                                <p class="text-muted mb-0"><?php echo $alert['detail']; ?></p>
+                                <small class="text-muted">Last updated <?php echo $alert['time']; ?></small>
+                            </div>
+                        <?php endforeach; ?>
+                    </div>
+                </div>
+            </div>
+            <div class="card coverage-card">
+                <div class="card-header">
+                    <h3><i class="fas fa-shield-alt text-success"></i> Controls Coverage</h3>
+                    <p class="text-muted">Consistency across operational domains.</p>
+                </div>
+                <table class="coverage-table">
+                    <thead>
+                        <tr>
+                            <th>Area</th>
+                            <th>Status</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <?php foreach ($controlCoverage as $coverage): ?>
+                            <tr>
+                                <td>
+                                    <strong><?php echo $coverage['area']; ?></strong>
+                                    <p class="text-muted mb-0"><?php echo $coverage['detail']; ?></p>
+                                </td>
+                                <td>
+                                    <span class="badge badge-<?php echo $coverage['status']; ?>">
+                                        <?php echo $coverage['coverage']; ?>
+                                    </span>
+                                </td>
+                            </tr>
+                        <?php endforeach; ?>
+                    </tbody>
+                </table>
+                <div class="alert alert-info mt-3">
+                    <i class="fas fa-info-circle"></i>
+                    <div>
+                        <strong>Next steps</strong>
+                        <p class="mb-0">Align payment and infrastructure playbooks to reach full coverage.</p>
+                    </div>
                 </div>
             </div>
         </div>
