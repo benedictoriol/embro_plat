@@ -61,4 +61,23 @@ function fetch_unread_notification_count(PDO $pdo, int $user_id): int {
     $stmt->execute([$user_id]);
     return (int) $stmt->fetchColumn();
 }
+
+function update_shop_rating_summary(PDO $pdo, int $shop_id): void {
+    $summary_stmt = $pdo->prepare("
+        SELECT COUNT(*) as rating_count, AVG(rating) as avg_rating
+        FROM orders
+        WHERE shop_id = ?
+          AND rating IS NOT NULL
+          AND rating > 0
+          AND rating_status = 'approved'
+    ");
+    $summary_stmt->execute([$shop_id]);
+    $summary = $summary_stmt->fetch();
+
+    $rating_count = (int) ($summary['rating_count'] ?? 0);
+    $avg_rating = $summary['avg_rating'] !== null ? (float) $summary['avg_rating'] : 0.0;
+
+    $update_stmt = $pdo->prepare("UPDATE shops SET rating = ?, rating_count = ?, updated_at = NOW() WHERE id = ?");
+    $update_stmt->execute([$avg_rating, $rating_count, $shop_id]);
+}
 ?>

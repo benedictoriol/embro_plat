@@ -27,10 +27,9 @@ $stats_stmt = $pdo->prepare("
         (SELECT COUNT(*) FROM orders WHERE shop_id = ? AND status = 'in_progress') as active_orders,
         (SELECT COUNT(*) FROM orders WHERE shop_id = ? AND status = 'completed') as completed_orders,
         (SELECT SUM(price) FROM orders WHERE shop_id = ? AND status = 'completed') as total_earnings,
-        (SELECT COUNT(*) FROM shop_employees WHERE shop_id = ? AND status = 'active') as total_staff,
-        (SELECT AVG(rating) FROM orders WHERE shop_id = ? AND rating IS NOT NULL) as avg_rating
+        (SELECT COUNT(*) FROM shop_employees WHERE shop_id = ? AND status = 'active') as total_staff
 ");
-$stats_stmt->execute([$shop_id, $shop_id, $shop_id, $shop_id, $shop_id, $shop_id, $shop_id]);
+$stats_stmt->execute([$shop_id, $shop_id, $shop_id, $shop_id, $shop_id, $shop_id]);
 $stats = $stats_stmt->fetch();
 
 // Recent orders
@@ -121,6 +120,7 @@ $recent_employees = $employees_stmt->fetchAll();
                 <li><a href="shop_profile.php" class="nav-link">Shop Profile</a></li>
                 <li><a href="manage_staff.php" class="nav-link">Staff</a></li>
                 <li><a href="shop_orders.php" class="nav-link">Orders</a></li>
+                <li><a href="reviews.php" class="nav-link">Reviews</a></li>
                 <li><a href="messages.php" class="nav-link">Messages</a></li>
                 <li><a href="delivery_management.php" class="nav-link">Delivery & Pickup</a></li>
                 <li><a href="payment_verifications.php" class="nav-link">Payments</a></li>
@@ -152,8 +152,8 @@ $recent_employees = $employees_stmt->fetchAll();
                 <div class="text-right">
                     <div class="shop-rating mb-3">
                         <i class="fas fa-star"></i> 
-                        <strong><?php echo number_format($stats['avg_rating'] ?? 0, 1); ?></strong>
-                        <small>(<?php echo $stats['completed_orders']; ?> completed orders)</small>
+                        <strong><?php echo number_format((float) $shop['rating'], 1); ?></strong>
+                        <small>(<?php echo (int) ($shop['rating_count'] ?? 0); ?> reviews)</small>
                     </div>
                     <div>
                         <a href="shop_profile.php" class="btn btn-light btn-sm">
@@ -326,11 +326,11 @@ $recent_employees = $employees_stmt->fetchAll();
                     <div class="mb-3">
                         <div class="d-flex justify-between">
                             <span>Average Rating:</span>
-                            <strong><?php echo number_format($stats['avg_rating'] ?? 0, 1); ?>/5</strong>
+                            <strong><?php echo number_format((float) $shop['rating'], 1); ?>/5</strong>
                         </div>
                         <div class="text-warning">
                             <?php for($i = 1; $i <= 5; $i++): ?>
-                                <i class="fas fa-star<?php echo $i <= ($stats['avg_rating'] ?? 0) ? '' : '-o'; ?>"></i>
+                                <<i class="fas fa-star<?php echo $i <= (float) $shop['rating'] ? '' : '-o'; ?>"></i>
                             <?php endfor; ?>
                         </div>
                     </div>

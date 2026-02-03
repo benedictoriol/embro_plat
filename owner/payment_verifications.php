@@ -237,6 +237,7 @@ function payment_badge($status) {
                 <li><a href="shop_profile.php" class="nav-link">Shop Profile</a></li>
                 <li><a href="manage_staff.php" class="nav-link">Staff</a></li>
                 <li><a href="shop_orders.php" class="nav-link">Orders</a></li>
+                <li><a href="reviews.php" class="nav-link">Reviews</a></li>
                 <li><a href="messages.php" class="nav-link">Messages</a></li>
                 <li><a href="payment_verifications.php" class="nav-link active">Payments</a></li>
                 <li><a href="earnings.php" class="nav-link">Earnings</a></li>

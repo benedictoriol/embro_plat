@@ -34,33 +34,37 @@ if(isset($_POST['submit_rating'])) {
         $error = 'Please remove inappropriate language from your review.';
     } else {
         $order_stmt = $pdo->prepare("
-            SELECT id, shop_id, rating
-            FROM orders
-            WHERE id = ? AND client_id = ? AND status = 'completed'
-        ");
+        SELECT id, shop_id, rating, rating_status
+        FROM orders
+        WHERE id = ? AND client_id = ? AND status = 'completed'
+          AND EXISTS (
+              SELECT 1
+              FROM order_fulfillments f
+              WHERE f.order_id = orders.id
+                AND f.status = 'claimed'
+          )
+    ");
         $order_stmt->execute([$order_id, $client_id]);
         $order = $order_stmt->fetch();
 
         if(!$order) {
-            $error = 'Unable to find a completed order to rate.';
+            $error = 'Ratings are available after an order is completed and claimed.';
             } elseif(!empty($order['rating'])) {
             $error = 'This order already has a rating. Each completed order can only be reviewed once.';
         } else {
             $update_stmt = $pdo->prepare("
                 UPDATE orders
-                SET rating = ?, rating_title = ?, rating_comment = ?, rating_submitted_at = NOW(), updated_at = NOW()
+                SET rating = ?,
+                    rating_title = ?,
+                    rating_comment = ?,
+                    rating_status = 'pending',
+                    rating_submitted_at = NOW(),
+                    updated_at = NOW()
                 WHERE id = ? AND client_id = ?
             ");
             $update_stmt->execute([$rating, $rating_title, $rating_comment, $order_id, $client_id]);
 
-            $rating_stmt = $pdo->prepare("SELECT AVG(rating) as avg_rating FROM orders WHERE shop_id = ? AND rating IS NOT NULL AND rating > 0");
-            $rating_stmt->execute([$order['shop_id']]);
-            $avg_rating = $rating_stmt->fetchColumn();
-
-            $shop_update = $pdo->prepare("UPDATE shops SET rating = ? WHERE id = ?");
-            $shop_update->execute([$avg_rating ?: 0, $order['shop_id']]);
-
-            $success = 'Thank you! Your rating has been submitted.';
+            $success = 'Thank you! Your rating has been submitted and is awaiting moderation.';
         }
     }
 }
@@ -69,7 +73,15 @@ $pending_stmt = $pdo->prepare("
     SELECT o.*, s.shop_name
     FROM orders o
     JOIN shops s ON o.shop_id = s.id
-    WHERE o.client_id = ? AND o.status = 'completed' AND (o.rating IS NULL OR o.rating = 0)
+    WHERE o.client_id = ?
+      AND o.status = 'completed'
+      AND (o.rating IS NULL OR o.rating = 0)
+      AND EXISTS (
+          SELECT 1
+          FROM order_fulfillments f
+          WHERE f.order_id = o.id
+            AND f.status = 'claimed'
+      )
     ORDER BY o.completed_at DESC, o.created_at DESC
 ");
 $pending_stmt->execute([$client_id]);
@@ -79,7 +91,10 @@ $rated_stmt = $pdo->prepare("
     SELECT o.*, s.shop_name
     FROM orders o
     JOIN shops s ON o.shop_id = s.id
-    WHERE o.client_id = ? AND o.status = 'completed' AND o.rating IS NOT NULL AND o.rating > 0
+    WHERE o.client_id = ?
+      AND o.status = 'completed'
+      AND o.rating IS NOT NULL
+      AND o.rating > 0
     ORDER BY o.completed_at DESC, o.created_at DESC
     LIMIT 5
 ");
@@ -185,7 +200,7 @@ $rated_orders = $rated_stmt->fetchAll();
     <div class="container">
         <div class="dashboard-header">
             <h2>Rate Your Providers</h2>
-            <p class="text-muted">Share feedback for completed orders to help shops improve their service.</p>
+            <p class="text-muted">Share feedback for completed orders to help shops improve their service. Ratings are available after an order has been claimed.</p>
         </div>
 
         <?php if($error): ?>
@@ -223,8 +238,7 @@ $rated_orders = $rated_stmt->fetchAll();
                                     </label>
                                 <?php endfor; ?>
                             </div>
-                            <button type="submit" name="submit_rating" class="btn btn-primary">
-                                <div class="form-group">
+                            <div class="form-group">
                                 <label>Review Title (Optional)</label>
                                 <input type="text" name="rating_title" class="form-control" maxlength="150" placeholder="Summarize your experience">
                             </div>
@@ -232,7 +246,7 @@ $rated_orders = $rated_stmt->fetchAll();
                                 <label>Review Comment (Optional)</label>
                                 <textarea name="rating_comment" class="form-control" rows="3" placeholder="Share details about quality, communication, or delivery"></textarea>
                             </div>
-                                <i class="fas fa-paper-plane"></i> Submit Rating
+                                <button type="submit" name="submit_rating" class="btn btn-primary">
                             </button>
                         </form>
                     </div>
@@ -262,6 +276,13 @@ $rated_orders = $rated_stmt->fetchAll();
                                         <i class="fas fa-star<?php echo $i <= $order['rating'] ? '' : '-o'; ?> text-warning"></i>
                                     <?php endfor; ?>
                                 </div>
+                                <?php if(!empty($order['rating_status']) && $order['rating_status'] !== 'approved'): ?>
+                                        <?php if($order['rating_status'] === 'rejected'): ?>
+                                            <span class="badge badge-danger">Rejected</span>
+                                        <?php else: ?>
+                                            <span class="badge badge-warning">Pending moderation</span>
+                                        <?php endif; ?>
+                                    <?php endif; ?>
                             </div>
                             <?php if(!empty($order['rating_title']) || !empty($order['rating_comment'])): ?>
                                 <div class="mt-2">
@@ -274,6 +295,12 @@ $rated_orders = $rated_stmt->fetchAll();
                                 </div>
                             <?php endif; ?>
                             <div class="text-muted small mt-2">#<?php echo htmlspecialchars($order['order_number']); ?></div>
+                            <?php if(!empty($order['rating_response'])): ?>
+                                <div class="mt-2 alert alert-info">
+                                    <strong>Shop response:</strong>
+                                    <div><?php echo htmlspecialchars($order['rating_response']); ?></div>
+                                </div>
+                            <?php endif; ?>
                         </div>
                     <?php endforeach; ?>
                 </div>
@@ -288,5 +315,3 @@ $rated_orders = $rated_stmt->fetchAll();
     </div>
 </body>
 </html>
-
-

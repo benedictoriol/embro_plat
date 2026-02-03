@@ -200,6 +200,7 @@ if($_SERVER['REQUEST_METHOD'] === 'POST') {
                 <li><a href="shop_profile.php" class="nav-link active">Shop Profile</a></li>
                 <li><a href="manage_staff.php" class="nav-link">Staff</a></li>
                 <li><a href="shop_orders.php" class="nav-link">Orders</a></li>
+                <li><a href="reviews.php" class="nav-link">Reviews</a></li>
                 <li><a href="messages.php" class="nav-link">Messages</a></li>
                 <li><a href="payment_verifications.php" class="nav-link">Payments</a></li>
                 <li><a href="earnings.php" class="nav-link">Earnings</a></li>
@@ -358,7 +359,7 @@ if($_SERVER['REQUEST_METHOD'] === 'POST') {
                     <div class="card" style="flex: 1; background: #f8fafc;">
                         <h4>Shop Status</h4>
                         <p class="text-muted">Current status: <strong><?php echo ucfirst($shop['status']); ?></strong></p>
-                        <p class="text-muted">Rating: <?php echo number_format($shop['rating'], 1); ?> / 5</p>
+                        <p class="text-muted">Rating: <?php echo number_format((float) $shop['rating'], 1); ?> / 5 (<?php echo (int) ($shop['rating_count'] ?? 0); ?> reviews)</p>
                     </div>
                     <div class="card" style="flex: 1; background: #f8fafc;">
                         <h4>Performance Snapshot</h4>
