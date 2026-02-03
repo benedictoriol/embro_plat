@@ -23,4 +23,19 @@ function can_transition_order_status(string $current, string $next): bool {
 function is_terminal_order_status(string $status): bool {
     return in_array($status, [STATUS_COMPLETED, STATUS_CANCELLED], true);
 }
+
+function record_order_status_history(
+    PDO $pdo,
+    int $order_id,
+    string $status,
+    int $progress = 0,
+    ?string $notes = null,
+    ?int $employee_id = null
+): void {
+    $stmt = $pdo->prepare("
+        INSERT INTO order_status_history (order_id, employee_id, status, progress, notes)
+        VALUES (?, ?, ?, ?, ?)
+    ");
+    $stmt->execute([$order_id, $employee_id, $status, $progress, $notes]);
+}
 ?>

@@ -167,8 +167,15 @@ if(isset($_POST['update_status'])) {
                 $complete_stmt->execute([$order_id]);
             }
 
-            
-        if($order_info && $order_info['status'] !== $status) {
+            if($order_info && $order_info['status'] !== $status) {
+                record_order_status_history(
+                    $pdo,
+                    $order_id,
+                    $status,
+                    (int) $progress,
+                    $employee_notes !== '' ? $employee_notes : null,
+                    $employee_id
+                );
                 $message = sprintf(
                     'Order #%s status updated to %s by %s.',
                     $order_info['order_number'],

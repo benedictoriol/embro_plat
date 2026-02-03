@@ -129,6 +129,7 @@ if($_SERVER['REQUEST_METHOD'] === 'POST' && $action !== '') {
                 WHERE id = ? AND client_id = ?
             ");
             $cancel_stmt->execute([$reason, $order_id, $client_id]);
+            record_order_status_history($pdo, $order_id, STATUS_CANCELLED, (int) $order['progress'], $reason);
             $success = 'Your order has been cancelled.';
             create_notification(
                 $pdo,
@@ -251,6 +252,7 @@ if($_SERVER['REQUEST_METHOD'] === 'POST' && $action !== '') {
                 WHERE id = ? AND client_id = ?
             ");
             $accept_stmt->execute([$order_id, $client_id]);
+            record_order_status_history($pdo, $order_id, STATUS_ACCEPTED, (int) $order['progress'], 'Client accepted the price.');
             $success = 'Price accepted. Your order is now scheduled for production.';
 
             create_notification(
@@ -312,6 +314,7 @@ $refund_by_order = [];
 $receipt_by_payment = [];
 $fulfillment_by_order = [];
 $fulfillment_history_by_id = [];
+$status_history_by_order = [];
 if(!empty($orders)) {
     $order_ids = array_column($orders, 'id');
     $placeholders = implode(',', array_fill(0, count($order_ids), '?'));
@@ -325,6 +328,17 @@ if(!empty($orders)) {
 
     foreach($photos as $photo) {
         $order_photos[$photo['order_id']][] = $photo;
+    }
+    
+    $status_history_stmt = $pdo->prepare("
+        SELECT * FROM order_status_history
+        WHERE order_id IN ($placeholders)
+        ORDER BY created_at DESC
+    ");
+    $status_history_stmt->execute($order_ids);
+    $status_histories = $status_history_stmt->fetchAll();
+    foreach($status_histories as $history) {
+        $status_history_by_order[$history['order_id']][] = $history;
     }
     
     $payments_stmt = $pdo->prepare("
@@ -512,6 +526,32 @@ function fulfillment_status_pill(?string $status): string {
             color: #64748b;
             font-size: 0.9rem;
         }
+        .status-timeline {
+            border-left: 2px solid #e2e8f0;
+            padding-left: 16px;
+            margin-top: 12px;
+        }
+        .timeline-item {
+            position: relative;
+            padding-bottom: 12px;
+        }
+        .timeline-item:last-child {
+            padding-bottom: 0;
+        }
+        .timeline-item::before {
+            content: "";
+            position: absolute;
+            left: -21px;
+            top: 4px;
+            width: 10px;
+            height: 10px;
+            border-radius: 50%;
+            background: #4f46e5;
+        }
+        .timeline-meta {
+            font-size: 0.82rem;
+            color: #64748b;
+        }
         .progress-bar {
             width: 100%;
             height: 8px;
@@ -638,6 +678,7 @@ function fulfillment_status_pill(?string $status): string {
         <?php if(!empty($orders)): ?>
             <?php foreach($orders as $order): ?>
                 <?php $quote_details = !empty($order['quote_details']) ? json_decode($order['quote_details'], true) : null; ?>
+                <?php $status_history = $status_history_by_order[$order['id']] ?? []; ?>
                 <div class="order-card">
                     <div class="d-flex justify-between align-center">
                         <div>
@@ -683,6 +724,33 @@ function fulfillment_status_pill(?string $status): string {
                             <div><?php echo nl2br(htmlspecialchars($order['cancellation_reason'])); ?></div>
                         </div>
                     <?php endif; ?>
+                    <div class="mt-3">
+                        <strong>Status Timeline</strong>
+                        <div class="status-timeline">
+                            <?php if(!empty($status_history)): ?>
+                                <?php foreach($status_history as $history): ?>
+                                    <div class="timeline-item">
+                                        <div>
+                                            <?php echo status_pill($history['status']); ?>
+                                            <?php if((int) $history['progress'] > 0): ?>
+                                                <span class="text-muted small">· <?php echo (int) $history['progress']; ?>% complete</span>
+                                            <?php endif; ?>
+                                        </div>
+                                        <?php if(!empty($history['notes'])): ?>
+                                            <div class="text-muted small mt-1"><?php echo nl2br(htmlspecialchars($history['notes'])); ?></div>
+                                        <?php endif; ?>
+                                        <div class="timeline-meta">
+                                            <?php echo date('M d, Y H:i', strtotime($history['created_at'])); ?>
+                                        </div>
+                                    </div>
+                                <?php endforeach; ?>
+                            <?php else: ?>
+                                <div class="timeline-item">
+                                    <div class="text-muted small">No status updates have been recorded yet.</div>
+                                </div>
+                            <?php endif; ?>
+                        </div>
+                    </div>
                     <?php if($order['status'] === 'pending'): ?>
                         <div class="mt-3">
                             <strong>Price Quote</strong>

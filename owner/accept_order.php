@@ -37,6 +37,7 @@ if(!$order || $order['status'] !== 'pending') {
 
 $update_stmt = $pdo->prepare("UPDATE orders SET status = 'accepted', updated_at = NOW() WHERE id = ? AND shop_id = ?");
 $update_stmt->execute([$order_id, $shop['id']]);
+record_order_status_history($pdo, $order_id, STATUS_ACCEPTED, 0, 'Order accepted by shop.');
 
 if($order) {
     $message = sprintf(

@@ -52,6 +52,7 @@ if($order['status'] !== 'pending') {
             WHERE id = ? AND shop_id = ?
         ");
         $update_stmt->execute([$rejection_reason, $order_id, $shop['id']]);
+        record_order_status_history($pdo, $order_id, STATUS_CANCELLED, 0, $rejection_reason);
 
         $message = sprintf(
             'Your order #%s has been cancelled by %s. Reason: %s',
