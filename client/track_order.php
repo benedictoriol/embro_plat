@@ -314,6 +314,8 @@ $payment_by_order = [];
 $invoice_by_order = [];
 $refund_by_order = [];
 $receipt_by_payment = [];
+$fulfillment_by_order = [];
+$fulfillment_history_by_id = [];
 if(!empty($orders)) {
     $order_ids = array_column($orders, 'id');
     $placeholders = implode(',', array_fill(0, count($order_ids), '?'));
@@ -367,6 +369,31 @@ if(!empty($orders)) {
         }
     }
 
+    $fulfillment_stmt = $pdo->prepare("
+        SELECT * FROM order_fulfillments
+        WHERE order_id IN ($placeholders)
+    ");
+    $fulfillment_stmt->execute($order_ids);
+    $fulfillments = $fulfillment_stmt->fetchAll();
+    foreach($fulfillments as $fulfillment) {
+        $fulfillment_by_order[$fulfillment['order_id']] = $fulfillment;
+    }
+
+    if(!empty($fulfillments)) {
+        $fulfillment_ids = array_column($fulfillments, 'id');
+        $fulfillment_placeholders = implode(',', array_fill(0, count($fulfillment_ids), '?'));
+        $history_stmt = $pdo->prepare("
+            SELECT * FROM order_fulfillment_history
+            WHERE fulfillment_id IN ($fulfillment_placeholders)
+            ORDER BY created_at DESC
+        ");
+        $history_stmt->execute($fulfillment_ids);
+        $history_rows = $history_stmt->fetchAll();
+        foreach($history_rows as $row) {
+            $fulfillment_history_by_id[$row['fulfillment_id']][] = $row;
+        }
+    }
+
     if(!empty($payments)) {
         $payment_ids = array_column($payments, 'id');
         $payment_placeholders = implode(',', array_fill(0, count($payment_ids), '?'));
@@ -405,6 +432,20 @@ function payment_status_pill($status) {
     ];
     $class = $map[$status] ?? 'payment-unpaid';
     return '<span class="status-pill ' . $class . '">' . ucfirst(str_replace('_', ' ', $status)) . '</span>';
+}
+
+function fulfillment_status_pill(?string $status): string {
+    $map = [
+        FULFILLMENT_PENDING => 'fulfillment-pending',
+        FULFILLMENT_READY_FOR_PICKUP => 'fulfillment-ready',
+        FULFILLMENT_OUT_FOR_DELIVERY => 'fulfillment-out',
+        FULFILLMENT_DELIVERED => 'fulfillment-delivered',
+        FULFILLMENT_CLAIMED => 'fulfillment-claimed',
+        FULFILLMENT_FAILED => 'fulfillment-failed',
+    ];
+    $label = $status ? ucfirst(str_replace('_', ' ', $status)) : 'Not scheduled';
+    $class = $map[$status] ?? 'fulfillment-pending';
+    return '<span class="status-pill ' . $class . '">' . $label . '</span>';
 }
 ?>
 <!DOCTYPE html>
@@ -454,6 +495,12 @@ function payment_status_pill($status) {
         .payment-rejected { background: #fee2e2; color: #991b1b; }
         .payment-refund-pending { background: #fef9c3; color: #92400e; }
         .payment-refunded { background: #e2e8f0; color: #475569; }
+        .fulfillment-pending { background: #e2e8f0; color: #475569; }
+        .fulfillment-ready { background: #fef9c3; color: #92400e; }
+        .fulfillment-out { background: #e0f2fe; color: #0369a1; }
+        .fulfillment-delivered { background: #dcfce7; color: #166534; }
+        .fulfillment-claimed { background: #ccfbf1; color: #0f766e; }
+        .fulfillment-failed { background: #fee2e2; color: #991b1b; }
         .order-card {
             border: 1px solid #e2e8f0;
             border-radius: 12px;
@@ -715,6 +762,33 @@ function payment_status_pill($status) {
                         <?php if($refund): ?>
                             <div class="mt-1">Refund status: <?php echo htmlspecialchars($refund['status']); ?></div>
                         <?php endif; ?>
+                    </div>
+
+                    <?php
+                        $fulfillment = $fulfillment_by_order[$order['id']] ?? null;
+                        $history = $fulfillment ? ($fulfillment_history_by_id[$fulfillment['id']] ?? []) : [];
+                    ?>
+                    <div class="mt-3">
+                        <strong>Delivery / Pickup:</strong>
+                        <?php echo fulfillment_status_pill($fulfillment['status'] ?? null); ?>
+                        <div class="text-muted small mt-2">
+                            <?php if($fulfillment): ?>
+                                <div>Type: <?php echo ucfirst($fulfillment['fulfillment_type']); ?></div>
+                                <div>Tracking: <?php echo htmlspecialchars($fulfillment['tracking_number'] ?? 'Not provided'); ?></div>
+                                <div>Courier: <?php echo htmlspecialchars($fulfillment['courier'] ?? 'Not assigned'); ?></div>
+                                <?php if(!empty($fulfillment['pickup_location'])): ?>
+                                    <div>Pickup location: <?php echo htmlspecialchars($fulfillment['pickup_location']); ?></div>
+                                <?php endif; ?>
+                                <?php if(!empty($history)): ?>
+                                    <div class="mt-1">
+                                        Latest update: <?php echo ucfirst(str_replace('_', ' ', $history[0]['status'])); ?>
+                                        (<?php echo date('M d, Y H:i', strtotime($history[0]['created_at'])); ?>)
+                                    </div>
+                                <?php endif; ?>
+                            <?php else: ?>
+                                <div>No delivery or pickup details yet. We'll notify you once the shop schedules the handoff.</div>
+                            <?php endif; ?>
+                        </div>
                     </div>
 
                     <?php if($can_submit_payment): ?>

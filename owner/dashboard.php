@@ -121,6 +121,7 @@ $recent_employees = $employees_stmt->fetchAll();
                 <li><a href="shop_profile.php" class="nav-link">Shop Profile</a></li>
                 <li><a href="manage_staff.php" class="nav-link">Staff</a></li>
                 <li><a href="shop_orders.php" class="nav-link">Orders</a></li>
+                <li><a href="delivery_management.php" class="nav-link">Delivery & Pickup</a></li>
                 <li><a href="payment_verifications.php" class="nav-link">Payments</a></li>
                 <li><a href="earnings.php" class="nav-link">Earnings</a></li>
                 <li class="dropdown">

@@ -419,6 +419,62 @@ INSERT INTO `orders` (`id`, `order_number`, `client_id`, `shop_id`, `service_typ
 -- Table structure for table `order_photos`
 --
 
+-- --------------------------------------------------------
+--
+-- Table structure for table `order_fulfillments`
+--
+
+CREATE TABLE `order_fulfillments` (
+  `id` int(11) NOT NULL,
+  `order_id` int(11) NOT NULL,
+  `fulfillment_type` enum('delivery','pickup') DEFAULT 'pickup',
+  `status` enum('pending','ready_for_pickup','out_for_delivery','delivered','claimed','failed') DEFAULT 'pending',
+  `courier` varchar(100) DEFAULT NULL,
+  `tracking_number` varchar(120) DEFAULT NULL,
+  `pickup_location` varchar(255) DEFAULT NULL,
+  `notes` text DEFAULT NULL,
+  `ready_at` datetime DEFAULT NULL,
+  `delivered_at` datetime DEFAULT NULL,
+  `claimed_at` datetime DEFAULT NULL,
+  `created_at` timestamp NOT NULL DEFAULT current_timestamp(),
+  `updated_at` timestamp NOT NULL DEFAULT current_timestamp() ON UPDATE current_timestamp()
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
+
+--
+-- Dumping data for table `order_fulfillments`
+--
+
+INSERT INTO `order_fulfillments` (`id`, `order_id`, `fulfillment_type`, `status`, `courier`, `tracking_number`, `pickup_location`, `notes`, `ready_at`, `delivered_at`, `claimed_at`, `created_at`, `updated_at`) VALUES
+(1, 2, 'delivery', 'delivered', 'LBC Express', 'LBX-2026-0012', NULL, 'Delivered to client reception.', NULL, '2026-01-28 13:30:00', NULL, '2026-01-28 08:15:00', '2026-01-28 13:30:00'),
+(2, 4, 'pickup', 'ready_for_pickup', NULL, NULL, 'Shop front desk', 'Notify client via text upon arrival.', '2026-01-27 09:00:00', NULL, NULL, '2026-01-27 08:45:00', '2026-01-27 09:00:00');
+
+-- --------------------------------------------------------
+--
+-- Table structure for table `order_fulfillment_history`
+--
+
+CREATE TABLE `order_fulfillment_history` (
+  `id` int(11) NOT NULL,
+  `fulfillment_id` int(11) NOT NULL,
+  `status` enum('pending','ready_for_pickup','out_for_delivery','delivered','claimed','failed') NOT NULL,
+  `notes` text DEFAULT NULL,
+  `created_at` timestamp NOT NULL DEFAULT current_timestamp()
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
+
+--
+-- Dumping data for table `order_fulfillment_history`
+--
+
+INSERT INTO `order_fulfillment_history` (`id`, `fulfillment_id`, `status`, `notes`, `created_at`) VALUES
+(1, 1, 'out_for_delivery', 'Courier collected the parcel.', '2026-01-28 09:30:00'),
+(2, 1, 'delivered', 'Client signed at reception.', '2026-01-28 13:30:00'),
+(3, 2, 'ready_for_pickup', 'Pickup window opened.', '2026-01-27 09:00:00');
+
+-- --------------------------------------------------------
+--
+-- Table structure for table `order_photos`
+--
+
 CREATE TABLE `order_photos` (
   `id` int(11) NOT NULL,
   `order_id` int(11) NOT NULL,
@@ -900,6 +956,20 @@ ALTER TABLE `order_invoices`
   ADD KEY `order_id` (`order_id`);
 
 --
+-- Indexes for table `order_fulfillments`
+--
+ALTER TABLE `order_fulfillments`
+  ADD PRIMARY KEY (`id`),
+  ADD UNIQUE KEY `order_id` (`order_id`);
+
+--
+-- Indexes for table `order_fulfillment_history`
+--
+ALTER TABLE `order_fulfillment_history`
+  ADD PRIMARY KEY (`id`),
+  ADD KEY `fulfillment_id` (`fulfillment_id`);
+
+--
 -- Indexes for table `order_photos`
 --
 ALTER TABLE `order_photos`
@@ -1102,6 +1172,18 @@ ALTER TABLE `notifications`
 --
 ALTER TABLE `orders`
   MODIFY `id` int(11) NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=11;
+
+--
+-- AUTO_INCREMENT for table `order_fulfillments`
+--
+ALTER TABLE `order_fulfillments`
+  MODIFY `id` int(11) NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=3;
+
+--
+-- AUTO_INCREMENT for table `order_fulfillment_history`
+--
+ALTER TABLE `order_fulfillment_history`
+  MODIFY `id` int(11) NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=4;
 
 --
 -- AUTO_INCREMENT for table `order_invoices`

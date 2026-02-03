@@ -18,6 +18,14 @@ define('STATUS_IN_PROGRESS', 'in_progress');
 define('STATUS_COMPLETED', 'completed');
 define('STATUS_CANCELLED', 'cancelled');
 
+// Fulfillment Statuses
+define('FULFILLMENT_PENDING', 'pending');
+define('FULFILLMENT_READY_FOR_PICKUP', 'ready_for_pickup');
+define('FULFILLMENT_OUT_FOR_DELIVERY', 'out_for_delivery');
+define('FULFILLMENT_DELIVERED', 'delivered');
+define('FULFILLMENT_CLAIMED', 'claimed');
+define('FULFILLMENT_FAILED', 'failed');
+
 // Shop Statuses
 define('SHOP_PENDING', 'pending');
 define('SHOP_ACTIVE', 'active');
