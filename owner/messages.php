@@ -46,6 +46,13 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['send_message'])) {
         } else {
             $insert_stmt = $pdo->prepare("INSERT INTO chats (sender_id, receiver_id, message) VALUES (?, ?, ?)");
             $insert_stmt->execute([$owner_id, $receiver_id, $message]);
+            create_notification(
+                $pdo,
+                $receiver_id,
+                null,
+                'message',
+                'New message from ' . $_SESSION['user']['fullname'] . '.'
+            );
             $success = 'Message sent.';
         }
     }

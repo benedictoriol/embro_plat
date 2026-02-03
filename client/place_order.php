@@ -279,6 +279,13 @@ if(isset($_POST['place_order'])) {
             'info',
             'Your order #' . $order_number . ' has been submitted and is awaiting shop acceptance.'
         );
+        create_notification(
+            $pdo,
+            (int) $shop_policy['owner_id'],
+            $order_id,
+            'order_status',
+            'New order #' . $order_number . ' has been placed and is awaiting your review.'
+        );
         
         $pdo->commit();
         
