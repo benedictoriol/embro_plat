@@ -123,13 +123,16 @@ $employeeProductivity = $pdo->query("
     SELECT
         u.id,
         u.fullname,
-        COUNT(o.id) as completed_orders,
-        AVG(CASE WHEN o.completed_at IS NOT NULL THEN TIMESTAMPDIFF(HOUR, o.created_at, o.completed_at) END) as avg_completion_hours
-    FROM orders o
-    JOIN users u ON o.assigned_to = u.id
-    WHERE o.status = 'completed'
+        COUNT(o.id) as total_assigned,
+        SUM(CASE WHEN o.status = 'completed' THEN 1 ELSE 0 END) as completed_orders,
+        SUM(CASE WHEN o.status IN ('accepted', 'in_progress') THEN 1 ELSE 0 END) as active_orders,
+        SUM(CASE WHEN o.status = 'cancelled' THEN 1 ELSE 0 END) as cancelled_orders,
+        AVG(CASE WHEN o.status = 'completed' AND o.completed_at IS NOT NULL THEN TIMESTAMPDIFF(HOUR, o.created_at, o.completed_at) END) as avg_completion_hours
+    FROM users u
+    LEFT JOIN orders o ON o.assigned_to = u.id
+    WHERE u.role = 'employee'
     GROUP BY u.id, u.fullname
-    ORDER BY completed_orders DESC
+    ORDER BY completed_orders DESC, active_orders DESC
     LIMIT 5
 ")->fetchAll();
 
@@ -137,6 +140,27 @@ $totalOrders = (int) ($orderLifecycle['total_orders'] ?? 0);
 $cancelledOrders = (int) ($orderLifecycle['cancelled_orders'] ?? 0);
 $cancellationRate = $totalOrders > 0 ? ($cancelledOrders / $totalOrders) * 100 : 0;
 $avgCompletionHours = $orderLifecycle['avg_completion_hours'] !== null ? (float) $orderLifecycle['avg_completion_hours'] : 0;
+
+$turnaroundSummary = $pdo->query("
+    SELECT
+        AVG(TIMESTAMPDIFF(HOUR, created_at, completed_at)) as avg_hours,
+        MIN(TIMESTAMPDIFF(HOUR, created_at, completed_at)) as min_hours,
+        MAX(TIMESTAMPDIFF(HOUR, created_at, completed_at)) as max_hours
+    FROM orders
+    WHERE status = 'completed' AND completed_at IS NOT NULL
+")->fetch();
+
+$turnaroundByService = $pdo->query("
+    SELECT
+        service_type,
+        COUNT(*) as total_orders,
+        AVG(TIMESTAMPDIFF(HOUR, created_at, completed_at)) as avg_hours
+    FROM orders
+    WHERE status = 'completed' AND completed_at IS NOT NULL
+    GROUP BY service_type
+    ORDER BY avg_hours ASC
+    LIMIT 5
+")->fetchAll();
 ?>
 <!DOCTYPE html>
 <html lang="en">
@@ -244,6 +268,18 @@ $avgCompletionHours = $orderLifecycle['avg_completion_hours'] !== null ? (float)
                 <div>
                     <h2>Analytics Overview</h2>
                     <p class="text-muted">Track growth, activity, and revenue trends across the platform.</p>
+                </div>
+                <div class="d-flex align-center gap-2">
+                    <a class="btn btn-outline-primary" href="export_analytics.php?type=orders_turnaround">
+                        <i class="fas fa-file-export"></i> Orders CSV
+                    </a>
+                    <a class="btn btn-outline-primary" href="export_analytics.php?type=staff_performance">
+                        <i class="fas fa-file-export"></i> Staff CSV
+                    </a>
+                    <a class="btn btn-outline-primary" href="export_analytics.php?type=shop_performance">
+                        <i class="fas fa-file-export"></i> Shops CSV
+                    </a>
+                    <span class="badge badge-success"><i class="fas fa-chart-line"></i> Live Metrics</span>
                 </div>
                 <span class="badge badge-success"><i class="fas fa-chart-line"></i> Live Metrics</span>
             </div>
@@ -406,6 +442,26 @@ $avgCompletionHours = $orderLifecycle['avg_completion_hours'] !== null ? (float)
                     </div>
                 </div>
             </div>
+            <div class="card data-card">
+                <div class="card-header">
+                    <h3><i class="fas fa-stopwatch text-info"></i> Turnaround Time</h3>
+                    <p class="text-muted">Speed highlights for completed orders.</p>
+                </div>
+                <div>
+                    <div class="metric-row">
+                        <span>Average</span>
+                        <strong><?php echo $turnaroundSummary['avg_hours'] !== null ? number_format($turnaroundSummary['avg_hours'], 1) : '—'; ?> hrs</strong>
+                    </div>
+                    <div class="metric-row">
+                        <span>Fastest</span>
+                        <strong><?php echo $turnaroundSummary['min_hours'] !== null ? number_format($turnaroundSummary['min_hours'], 1) : '—'; ?> hrs</strong>
+                    </div>
+                    <div class="metric-row">
+                        <span>Slowest</span>
+                        <strong><?php echo $turnaroundSummary['max_hours'] !== null ? number_format($turnaroundSummary['max_hours'], 1) : '—'; ?> hrs</strong>
+                    </div>
+                </div>
+            </div>
 
             <div class="card half-card">
                 <div class="card-header">
@@ -440,8 +496,8 @@ $avgCompletionHours = $orderLifecycle['avg_completion_hours'] !== null ? (float)
 
             <div class="card half-card">
                 <div class="card-header">
-                    <h3><i class="fas fa-user-clock text-info"></i> Employee Productivity</h3>
-                    <p class="text-muted">Top employees by completed orders.</p>
+                    <h3><i class="fas fa-user-clock text-info"></i> Staff Performance</h3>
+                    <p class="text-muted">Top employees by output and workload.</p>
                 </div>
                 <?php if (empty($employeeProductivity)): ?>
                     <p class="text-muted">No employee productivity data yet.</p>
@@ -450,7 +506,10 @@ $avgCompletionHours = $orderLifecycle['avg_completion_hours'] !== null ? (float)
                         <thead>
                             <tr>
                                 <th>Employee</th>
+                                <th>Assigned</th>
+                                <th>Active</th>
                                 <th>Completed</th>
+                                <th>Cancelled</th>
                                 <th>Avg. Completion (hrs)</th>
                             </tr>
                         </thead>
@@ -458,8 +517,40 @@ $avgCompletionHours = $orderLifecycle['avg_completion_hours'] !== null ? (float)
                             <?php foreach ($employeeProductivity as $employee): ?>
                                 <tr>
                                     <td><?php echo htmlspecialchars($employee['fullname']); ?></td>
+                                    <td><?php echo number_format($employee['total_assigned']); ?></td>
+                                    <td><?php echo number_format($employee['active_orders']); ?></td>
                                     <td><?php echo number_format($employee['completed_orders']); ?></td>
+                                    <td><?php echo number_format($employee['cancelled_orders']); ?></td>
                                     <td><?php echo $employee['avg_completion_hours'] !== null ? number_format($employee['avg_completion_hours'], 1) : '—'; ?></td>
+                                </tr>
+                            <?php endforeach; ?>
+                        </tbody>
+                    </table>
+                <?php endif; ?>
+            </div>
+            
+            <div class="card full-card">
+                <div class="card-header">
+                    <h3><i class="fas fa-clock text-primary"></i> Turnaround by Service</h3>
+                    <p class="text-muted">Average completion time for the most common services.</p>
+                </div>
+                <?php if (empty($turnaroundByService)): ?>
+                    <p class="text-muted">No turnaround data yet.</p>
+                <?php else: ?>
+                    <table class="analytics-table">
+                        <thead>
+                            <tr>
+                                <th>Service</th>
+                                <th>Completed Orders</th>
+                                <th>Avg. Turnaround (hrs)</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            <?php foreach ($turnaroundByService as $service): ?>
+                                <tr>
+                                    <td><?php echo htmlspecialchars($service['service_type'] ?? 'N/A'); ?></td>
+                                    <td><?php echo number_format($service['total_orders']); ?></td>
+                                    <td><?php echo $service['avg_hours'] !== null ? number_format($service['avg_hours'], 1) : '—'; ?></td>
                                 </tr>
                             <?php endforeach; ?>
                         </tbody>
