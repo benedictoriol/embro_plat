@@ -30,6 +30,21 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $verifyStmt = $pdo->prepare("UPDATE otp_verifications SET verified = 1 WHERE id = ?");
             $verifyStmt->execute([$record['id']]);
 
+            $userStmt = $pdo->prepare("SELECT role FROM users WHERE id = ?");
+            $userStmt->execute([(int) $record['user_id']]);
+            $userRole = $userStmt->fetchColumn() ?: null;
+
+            log_audit(
+                $pdo,
+                (int) $record['user_id'],
+                $userRole,
+                'password_reset_verified',
+                'users',
+                (int) $record['user_id'],
+                [],
+                ['email' => $email]
+            );
+
             $_SESSION['password_reset_user_id'] = (int) $record['user_id'];
             $_SESSION['password_reset_email'] = $email;
 

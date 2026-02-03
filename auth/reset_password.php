@@ -29,7 +29,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     } elseif (!$hasLower || !$hasUpper || !$hasDigit || !$hasSpecial) {
         $error = 'Password must include uppercase, lowercase, number, and special character.';
     } else {
-        $userStmt = $pdo->prepare("SELECT id FROM users WHERE id = ? AND email = ?");
+        $userStmt = $pdo->prepare("SELECT id, role FROM users WHERE id = ? AND email = ?");
         $userStmt->execute([$userId, $email]);
         $user = $userStmt->fetch();
 
@@ -45,6 +45,17 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 WHERE user_id = ? AND type = 'reset'
             ");
             $cleanupStmt->execute([$userId]);
+
+            log_audit(
+                $pdo,
+                (int) $userId,
+                $user['role'] ?? null,
+                'password_reset_completed',
+                'users',
+                (int) $userId,
+                [],
+                ['email' => $email]
+            );
 
             unset($_SESSION['password_reset_user_id'], $_SESSION['password_reset_email']);
             $message = 'Password updated successfully. You can now log in.';

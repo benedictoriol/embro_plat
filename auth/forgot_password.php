@@ -12,7 +12,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     if (empty($email)) {
         $error = 'Please enter your email address.';
     } else {
-        $userStmt = $pdo->prepare("SELECT id, email FROM users WHERE email = ?");
+        $userStmt = $pdo->prepare("SELECT id, email, role FROM users WHERE email = ?");
         $userStmt->execute([$email]);
         $user = $userStmt->fetch();
 
@@ -31,6 +31,17 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 VALUES (?, ?, ?, 'reset', ?, 0)
             ");
             $otpStmt->execute([$user['id'], $user['email'], $otpCode, $expiresAt]);
+            
+            log_audit(
+                $pdo,
+                (int) $user['id'],
+                $user['role'],
+                'password_reset_requested',
+                'users',
+                (int) $user['id'],
+                [],
+                ['email' => $user['email']]
+            );
         }
 
         $show_verify_link = true;

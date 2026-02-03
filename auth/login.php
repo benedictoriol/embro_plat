@@ -27,6 +27,16 @@ if($_SERVER['REQUEST_METHOD'] == 'POST') {
 
                 if ($user['status'] !== 'active') {
                 $error = "Your account is pending approval. Please wait for activation.";
+                log_audit(
+                    $pdo,
+                    (int) $user['id'],
+                    $user['role'],
+                    'login_blocked',
+                    'users',
+                    (int) $user['id'],
+                    ['status' => $user['status']],
+                    ['status' => $user['status']]
+                );
             } else {
 
 
@@ -36,6 +46,17 @@ if($_SERVER['REQUEST_METHOD'] == 'POST') {
             $update_stmt = $pdo->prepare("UPDATE users SET last_login = NOW() WHERE id = ?");
             $update_stmt->execute([$user['id']]);
             
+            log_audit(
+                $pdo,
+                (int) $user['id'],
+                $user['role'],
+                'login',
+                'users',
+                (int) $user['id'],
+                [],
+                ['last_login' => date('Y-m-d H:i:s')]
+            );
+            
             redirect_based_on_role($user['role']);
             
 
@@ -44,6 +65,18 @@ if($_SERVER['REQUEST_METHOD'] == 'POST') {
 
         } else {
             $error = "Invalid email or password!";
+            $failedUserId = $user ? (int) $user['id'] : null;
+            $failedUserRole = $user ? $user['role'] : null;
+            log_audit(
+                $pdo,
+                $failedUserId,
+                $failedUserRole,
+                'login_failed',
+                'users',
+                $failedUserId,
+                [],
+                ['email' => $email]
+            );
         }
     } catch(PDOException $e) {
         $error = "Login failed: " . $e->getMessage();

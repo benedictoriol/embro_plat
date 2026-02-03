@@ -122,6 +122,21 @@ if($_SERVER['REQUEST_METHOD'] == 'POST') {
                         $shop_stmt->execute([$user_id, $shop_name, $permitNumber, $permitFilename]);
                     }
                     
+                    log_audit(
+                        $pdo,
+                        (int) $user_id,
+                        $user_type,
+                        'register_user',
+                        'users',
+                        (int) $user_id,
+                        [],
+                        [
+                            'email' => $email,
+                            'role' => $user_type,
+                            'status' => $user_status,
+                        ]
+                    );
+                    
 
                 $success = $user_status === 'pending'
                         ? "Registration successful! Your account is pending approval."

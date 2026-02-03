@@ -286,9 +286,23 @@ if(isset($_POST['place_order'])) {
             'order_status',
             'New order #' . $order_number . ' has been placed and is awaiting your review.'
         );
-        
+
         $pdo->commit();
         
+        log_audit(
+            $pdo,
+            $client_id,
+            $_SESSION['user']['role'] ?? 'client',
+            'place_order',
+            'orders',
+            (int) $order_id,
+            [],
+            [
+                'order_number' => $order_number,
+                'status' => 'pending',
+                'estimated_total' => $quote_details['estimated_total'] ?? null,
+            ]
+        );
         $success = "Order placed successfully! Your order number is: <strong>$order_number</strong>";
         
     } catch(RuntimeException $e) {

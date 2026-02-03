@@ -20,6 +20,7 @@ $preferences = $_SESSION['sys_admin_preferences'];
 $message = '';
 
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
+    $previousPreferences = $preferences;
     $preferences['timezone'] = sanitize($_POST['timezone'] ?? $preferences['timezone']);
     $preferences['theme'] = sanitize($_POST['theme'] ?? $preferences['theme']);
     $preferences['digest_frequency'] = sanitize($_POST['digest_frequency'] ?? $preferences['digest_frequency']);
@@ -28,6 +29,19 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
     $_SESSION['sys_admin_preferences'] = $preferences;
     $message = 'System preferences updated successfully.';
+    
+    $actorId = $_SESSION['user']['id'] ?? null;
+    $actorRole = $_SESSION['user']['role'] ?? 'sys_admin';
+    log_audit(
+        $pdo,
+        $actorId ? (int) $actorId : null,
+        $actorRole,
+        'update_admin_preferences',
+        'system_settings',
+        null,
+        $previousPreferences,
+        $preferences
+    );
 }
 ?>
 <!DOCTYPE html>
