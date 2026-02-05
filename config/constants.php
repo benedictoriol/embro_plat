@@ -7,8 +7,13 @@ define('UPLOAD_PATH', $_SERVER['DOCUMENT_ROOT'] . '/web-app/assets/uploads/');
 // User Roles
 define('ROLE_SYS_ADMIN', 'sys_admin');
 define('ROLE_OWNER', 'owner');
+define('ROLE_HR', 'hr');
+define('ROLE_STAFF', 'staff');
 define('ROLE_EMPLOYEE', 'employee');
 define('ROLE_CLIENT', 'client');
+
+// Session settings
+define('SESSION_TIMEOUT_SECONDS', 30 * 60);
 
 // Order Statuses
 define('STATUS_PENDING', 'pending');

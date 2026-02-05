@@ -10,7 +10,18 @@ function is_logged_in() {
 }
 
 function is_active_user(): bool {
-    return isset($_SESSION['user']) && ($_SESSION['user']['status'] ?? null) === 'active';
+    if (!isset($_SESSION['user'])) {
+        return false;
+    }
+
+    if (is_session_expired()) {
+        end_user_session();
+        return false;
+    }
+
+    touch_session_activity();
+
+    return ($_SESSION['user']['status'] ?? null) === 'active';
 }
 
 /**
@@ -26,6 +37,10 @@ function check_role($required_role) {
         return false;
     }
 
+    if (is_array($required_role)) {
+        return in_array($_SESSION['user']['role'], $required_role, true);
+    }
+
     return $_SESSION['user']['role'] === $required_role;
 }
 
@@ -35,10 +50,21 @@ function check_role($required_role) {
  * @param string $required_role Role required to access the page
  */
 function require_role($required_role) {
+    if (isset($_SESSION['user']) && is_session_expired()) {
+        end_user_session();
+        header("Location: ../auth/login.php");
+        exit();
+    }
+
+    if (!refresh_session_user_status()) {
+        end_user_session();
+        header("Location: ../auth/login.php");
+        exit();
+    }
+
     if (!check_role($required_role)) {
         if (isset($_SESSION['user']) && !is_active_user()) {
-            session_unset();
-            session_destroy();
+            end_user_session();
         }
         header("Location: ../auth/login.php");
         exit();
@@ -59,6 +85,8 @@ function redirect_based_on_role($role, $base_path = '..') {
         case 'owner':
             header("Location: {$base_path}/owner/dashboard.php");
             break;
+        case 'hr':
+        case 'staff':
         case 'employee':
             header("Location: {$base_path}/employee/dashboard.php");
             break;
@@ -69,6 +97,55 @@ function redirect_based_on_role($role, $base_path = '..') {
             header("Location: {$base_path}/index.php");
     }
     exit();
+}
+
+function session_timeout_seconds(): int {
+    if (defined('SESSION_TIMEOUT_SECONDS')) {
+        return (int) SESSION_TIMEOUT_SECONDS;
+    }
+
+    return 1800;
+}
+
+function is_session_expired(): bool {
+    if (!isset($_SESSION['last_activity'])) {
+        return false;
+    }
+
+    return (time() - (int) $_SESSION['last_activity']) > session_timeout_seconds();
+}
+
+function touch_session_activity(): void {
+    $_SESSION['last_activity'] = time();
+}
+
+function end_user_session(): void {
+    session_unset();
+    session_destroy();
+}
+
+function refresh_session_user_status(): bool {
+    if (!isset($_SESSION['user']['id'])) {
+        return false;
+    }
+
+    $pdo = $GLOBALS['pdo'] ?? null;
+    if (!$pdo instanceof PDO) {
+        return true;
+    }
+
+    $stmt = $pdo->prepare("SELECT status, role FROM users WHERE id = ?");
+    $stmt->execute([$_SESSION['user']['id']]);
+    $user = $stmt->fetch(PDO::FETCH_ASSOC);
+
+    if (!$user) {
+        return false;
+    }
+
+    $_SESSION['user']['status'] = $user['status'];
+    $_SESSION['user']['role'] = $user['role'];
+
+    return $user['status'] === 'active';
 }
 function employee_permission_defaults(): array {
     return [

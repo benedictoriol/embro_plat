@@ -48,20 +48,6 @@ CREATE TABLE `activities` (
   `created_at` timestamp NOT NULL DEFAULT current_timestamp()
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
 
---
--- Dumping data for table `activities`
---
-
-INSERT INTO `activities` (`id`, `user_id`, `user_name`, `activity`, `status`, `created_at`) VALUES
-(1, NULL, 'John Smith', 'New user registered', 'completed', '2026-01-22 12:31:55'),
-(2, NULL, 'Jane Doe', 'User role changed', 'pending', '2026-01-22 12:31:55'),
-(3, NULL, 'System', 'System backup', 'completed', '2026-01-22 12:31:55'),
-(4, NULL, 'John Smith', 'New user registered', 'completed', '2026-01-22 12:35:37'),
-(5, NULL, 'Jane Doe', 'User role changed', 'pending', '2026-01-22 12:35:37'),
-(6, NULL, 'System', 'System backup', 'completed', '2026-01-22 12:35:37'),
-(7, NULL, 'Robert Johnson', 'New service request submitted', 'pending', '2026-01-22 12:35:37'),
-(8, NULL, 'Sarah Wilson', 'Order #001 completed', 'completed', '2026-01-22 12:35:37');
-
 -- --------------------------------------------------------
 
 --
@@ -95,14 +81,6 @@ CREATE TABLE `appointments` (
   `created_at` timestamp NOT NULL DEFAULT current_timestamp()
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
 
---
--- Dumping data for table `appointments`
---
-
-INSERT INTO `appointments` (`id`, `customer_id`, `staff_id`, `appointment_date`, `appointment_time`, `service_type`, `status`, `notes`, `created_at`) VALUES
-(1, 3, 2, '2026-01-22', '10:30:00', 'Consultation', 'scheduled', NULL, '2026-01-22 12:35:37'),
-(2, 3, 2, '2026-01-24', '14:00:00', 'Design Review', 'scheduled', NULL, '2026-01-22 12:35:37');
-
 -- --------------------------------------------------------
 
 --
@@ -122,20 +100,6 @@ CREATE TABLE `audit_logs` (
   `user_agent` varchar(255) DEFAULT NULL,
   `created_at` timestamp NOT NULL DEFAULT current_timestamp()
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
-
---
--- Dumping data for table `audit_logs`
---
-
-INSERT INTO `audit_logs` (`id`, `actor_id`, `actor_role`, `action`, `entity_type`, `entity_id`, `old_values`, `new_values`, `ip_address`, `user_agent`, `created_at`) VALUES
-(1, 1, 'sys_admin', 'approve_shop', 'shops', 2, '{\"status\":\"pending\"}', '{\"status\":\"active\"}', '::1', 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/144.0.0.0 Safari/537.36', '2026-01-30 13:18:18'),
-(2, 1, 'sys_admin', 'activate_shop_owner', 'users', 14, '{\"status\":\"\"}', '{\"status\":\"active\"}', '::1', 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/144.0.0.0 Safari/537.36', '2026-01-30 13:18:18'),
-(3, 14, 'owner', 'accept_order', 'orders', 6, '{\"status\":\"pending\"}', '{\"status\":\"accepted\"}', '::1', 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/144.0.0.0 Safari/537.36', '2026-01-30 13:19:24'),
-(4, 14, 'owner', 'accept_order', 'orders', 7, '{\"status\":\"pending\"}', '{\"status\":\"accepted\"}', '::1', 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/144.0.0.0 Safari/537.36', '2026-01-30 13:20:47'),
-(5, 14, 'owner', 'accept_order', 'orders', 8, '{\"status\":\"pending\"}', '{\"status\":\"accepted\"}', '::1', 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/144.0.0.0 Safari/537.36', '2026-01-30 13:49:39'),
-(6, 14, 'owner', 'accept_order', 'orders', 9, '{\"status\":\"pending\"}', '{\"status\":\"accepted\"}', '::1', 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/144.0.0.0 Safari/537.36', '2026-01-31 01:31:44'),
-(7, 1, 'sys_admin', 'approve_shop', 'shops', 3, '{\"status\":\"pending\"}', '{\"status\":\"active\"}', '::1', 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/144.0.0.0 Safari/537.36', '2026-01-31 06:00:13'),
-(8, 1, 'sys_admin', 'activate_shop_owner', 'users', 17, '{\"status\":\"pending\"}', '{\"status\":\"active\"}', '::1', 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/144.0.0.0 Safari/537.36', '2026-01-31 06:00:13');
 
 -- --------------------------------------------------------
 
@@ -207,17 +171,6 @@ CREATE TABLE `dss_configurations` (
   `created_at` timestamp NOT NULL DEFAULT current_timestamp(),
   `updated_at` timestamp NOT NULL DEFAULT current_timestamp() ON UPDATE current_timestamp()
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
-
---
--- Dumping data for table `dss_configurations`
---
-
-INSERT INTO `dss_configurations` (`id`, `config_key`, `config_value`, `config_type`, `description`, `created_by`, `created_at`, `updated_at`) VALUES
-(1, 'order_acceptance_threshold', '0.7', 'system', 'Minimum rating threshold for auto-order acceptance', NULL, '2026-01-22 12:44:22', '2026-01-22 12:44:22'),
-(2, 'employee_performance_weight', '{\"quality\":0.4,\"speed\":0.3,\"customer_feedback\":0.3}', 'system', 'Weight for employee performance calculation', NULL, '2026-01-22 12:44:22', '2026-01-22 12:44:22'),
-(3, 'shop_rating_algorithm', 'weighted_average', 'system', 'Algorithm for calculating shop ratings', NULL, '2026-01-22 12:44:22', '2026-01-22 12:44:22'),
-(4, 'auto_schedule_enabled', 'true', 'system', 'Enable automatic job scheduling', NULL, '2026-01-22 12:44:22', '2026-01-22 12:44:22'),
-(5, 'notification_days_before_due', '2', 'system', 'Days before due date to send notifications', NULL, '2026-01-22 12:44:22', '2026-01-22 12:44:22');
 
 -- --------------------------------------------------------
 
@@ -310,53 +263,6 @@ CREATE TABLE `notifications` (
   `created_at` timestamp NOT NULL DEFAULT current_timestamp()
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
 
---
--- Dumping data for table `notifications`
---
-
-INSERT INTO `notifications` (`id`, `user_id`, `order_id`, `type`, `message`, `read_at`, `created_at`) VALUES
-(1, 12, 6, 'info', 'Your order #ORD-20260130-B540E6 has been submitted and is awaiting shop acceptance.', NULL, '2026-01-30 13:19:07'),
-(2, 12, 6, 'order_status', 'Your order #ORD-20260130-B540E6 has been accepted by Ailly Mae Ramil\'s Shop.', NULL, '2026-01-30 13:19:24'),
-(3, 12, 6, 'success', 'Your order #ORD-20260130-B540E6 has been accepted and will be scheduled shortly.', NULL, '2026-01-30 13:19:24'),
-(4, 12, 6, 'order_status', 'Order #ORD-20260130-B540E6 status updated to completed by Ailly Mae Ramil\'s Shop.', NULL, '2026-01-30 13:19:46'),
-(5, 14, 6, 'order_status', 'Order #ORD-20260130-B540E6 status updated to completed by Ailly Mae Ramil\'s Shop.', NULL, '2026-01-30 13:19:46'),
-(6, 12, 6, 'success', 'Order #ORD-20260130-B540E6 has been updated to completed.', NULL, '2026-01-30 13:19:46'),
-(7, 12, 7, 'info', 'Your order #ORD-20260130-74686B has been submitted and is awaiting shop acceptance.', NULL, '2026-01-30 13:20:39'),
-(8, 12, 7, 'order_status', 'Your order #ORD-20260130-74686B has been accepted by Ailly Mae Ramil\'s Shop.', NULL, '2026-01-30 13:20:47'),
-(9, 12, 7, 'success', 'Your order #ORD-20260130-74686B has been accepted and will be scheduled shortly.', NULL, '2026-01-30 13:20:47'),
-(10, 12, 7, 'order_status', 'Order #ORD-20260130-74686B status updated to in progress by Ailly Mae Ramil\'s Shop.', NULL, '2026-01-30 13:21:08'),
-(11, 14, 7, 'order_status', 'Order #ORD-20260130-74686B status updated to in progress by Ailly Mae Ramil\'s Shop.', NULL, '2026-01-30 13:21:08'),
-(12, 12, 7, 'info', 'Order #ORD-20260130-74686B has been updated to in progress.', NULL, '2026-01-30 13:21:08'),
-(13, 12, 7, 'order_status', 'Order #ORD-20260130-74686B status updated to completed by Ailly Mae Ramil\'s Shop.', NULL, '2026-01-30 13:39:27'),
-(14, 14, 7, 'order_status', 'Order #ORD-20260130-74686B status updated to completed by Ailly Mae Ramil\'s Shop.', NULL, '2026-01-30 13:39:27'),
-(15, 12, 7, 'success', 'Order #ORD-20260130-74686B has been updated to completed.', NULL, '2026-01-30 13:39:27'),
-(16, 15, 8, 'info', 'Your order #ORD-20260130-5960D2 has been submitted and is awaiting shop acceptance.', NULL, '2026-01-30 13:48:37'),
-(17, 15, 8, 'order_status', 'Your order #ORD-20260130-5960D2 has been accepted by Ailly Mae Ramil\'s Shop.', NULL, '2026-01-30 13:49:39'),
-(18, 15, 8, 'success', 'Your order #ORD-20260130-5960D2 has been accepted and will be scheduled shortly.', NULL, '2026-01-30 13:49:39'),
-(19, 15, 8, 'order_status', 'Order #ORD-20260130-5960D2 status updated to in progress by Ailly Mae Ramil\'s Shop.', NULL, '2026-01-30 13:50:02'),
-(20, 14, 8, 'order_status', 'Order #ORD-20260130-5960D2 status updated to in progress by Ailly Mae Ramil\'s Shop.', NULL, '2026-01-30 13:50:02'),
-(21, 15, 8, 'info', 'Order #ORD-20260130-5960D2 has been updated to in progress.', NULL, '2026-01-30 13:50:02'),
-(22, 15, 8, 'order_status', 'Order #ORD-20260130-5960D2 status updated to completed by Ailly Mae Ramil\'s Shop.', NULL, '2026-01-30 13:52:51'),
-(23, 14, 8, 'order_status', 'Order #ORD-20260130-5960D2 status updated to completed by Ailly Mae Ramil\'s Shop.', NULL, '2026-01-30 13:52:51'),
-(24, 15, 8, 'success', 'Order #ORD-20260130-5960D2 has been updated to completed.', NULL, '2026-01-30 13:52:51'),
-(25, 15, 9, 'info', 'Your order #ORD-20260131-E9DC0B has been submitted and is awaiting shop acceptance.', NULL, '2026-01-31 01:31:26'),
-(26, 15, 9, 'order_status', 'Your order #ORD-20260131-E9DC0B has been accepted by Ailly Mae Ramil\'s Shop.', NULL, '2026-01-31 01:31:44'),
-(27, 15, 9, 'success', 'Your order #ORD-20260131-E9DC0B has been accepted and will be scheduled shortly.', NULL, '2026-01-31 01:31:44'),
-(28, 15, 9, 'order_status', 'Order #ORD-20260131-E9DC0B status updated to  by Ailly Mae Ramil\'s Shop.', NULL, '2026-01-31 01:32:06'),
-(29, 14, 9, 'order_status', 'Order #ORD-20260131-E9DC0B status updated to  by Ailly Mae Ramil\'s Shop.', NULL, '2026-01-31 01:32:06'),
-(30, 15, 9, 'info', 'Order #ORD-20260131-E9DC0B has been updated to .', NULL, '2026-01-31 01:32:06'),
-(31, 15, 9, 'order_status', 'Order #ORD-20260131-E9DC0B status updated to in progress by Ailly Mae Ramil\'s Shop.', NULL, '2026-01-31 01:32:23'),
-(32, 14, 9, 'order_status', 'Order #ORD-20260131-E9DC0B status updated to in progress by Ailly Mae Ramil\'s Shop.', NULL, '2026-01-31 01:32:24'),
-(33, 15, 9, 'info', 'Order #ORD-20260131-E9DC0B has been updated to in progress.', NULL, '2026-01-31 01:32:24'),
-(34, 15, 9, 'order_status', 'Order #ORD-20260131-E9DC0B status updated to completed by Ailly Mae Ramil\'s Shop.', NULL, '2026-01-31 01:32:39'),
-(35, 14, 9, 'order_status', 'Order #ORD-20260131-E9DC0B status updated to completed by Ailly Mae Ramil\'s Shop.', NULL, '2026-01-31 01:32:39'),
-(36, 15, 9, 'success', 'Order #ORD-20260131-E9DC0B has been updated to completed.', NULL, '2026-01-31 01:32:39'),
-(37, 15, 9, 'order_status', 'Order #ORD-20260131-E9DC0B status updated to in progress by Ailly Mae Ramil\'s Shop.', NULL, '2026-01-31 01:32:43'),
-(38, 14, 9, 'order_status', 'Order #ORD-20260131-E9DC0B status updated to in progress by Ailly Mae Ramil\'s Shop.', NULL, '2026-01-31 01:32:43'),
-(39, 15, 9, 'info', 'Order #ORD-20260131-E9DC0B has been updated to in progress.', NULL, '2026-01-31 01:32:43'),
-(40, 16, 10, 'info', 'Your order #ORD-20260131-B29BA3 has been submitted and is awaiting shop acceptance.', NULL, '2026-01-31 06:00:59'),
-(41, 16, 10, 'warning', 'Order #ORD-20260131-B29BA3 was cancelled per your request.', NULL, '2026-01-31 06:02:25');
-
 -- --------------------------------------------------------
 
 --
@@ -401,22 +307,6 @@ CREATE TABLE `orders` (
   `updated_at` timestamp NOT NULL DEFAULT current_timestamp() ON UPDATE current_timestamp()
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
 
---
--- Dumping data for table `orders`
---
-
-INSERT INTO `orders` (`id`, `order_number`, `client_id`, `shop_id`, `service_type`, `design_description`, `quantity`, `price`, `client_notes`, `quote_details`, `status`, `assigned_to`, `progress`, `scheduled_date`, `shop_notes`, `design_file`, `design_approved`, `rating`, `payment_status`, `payment_verified_at`, `rating_title`, `rating_comment`, `rating_submitted_at`, `revision_count`, `revision_notes`, `revision_requested_at`, `cancellation_reason`, `cancelled_at`, `completed_at`, `created_at`, `updated_at`) VALUES
-(1, 'ORD-20260122-ABC123', 3, 1, 'Custom Logo Embroidery', 'Logo for company uniforms', 50, 2500.00, 'Please match our brand colors.', NULL, 'in_progress', NULL, 75, '2026-01-28', NULL, NULL, 0, NULL, 'unpaid', NULL, NULL, NULL, NULL, 0, NULL, NULL, NULL, NULL, NULL, '2026-01-22 12:31:55', '2026-01-22 12:31:55'),
-(2, 'ORD-20260122-DEF456', 3, 1, 'Name Patch Embroidery', 'Name patches for employees', 25, 1200.00, 'Include last names only.', NULL, 'completed', NULL, 100, '2026-01-27', 'Completed successfully.', NULL, 0, 5, 'unpaid', NULL, 'Clean finish', 'Great quality, stitches are consistent.', '2026-01-28 10:05:00', 0, NULL, NULL, NULL, NULL, '2026-01-28 10:00:00', '2026-01-22 12:31:55', '2026-01-22 12:31:55'),
-(3, 'ORD-20260122-GHI789', 3, 1, 'Custom Logo Embroidery', 'Cap embroidery', 30, 900.00, NULL, NULL, 'accepted', NULL, 20, '2026-01-29', NULL, NULL, 0, NULL, 'unpaid', NULL, NULL, NULL, NULL, 0, NULL, NULL, NULL, NULL, NULL, '2026-01-22 12:35:37', '2026-01-22 12:35:37'),
-(4, 'ORD-20260122-JKL012', 3, 1, 'Name Patch Embroidery', 'Uniform patches', 10, 300.00, NULL, NULL, 'completed', NULL, 100, '2026-01-26', 'Delivered to client.', NULL, 0, 4, 'unpaid', NULL, 'Quick turnaround', 'Fast delivery and accurate sizing.', '2026-01-27 10:00:00', 0, NULL, NULL, NULL, NULL, '2026-01-27 09:30:00', '2026-01-22 12:35:37', '2026-01-22 12:35:37'),
-(5, 'ORD-20260122-MNO345', 3, 1, 'Uniform Design', 'Seasonal uniform design', 15, 1500.00, 'Need before end of month.', NULL, 'pending', NULL, 0, '2026-02-02', NULL, NULL, 0, NULL, 'unpaid', NULL, NULL, NULL, NULL, 0, NULL, NULL, NULL, NULL, NULL, '2026-01-22 12:35:37', '2026-01-22 12:35:37'),
-(6, 'ORD-20260130-B540E6', 12, 2, 'T-shirt Embroidery', 'add', 1, 290.00, 'adad', NULL, 'completed', 13, 17, NULL, '\n', '6_download.png', 0, NULL, 'unpaid', NULL, NULL, NULL, NULL, 0, NULL, NULL, NULL, NULL, '2026-01-30 21:19:46', '2026-01-30 13:19:07', '2026-01-30 13:19:46'),
-(7, 'ORD-20260130-74686B', 12, 2, 'Logo Embroidery', 'adad', 1, 200.00, 'adad', NULL, 'completed', 13, 50, NULL, '\nmalapit na po\n\n\n', '7_download.png', 0, NULL, 'unpaid', NULL, NULL, NULL, NULL, 0, NULL, NULL, NULL, NULL, '2026-01-30 21:39:33', '2026-01-30 13:20:39', '2026-01-30 13:39:33'),
-(8, 'ORD-20260130-5960D2', 15, 2, 'Bag Embroidery', 'adad', 1, 123.00, '', NULL, 'completed', 13, 35, NULL, '\n\n\n', '8_download.png', 0, 5, 'unpaid', NULL, '', '', '2026-01-30 21:53:11', 0, NULL, NULL, NULL, NULL, '2026-01-30 21:52:54', '2026-01-30 13:48:37', '2026-01-30 13:53:11'),
-(9, 'ORD-20260131-E9DC0B', 15, 2, 'T-shirt Embroidery', 'malupet', 2, NULL, '', NULL, 'in_progress', 13, 50, NULL, '\n\n\n\n', NULL, 0, NULL, 'unpaid', NULL, NULL, NULL, NULL, 0, NULL, NULL, NULL, NULL, '2026-01-31 09:32:39', '2026-01-31 01:31:26', '2026-01-31 01:32:43'),
-(10, 'ORD-20260131-B29BA3', 16, 3, 'T-shirt Embroidery', 'master kim', 1, NULL, 'master ko si kim', NULL, 'cancelled', NULL, 0, NULL, NULL, '10_download.png', 0, NULL, 'unpaid', NULL, NULL, NULL, NULL, 0, NULL, NULL, '', '2026-01-31 14:02:25', NULL, '2026-01-31 06:00:59', '2026-01-31 06:02:25');
-
 -- --------------------------------------------------------
 
 --
@@ -444,14 +334,6 @@ CREATE TABLE `order_fulfillments` (
   `updated_at` timestamp NOT NULL DEFAULT current_timestamp() ON UPDATE current_timestamp()
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
 
---
--- Dumping data for table `order_fulfillments`
---
-
-INSERT INTO `order_fulfillments` (`id`, `order_id`, `fulfillment_type`, `status`, `courier`, `tracking_number`, `pickup_location`, `notes`, `ready_at`, `delivered_at`, `claimed_at`, `created_at`, `updated_at`) VALUES
-(1, 2, 'delivery', 'delivered', 'LBC Express', 'LBX-2026-0012', NULL, 'Delivered to client reception.', NULL, '2026-01-28 13:30:00', NULL, '2026-01-28 08:15:00', '2026-01-28 13:30:00'),
-(2, 4, 'pickup', 'ready_for_pickup', NULL, NULL, 'Shop front desk', 'Notify client via text upon arrival.', '2026-01-27 09:00:00', NULL, NULL, '2026-01-27 08:45:00', '2026-01-27 09:00:00');
-
 -- --------------------------------------------------------
 --
 -- Table structure for table `order_fulfillment_history`
@@ -464,15 +346,6 @@ CREATE TABLE `order_fulfillment_history` (
   `notes` text DEFAULT NULL,
   `created_at` timestamp NOT NULL DEFAULT current_timestamp()
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
-
---
--- Dumping data for table `order_fulfillment_history`
---
-
-INSERT INTO `order_fulfillment_history` (`id`, `fulfillment_id`, `status`, `notes`, `created_at`) VALUES
-(1, 1, 'out_for_delivery', 'Courier collected the parcel.', '2026-01-28 09:30:00'),
-(2, 1, 'delivered', 'Client signed at reception.', '2026-01-28 13:30:00'),
-(3, 2, 'ready_for_pickup', 'Pickup window opened.', '2026-01-27 09:00:00');
 
 -- --------------------------------------------------------
 --
@@ -487,13 +360,6 @@ CREATE TABLE `order_photos` (
   `caption` varchar(255) DEFAULT NULL,
   `uploaded_at` timestamp NOT NULL DEFAULT current_timestamp()
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
-
---
--- Dumping data for table `order_photos`
---
-
-INSERT INTO `order_photos` (`id`, `order_id`, `employee_id`, `photo_url`, `caption`, `uploaded_at`) VALUES
-(1, 8, 13, 'job_photos/8_13_job_697cb728a84af1.78263580.png', 'adadad', '2026-01-30 13:50:32');
 
 -- --------------------------------------------------------
 
@@ -655,20 +521,6 @@ CREATE TABLE `services` (
   `created_at` timestamp NOT NULL DEFAULT current_timestamp()
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
 
---
--- Dumping data for table `services`
---
-
-INSERT INTO `services` (`id`, `name`, `description`, `price`, `category`, `status`, `created_at`) VALUES
-(1, 'Custom T-shirt Embroidery', 'Custom embroidery on t-shirts with your design', 25.00, 'custom_apparel', 'active', '2026-01-22 12:31:55'),
-(2, 'Logo Embroidery', 'Company logo embroidery on caps and uniforms', 45.00, 'logo_embroidery', 'active', '2026-01-22 12:31:55'),
-(3, 'Personalized Gift', 'Custom embroidered gifts and souvenirs', 35.00, 'personalized_gifts', 'active', '2026-01-22 12:31:55'),
-(4, 'Uniform Embroidery', 'Name and badge embroidery on uniforms', 30.00, 'custom_apparel', 'active', '2026-01-22 12:31:55'),
-(5, 'Custom T-shirt Embroidery', 'Custom embroidery on t-shirts with your design', 25.00, 'custom_apparel', 'active', '2026-01-22 12:35:36'),
-(6, 'Logo Embroidery', 'Company logo embroidery on caps and uniforms', 45.00, 'logo_embroidery', 'active', '2026-01-22 12:35:36'),
-(7, 'Personalized Gift', 'Custom embroidered gifts and souvenirs', 35.00, 'personalized_gifts', 'active', '2026-01-22 12:35:36'),
-(8, 'Uniform Embroidery', 'Name and badge embroidery on uniforms', 30.00, 'custom_apparel', 'active', '2026-01-22 12:35:36');
-
 -- --------------------------------------------------------
 
 --
@@ -704,17 +556,6 @@ CREATE TABLE `service_requests` (
   `created_at` timestamp NOT NULL DEFAULT current_timestamp(),
   `updated_at` timestamp NOT NULL DEFAULT current_timestamp() ON UPDATE current_timestamp()
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
-
---
--- Dumping data for table `service_requests`
---
-
-INSERT INTO `service_requests` (`id`, `customer_id`, `service_type`, `description`, `status`, `assigned_to`, `priority`, `created_at`, `updated_at`) VALUES
-(1, 3, 'Logo Design', 'Need company logo embroidery on 50 caps', 'pending', NULL, 'high', '2026-01-22 12:35:10', '2026-01-22 12:35:10'),
-(2, 3, 'Uniform Patch', 'Name patches for employee uniforms', 'pending', NULL, 'medium', '2026-01-22 12:35:10', '2026-01-22 12:35:10'),
-(3, 3, 'Logo Design', 'Need company logo embroidery on 50 caps', 'pending', NULL, 'high', '2026-01-22 12:35:37', '2026-01-22 12:35:37'),
-(4, 3, 'Uniform Patch', 'Name patches for employee uniforms', 'pending', NULL, 'medium', '2026-01-22 12:35:37', '2026-01-22 12:35:37'),
-(5, 3, 'Custom Gift', 'Embroidered towels for company anniversary', 'pending', NULL, 'low', '2026-01-22 12:35:37', '2026-01-22 12:35:37');
 
 -- --------------------------------------------------------
 
@@ -754,10 +595,7 @@ CREATE TABLE `shops` (
 --
 
 INSERT INTO `shops` (`id`, `owner_id`, `shop_name`, `shop_description`, `address`, `phone`, `email`, `business_permit`, `permit_file`, `logo`, `opening_time`, `closing_time`, `operating_days`, `service_settings`, `pricing_settings`, `status`, `rejection_reason`, `rejected_at`, `rating`, `total_orders`, `total_earnings`, `created_at`, `updated_at`) VALUES
-(1, 5, 'Thread & Needle Studio', 'Custom embroidery and uniform design services.', '123 Market Street', '09171234567', 'owner@embroidery.com', NULL, NULL, NULL, '08:00:00', '18:00:00', '[1,2,3,4,5,6]', '[\"T-shirt Embroidery\",\"Logo Embroidery\",\"Cap Embroidery\",\"Bag Embroidery\",\"Custom\"]', '{\"base_prices\":{\"T-shirt Embroidery\":180,\"Logo Embroidery\":160,\"Cap Embroidery\":150,\"Bag Embroidery\":200,\"Custom\":200},\"complexity_multipliers\":{\"Simple\":1,\"Standard\":1.15,\"Complex\":1.35},\"rush_fee_percent\":25,\"add_ons\":{\"Metallic Thread\":50,\"3D Puff\":75,\"Extra Color\":25,\"Applique\":60}}', 'active', NULL, NULL, 4.50, 5, 6400.00, '2026-01-22 12:20:00', '2026-01-22 12:20:00'),
-(2, 14, 'Ailly Mae Ramil\'s Shop', NULL, NULL, NULL, NULL, NULL, NULL, NULL, '09:00:00', '17:00:00', '[1,2,3,4,5]', '[\"T-shirt Embroidery\",\"Logo Embroidery\",\"Custom\"]', '{\"base_prices\":{\"T-shirt Embroidery\":170,\"Logo Embroidery\":150,\"Cap Embroidery\":140,\"Bag Embroidery\":190,\"Custom\":190},\"complexity_multipliers\":{\"Simple\":1,\"Standard\":1.15,\"Complex\":1.35},\"rush_fee_percent\":20,\"add_ons\":{\"Metallic Thread\":45,\"3D Puff\":70,\"Extra Color\":20,\"Applique\":55}}', 'active', NULL, NULL, 5.00, 4, 0.00, '2026-01-30 13:17:57', '2026-01-31 01:31:26'),
-(3, 17, 'sean\'s Shop', NULL, NULL, NULL, NULL, NULL, NULL, NULL, '10:00:00', '19:00:00', '[2,3,4,5,6]', '[\"Cap Embroidery\",\"Bag Embroidery\",\"Custom\"]', '{\"base_prices\":{\"T-shirt Embroidery\":160,\"Logo Embroidery\":140,\"Cap Embroidery\":130,\"Bag Embroidery\":180,\"Custom\":180},\"complexity_multipliers\":{\"Simple\":1,\"Standard\":1.1,\"Complex\":1.3},\"rush_fee_percent\":15,\"add_ons\":{\"Metallic Thread\":40,\"3D Puff\":60,\"Extra Color\":15,\"Applique\":50}}', 'active', NULL, NULL, 0.00, 1, 0.00, '2026-01-31 05:59:47', '2026-01-31 06:00:59');
-
+(1, 4, 'Thread & Needle Studio', 'Custom embroidery and uniform design services.', '123 Market Street', '09171234567', 'owner@embroidery.com', NULL, NULL, NULL, '08:00:00', '18:00:00', '[1,2,3,4,5,6]', '[\"T-shirt Embroidery\",\"Logo Embroidery\",\"Cap Embroidery\",\"Bag Embroidery\",\"Custom\"]', '{\"base_prices\":{\"T-shirt Embroidery\":180,\"Logo Embroidery\":160,\"Cap Embroidery\":150,\"Bag Embroidery\":200,\"Custom\":200},\"complexity_multipliers\":{\"Simple\":1,\"Standard\":1.15,\"Complex\":1.35},\"rush_fee_percent\":25,\"add_ons\":{\"Metallic Thread\":50,\"3D Puff\":75,\"Extra Color\":25,\"Applique\":60}}', 'active', NULL, NULL, 4.50, 5, 6400.00, '2026-01-22 12:20:00', '2026-01-22 12:20:00');
 -- --------------------------------------------------------
 
 --
@@ -778,14 +616,6 @@ CREATE TABLE `shop_employees` (
   `status` enum('active','inactive') DEFAULT 'active',
   `created_at` timestamp NOT NULL DEFAULT current_timestamp()
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
-
---
--- Dumping data for table `shop_employees`
---
-
-INSERT INTO `shop_employees` (`id`, `shop_id`, `user_id`, `position`, `permissions`, `availability_days`, `availability_start`, `availability_end`, `max_active_orders`, `hired_date`, `status`, `created_at`) VALUES
-(1, 2, 13, 'Designer', '{\"view_jobs\":true,\"update_status\":true,\"upload_photos\":true}', '[1,2,3,4,5]', '09:00:00', '18:00:00', 3, '2026-01-30', 'active', '2026-01-30 13:18:40'),
-(2, 3, 18, 'Designer', '{\"view_jobs\":true,\"update_status\":true,\"upload_photos\":true}', '[2,3,4,5,6]', '10:00:00', '19:00:00', 3, '2026-01-31', 'active', '2026-01-31 06:03:26');
 
 -- --------------------------------------------------------
 
@@ -830,15 +660,7 @@ INSERT INTO `users` (`id`, `fullname`, `email`, `password`, `role`, `status`, `c
 (1, 'Administrator', 'admin@embroidery.com', '$2y$10$92IXUNpkjO0rOQ5byMi.Ye4oKoEa3Ro9llC/.og/at2.uheWG/igi', 'sys_admin', 'active', '2026-01-19 15:28:09', 0, NULL, 0, '2026-01-31 14:00:06'),
 (2, 'Staff Member', 'staff@embroidery.com', '$2y$10$92IXUNpkjO0rOQ5byMi.Ye4oKoEa3Ro9llC/.og/at2.uheWG/igi', 'employee', 'active', '2026-01-19 15:28:09', 0, NULL, 0, '2026-01-31 09:53:28'),
 (3, 'Customer', 'customer@embroidery.com', '$2y$10$92IXUNpkjO0rOQ5byMi.Ye4oKoEa3Ro9llC/.og/at2.uheWG/igi', 'client', 'active', '2026-01-19 15:28:09', 0, NULL, 0, '2026-01-27 20:53:59'),
-(4, 'kim', 'kim@gmail.com', '$2y$12$/6/fhAh8USgtPJsGpB9IAea3NzCCjVSlC7KMiflw9wkKLeiS1f7B2', 'client', 'active', '2026-01-20 12:22:00', 0, NULL, 0, NULL),
-(5, 'Shop Owner', 'owner@embroidery.com', '$2y$10$92IXUNpkjO0rOQ5byMi.Ye4oKoEa3Ro9llC/.og/at2.uheWG/igi', 'owner', 'active', '2026-01-19 15:28:09', 0, NULL, 0, '2026-01-27 19:15:00'),
-(12, 'gab', 'gab@embroidery.com', '$2y$10$//MQlEjnhjCYGL1Ar7bDx.y2yGNY4emXxfwDSNjrr1MI.AUK29Uj.', 'client', 'active', '2026-01-30 13:15:16', 0, '123', 0, '2026-01-30 21:40:47'),
-(13, 'gwen', 'gwen@embroidery.com', '$2y$10$PaxfOvmaVJYT4erUZ66kz.V56FPbfI5DOWyhenalStgJVi69pZ8lO', 'employee', 'active', '2026-01-30 13:17:06', 0, '12345', 0, '2026-01-31 09:31:53'),
-(14, 'Ailly Mae Ramil', 'ailly@embroidery.com', '$2y$10$rGZxnZC3cW6Zkd5BpwIoJ.nylwG.Ur3/8Yq/B4MYU4Oa190fwf9be', 'owner', 'active', '2026-01-30 13:17:57', 0, '123', 0, '2026-01-31 09:53:03'),
-(15, 'kiel', 'kiel@embroidery.com', '$2y$10$ZXU.KPOxbnwaOqcSDTfrtOrmrKpZLFkYYJrNFed6JbJb0UXyq0Acq', 'client', 'active', '2026-01-30 13:42:10', 0, '1234', 0, '2026-01-31 09:33:11'),
-(16, 'ivypowers', 'ivy@embroidery.com', '$2y$10$3V1I8sJVsbfFManng09SJ.bT45vM1jWy67tvnGmI98IK7J4lGVE.e', 'client', 'active', '2026-01-31 05:58:32', 0, '123456789', 0, '2026-01-31 14:01:15'),
-(17, 'sean', 'sean@embroidery.com', '$2y$10$wGSzmQiQxanKmURc254kW.wV5bE4pQdpYCq30ZCCCvLA0bltzX9fa', 'owner', 'active', '2026-01-31 05:59:47', 0, '123', 0, '2026-01-31 14:02:42'),
-(18, 'jvee', 'jvee@embroidery.com', '$2y$10$gzMdBcfmS3DsojkpWrWiEO0yLAhx62XwyvmFBg9eH.G8ZCrHUsJau', 'employee', 'active', '2026-01-31 06:03:26', 0, '123', 0, NULL);
+(4, 'Shop Owner', 'owner@embroidery.com', '$2y$10$92IXUNpkjO0rOQ5byMi.Ye4oKoEa3Ro9llC/.og/at2.uheWG/igi', 'owner', 'active', '2026-01-19 15:28:09', 0, NULL, 0, '2026-01-27 19:15:00');
 
 --
 -- Indexes for dumped tables

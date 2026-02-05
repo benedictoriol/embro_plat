@@ -26,7 +26,10 @@ if($_SERVER['REQUEST_METHOD'] == 'POST') {
         if($user && password_verify($password, $user['password'])) {
 
                 if ($user['status'] !== 'active') {
-                $error = "Your account is pending approval. Please wait for activation.";
+                $status = $user['status'] ?? 'inactive';
+                $error = $status === 'pending'
+                    ? "Your account is pending approval. Please wait for activation."
+                    : "Your account is not active. Please contact support.";
                 log_audit(
                     $pdo,
                     (int) $user['id'],
@@ -42,6 +45,7 @@ if($_SERVER['REQUEST_METHOD'] == 'POST') {
 
             unset($user['password']);
             $_SESSION['user'] = $user;
+            $_SESSION['last_activity'] = time();
             
             $update_stmt = $pdo->prepare("UPDATE users SET last_login = NOW() WHERE id = ?");
             $update_stmt->execute([$user['id']]);
