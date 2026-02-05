@@ -219,6 +219,7 @@ $workflow_steps = [
                 <li><a href="hiring_management.php" class="nav-link">Hiring</a></li>
                 <li><a href="staff_productivity_performance.php" class="nav-link">Productivity</a></li>
                 <li><a href="payroll_compensation.php" class="nav-link active">Payroll</a></li>
+                <li><a href="analytics_reporting.php" class="nav-link">Analytics</a></li>
                 <li><a href="../auth/logout.php" class="nav-link">Logout</a></li>
             </ul>
         </div>

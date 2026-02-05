@@ -125,6 +125,7 @@ $recent_employees = $employees_stmt->fetchAll();
                 <li><a href="delivery_management.php" class="nav-link">Delivery & Pickup</a></li>
                 <li><a href="payment_verifications.php" class="nav-link">Payments</a></li>
                 <li><a href="earnings.php" class="nav-link">Earnings</a></li>
+                <li><a href="analytics_reporting.php" class="nav-link">Analytics</a></li>
                 <li class="dropdown">
                     <a href="#" class="nav-link dropdown-toggle">
                         <i class="fas fa-user"></i> <?php echo htmlspecialchars($_SESSION['user']['fullname']); ?>

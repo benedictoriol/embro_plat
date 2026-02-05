@@ -4,6 +4,7 @@ function sys_admin_nav(string $activePage): void {
     $navItems = [
         ['key' => 'dashboard', 'label' => 'Dashboard', 'icon' => 'fas fa-tachometer-alt', 'href' => 'dashboard.php'],
         ['key' => 'analytics', 'label' => 'Analytics', 'icon' => 'fas fa-chart-line', 'href' => 'analytics.php'],
+        ['key' => 'analytics_reporting', 'label' => 'Reporting', 'icon' => 'fas fa-chart-pie', 'href' => 'analytics_reporting.php'],
     ];
     $userItems = [
         ['key' => 'member_approval', 'label' => 'Approvals', 'icon' => 'fas fa-user-check', 'href' => 'member_approval.php'],
