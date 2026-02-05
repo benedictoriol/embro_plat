@@ -151,6 +151,7 @@ if(isset($_POST['update_design'])) {
                     </a>
                     <div class="dropdown-menu">
                         <a href="customize_design.php" class="dropdown-item active"><i class="fas fa-paint-brush"></i> Customize Design</a>
+                        <a href="design_editor.php" class="dropdown-item"><i class="fas fa-pencil-ruler"></i> Design Editor</a>
                         <a href="rate_provider.php" class="dropdown-item"><i class="fas fa-star"></i> Rate Provider</a>
                         <a href="search_discovery.php" class="dropdown-item"><i class="fas fa-compass"></i> Search &amp; Discovery</a>
                     </div>
