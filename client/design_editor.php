@@ -150,6 +150,7 @@ $unread_notifications = fetch_unread_notification_count($pdo, $client_id);
                         <a href="design_editor.php" class="dropdown-item active"><i class="fas fa-pencil-ruler"></i> Design Editor</a>
                         <a href="rate_provider.php" class="dropdown-item"><i class="fas fa-star"></i> Rate Provider</a>
                         <a href="search_discovery.php" class="dropdown-item"><i class="fas fa-compass"></i> Search &amp; Discovery</a>
+                        <a href="design_proofing.php" class="dropdown-item"><i class="fas fa-clipboard-check"></i> Design Proofing &amp; Approval</a>
                     </div>
                 </li>
                 <li><a href="messages.php" class="nav-link">Messages</a></li>

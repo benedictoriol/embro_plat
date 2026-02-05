@@ -6,43 +6,35 @@ require_role('client');
 $client_id = $_SESSION['user']['id'];
 $unread_notifications = fetch_unread_notification_count($pdo, $client_id);
 
-$coreFunctions = [
-    [
-        'title' => 'Shop browsing and filtering',
-        'detail' => 'Search by location, service type, turnaround time, and rating to find the best match.',
-        'icon' => 'fas fa-filter',
-        'tone' => 'primary',
-    ],
-    [
-        'title' => 'Availability display',
-        'detail' => 'Surface shop capacity, lead times, and open order slots before booking.',
-        'icon' => 'fas fa-calendar-check',
-        'tone' => 'success',
-    ],
-    [
-        'title' => 'Hiring shop discovery',
-        'detail' => 'Highlight shops that are actively hiring and accept new staff applications.',
-        'icon' => 'fas fa-briefcase',
-        'tone' => 'info',
-    ],
-];
-
 $coreProcess = [
-    'Client searches or filters',
-    'System ranks results',
-    'Client selects shop or hiring post',
+    [
+        'title' => 'Design submitted',
+        'detail' => 'Client uploads artwork or updates notes for the shop review.',
+    ],
+    [
+        'title' => 'Proof prepared',
+        'detail' => 'Shop returns a production-ready proof with colors, sizing, and placement.',
+    ],
+    [
+        'title' => 'Client approves or requests revision',
+        'detail' => 'Approval or revision feedback is captured before moving forward.',
+    ],
+    [
+        'title' => 'Production unlocked',
+        'detail' => 'Only approved proofs can be released to production and scheduling.',
+    ],
 ];
 
 $automation = [
     [
-        'title' => 'Popular & nearby shop suggestions',
-        'detail' => 'Recommend top-rated and location-relevant shops based on recent activity.',
-        'icon' => 'fas fa-map-marker-alt',
+        'title' => 'Approval reminders',
+        'detail' => 'Automated nudges keep approvals moving before delivery deadlines.',
+        'icon' => 'fas fa-bell',
     ],
     [
-        'title' => 'Auto-highlight hiring shops',
-        'detail' => 'Surface open hiring posts with a boosted badge and priority placement.',
-        'icon' => 'fas fa-bullhorn',
+        'title' => 'Production lock enforcement',
+        'detail' => 'System blocks production start until an approval is recorded.',
+        'icon' => 'fas fa-lock',
     ],
 ];
 ?>
@@ -51,11 +43,11 @@ $automation = [
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Search & Discovery Module - Client</title>
+    <title>Design Proofing & Approval Module - Client</title>
     <link rel="stylesheet" href="../assets/css/style.css">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
     <style>
-        .discovery-grid {
+        .proofing-grid {
             display: grid;
             grid-template-columns: repeat(12, 1fr);
             gap: 1.5rem;
@@ -66,50 +58,22 @@ $automation = [
             grid-column: span 12;
         }
 
-        .functions-card {
+        .process-card {
             grid-column: span 7;
         }
 
-        .process-card {
+        .automation-card {
             grid-column: span 5;
         }
-
-        .automation-card {
-            grid-column: span 12;
-        }
-
-        .function-list {
-            display: grid;
-            grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
-            gap: 1rem;
-        }
-
-        .function-item {
-            border: 1px solid var(--gray-200);
-            border-radius: var(--radius);
-            padding: 1rem;
-            background: var(--bg-primary);
-        }
-
-        .function-item .icon {
-            width: 2.5rem;
-            height: 2.5rem;
-            border-radius: var(--radius-full);
-            display: inline-flex;
-            align-items: center;
-            justify-content: center;
-            margin-bottom: 0.75rem;
-            color: white;
-        }
-
-        .bg-primary { background: var(--primary-600); }
-        .bg-success { background: var(--success-600); }
-        .bg-info { background: var(--info-600); }
 
         .process-step {
             display: flex;
             gap: 1rem;
             align-items: flex-start;
+            padding: 1rem;
+            border-radius: var(--radius);
+            border: 1px solid var(--gray-200);
+            background: var(--bg-primary);
         }
 
         .process-step .badge {
@@ -124,9 +88,8 @@ $automation = [
             color: var(--primary-700);
         }
 
-        .automation-grid {
+        .process-list {
             display: grid;
-            grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
             gap: 1rem;
         }
 
@@ -166,8 +129,8 @@ $automation = [
                     <div class="dropdown-menu">
                         <a href="customize_design.php" class="dropdown-item"><i class="fas fa-paint-brush"></i> Customize Design</a>
                         <a href="rate_provider.php" class="dropdown-item"><i class="fas fa-star"></i> Rate Provider</a>
-                        <a href="search_discovery.php" class="dropdown-item active"><i class="fas fa-compass"></i> Search & Discovery</a>
-                        <a href="design_proofing.php" class="dropdown-item"><i class="fas fa-clipboard-check"></i> Design Proofing &amp; Approval</a>
+                        <a href="search_discovery.php" class="dropdown-item"><i class="fas fa-compass"></i> Search &amp; Discovery</a>
+                        <a href="design_proofing.php" class="dropdown-item active"><i class="fas fa-clipboard-check"></i> Design Proofing &amp; Approval</a>
                     </div>
                 </li>
                 <li><a href="messages.php" class="nav-link">Messages</a></li>
@@ -192,60 +155,36 @@ $automation = [
         <div class="dashboard-header fade-in">
             <div class="d-flex justify-between align-center">
                 <div>
-                    <h2>Search, Discovery & Hiring Visibility</h2>
-                    <p class="text-muted">Find the right shop, check availability, and explore hiring opportunities.</p>
+                    <h2>Design Proofing &amp; Approval</h2>
+                    <p class="text-muted">Keep production locked until every proof is approved by the client.</p>
                 </div>
-                <span class="badge badge-primary"><i class="fas fa-compass"></i> Module 6</span>
+                <span class="badge badge-primary"><i class="fas fa-clipboard-check"></i> Module 9</span>
             </div>
         </div>
 
-        <div class="discovery-grid">
+        <div class="proofing-grid">
             <div class="card overview-card">
                 <div class="card-header">
-                    <h3><i class="fas fa-bullseye text-primary"></i> Purpose</h3>
+                    <h3><i class="fas fa-shield-halved text-primary"></i> Purpose</h3>
                 </div>
                 <p class="text-muted mb-0">
-                    Allows clients to discover shops, services, and hiring opportunities with targeted filters,
-                    smart ranking, and availability insights.
+                    Prevents production without client approval by capturing feedback, documenting sign-off,
+                    and unlocking production only after an approved proof.
                 </p>
-            </div>
-
-            <div class="card functions-card">
-                <div class="card-header">
-                    <h3><i class="fas fa-list-check text-primary"></i> Core Functions</h3>
-                    <p class="text-muted">Capabilities that power discovery and search workflows.</p>
-                </div>
-                <div class="function-list">
-                    <?php foreach ($coreFunctions as $function): ?>
-                        <div class="function-item">
-                            <span class="icon bg-<?php echo $function['tone']; ?>">
-                                <i class="<?php echo $function['icon']; ?>"></i>
-                            </span>
-                            <h4><?php echo $function['title']; ?></h4>
-                            <p class="text-muted mb-0"><?php echo $function['detail']; ?></p>
-                        </div>
-                    <?php endforeach; ?>
-                </div>
             </div>
 
             <div class="card process-card">
                 <div class="card-header">
                     <h3><i class="fas fa-route text-primary"></i> Core Process</h3>
-                    <p class="text-muted">How clients move from search to selection.</p>
+                    <p class="text-muted">From proof submission through approval gates.</p>
                 </div>
-                <div class="d-flex flex-column gap-3">
+                <div class="process-list">
                     <?php foreach ($coreProcess as $index => $step): ?>
                         <div class="process-step">
                             <span class="badge"><?php echo $index + 1; ?></span>
                             <div>
-                                <strong><?php echo $step; ?></strong>
-                                <?php if ($index === 0): ?>
-                                    <p class="text-muted mb-0">Apply filters for service type, budget, and lead time.</p>
-                                <?php elseif ($index === 1): ?>
-                                    <p class="text-muted mb-0">Ranked by relevance, ratings, proximity, and availability.</p>
-                                <?php else: ?>
-                                    <p class="text-muted mb-0">Choose a shop or view hiring details before engaging.</p>
-                                <?php endif; ?>
+                                <strong><?php echo $step['title']; ?></strong>
+                                <p class="text-muted mb-0"><?php echo $step['detail']; ?></p>
                             </div>
                         </div>
                     <?php endforeach; ?>
@@ -255,9 +194,9 @@ $automation = [
             <div class="card automation-card">
                 <div class="card-header">
                     <h3><i class="fas fa-robot text-primary"></i> Automation</h3>
-                    <p class="text-muted">System-driven assists to keep discovery effortless.</p>
+                    <p class="text-muted">Reminders and safeguards that keep approvals on track.</p>
                 </div>
-                <div class="automation-grid">
+                <div class="d-flex flex-column gap-3">
                     <?php foreach ($automation as $rule): ?>
                         <div class="automation-item">
                             <h4 class="d-flex align-center gap-2">

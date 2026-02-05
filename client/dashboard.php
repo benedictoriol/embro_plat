@@ -113,6 +113,7 @@ function client_status_badge($status) {
                         <a href="customize_design.php" class="dropdown-item"><i class="fas fa-paint-brush"></i> Customize Design</a>
                         <a href="rate_provider.php" class="dropdown-item"><i class="fas fa-star"></i> Rate Provider</a>
                         <a href="search_discovery.php" class="dropdown-item"><i class="fas fa-compass"></i> Search &amp; Discovery</a>
+                        <a href="design_proofing.php" class="dropdown-item"><i class="fas fa-clipboard-check"></i> Design Proofing &amp; Approval</a>
                     </div>
                 </li>
                 <li><a href="messages.php" class="nav-link">Messages</a></li>
@@ -180,6 +181,10 @@ function client_status_badge($status) {
             <a href="search_discovery.php" class="action-card">
                 <h4><i class="fas fa-compass text-primary"></i> Search &amp; Discovery</h4>
                 <p class="text-muted">Browse shops, check availability, and explore hiring posts.</p>
+            </a>
+            <a href="design_proofing.php" class="action-card">
+                <h4><i class="fas fa-clipboard-check text-primary"></i> Design Proofing &amp; Approval</h4>
+                <p class="text-muted">Review proofs, approve revisions, and unlock production.</p>
             </a>
         </div>
         <div class="card">
