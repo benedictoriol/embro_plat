@@ -37,6 +37,9 @@ $default_pricing_settings = [
         'Applique' => 60,
     ],
 ];
+$search_term = sanitize($_GET['search'] ?? '');
+$service_filter = sanitize($_GET['service'] ?? '');
+$open_filter = sanitize($_GET['open'] ?? '');
 
 function validate_design_description(string $description): string {
     $trimmed = trim($description);
@@ -109,13 +112,70 @@ $shops_stmt = $pdo->query("
     ORDER BY rating DESC, total_orders DESC
 ");
 $shops = $shops_stmt->fetchAll();
-$shops = array_map(function($shop) use ($available_services, $default_pricing_settings) {
+$capacity_map = [];
+$capacity_stmt = $pdo->query("
+    SELECT shop_id, COALESCE(SUM(max_active_orders), 0) AS total_capacity
+    FROM shop_employees
+    WHERE status = 'active'
+    GROUP BY shop_id
+");
+foreach ($capacity_stmt->fetchAll(PDO::FETCH_ASSOC) as $row) {
+    $capacity_map[(int) $row['shop_id']] = (int) $row['total_capacity'];
+}
+
+$workload_map = [];
+$workload_stmt = $pdo->query("
+    SELECT shop_id, COUNT(*) AS active_orders
+    FROM orders
+    WHERE status IN ('pending', 'accepted', 'in_progress')
+    GROUP BY shop_id
+");
+foreach ($workload_stmt->fetchAll(PDO::FETCH_ASSOC) as $row) {
+    $workload_map[(int) $row['shop_id']] = (int) $row['active_orders'];
+}
+
+$portfolio_samples = [];
+$portfolio_stmt = $pdo->query("
+    SELECT shop_id, title, image_path
+    FROM shop_portfolio
+    ORDER BY created_at DESC
+");
+foreach ($portfolio_stmt->fetchAll(PDO::FETCH_ASSOC) as $row) {
+    $shop_id = (int) $row['shop_id'];
+    if (!isset($portfolio_samples[$shop_id])) {
+        $portfolio_samples[$shop_id] = [];
+    }
+    if (count($portfolio_samples[$shop_id]) < 3) {
+        $portfolio_samples[$shop_id][] = $row;
+    }
+}
+
+$shops = array_map(function($shop) use ($available_services, $default_pricing_settings, $capacity_map, $workload_map, $portfolio_samples) {
+    $shop_id = (int) $shop['id'];
     $shop['operating_days_list'] = resolve_operating_days($shop);
     $shop['service_list'] = resolve_shop_services($shop, $available_services);
     $shop['is_open'] = is_shop_open($shop);
     $shop['pricing_settings'] = resolve_pricing_settings($shop, $default_pricing_settings);
+    $shop['capacity'] = $capacity_map[$shop_id] ?? 0;
+    $shop['active_orders'] = $workload_map[$shop_id] ?? 0;
+    $shop['portfolio_samples'] = $portfolio_samples[$shop_id] ?? [];
     return $shop;
 }, $shops);
+$shops = array_values(array_filter($shops, function($shop) use ($search_term, $service_filter, $open_filter) {
+    if ($search_term !== '') {
+        $haystack = mb_strtolower($shop['shop_name'] . ' ' . $shop['shop_description'] . ' ' . $shop['address']);
+        if (mb_strpos($haystack, mb_strtolower($search_term)) === false) {
+            return false;
+        }
+    }
+    if ($service_filter !== '' && !in_array($service_filter, $shop['service_list'], true)) {
+        return false;
+    }
+    if ($open_filter === '1' && !$shop['is_open']) {
+        return false;
+    }
+    return true;
+}));
 $max_upload_mb = (int) ceil(MAX_FILE_SIZE / (1024 * 1024));
 
 // Place order
@@ -345,6 +405,19 @@ $upload = save_uploaded_media(
             border-color: #4361ee;
             background: #f8f9ff;
         }
+        .portfolio-strip {
+            display: flex;
+            gap: 8px;
+            margin-top: 10px;
+            flex-wrap: wrap;
+        }
+        .portfolio-strip img {
+            width: 72px;
+            height: 72px;
+            object-fit: cover;
+            border-radius: 8px;
+            border: 1px solid #e2e8f0;
+        }
     </style>
 </head>
 <body>
@@ -413,11 +486,43 @@ $upload = save_uploaded_media(
                 </div>
             </div>
         <?php else: ?>
+            <form method="GET" class="mb-3">
+            <div class="row" style="display: flex; gap: 12px; flex-wrap: wrap;">
+                <div class="form-group" style="flex: 2; min-width: 220px;">
+                    <label>Search shops</label>
+                    <input type="text" name="search" class="form-control" placeholder="Search by name, description, or address" value="<?php echo htmlspecialchars($search_term); ?>">
+                </div>
+                <div class="form-group" style="flex: 1; min-width: 180px;">
+                    <label>Filter by service</label>
+                    <select name="service" class="form-control">
+                        <option value="">All services</option>
+                        <?php foreach ($available_services as $service): ?>
+                            <option value="<?php echo htmlspecialchars($service); ?>" <?php echo $service_filter === $service ? 'selected' : ''; ?>>
+                                <?php echo htmlspecialchars($service); ?>
+                            </option>
+                        <?php endforeach; ?>
+                    </select>
+                </div>
+                <div class="form-group" style="flex: 1; min-width: 160px;">
+                    <label>Availability</label>
+                    <select name="open" class="form-control">
+                        <option value="">All shops</option>
+                        <option value="1" <?php echo $open_filter === '1' ? 'selected' : ''; ?>>Open now</option>
+                    </select>
+                </div>
+                <div class="form-group" style="align-self: flex-end;">
+                    <button type="submit" class="btn btn-primary">Search</button>
+                </div>
+            </div>
+        </form>
         <form method="POST" enctype="multipart/form-data" id="orderForm">
             <!-- Step 1: Select Shop -->
             <div class="card mb-4">
                 <h3>Step 1: Select Service Provider</h3>
                 <div class="row" style="display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 15px;">
+                    <?php if (empty($shops)): ?>
+                        <div class="text-muted">No shops match the current filters. Try broadening your search.</div>
+                    <?php endif; ?>
                     <?php foreach($shops as $shop): ?>
                     <div class="shop-card" onclick="selectShop(<?php echo $shop['id']; ?>)"
                          data-services="<?php echo htmlspecialchars(json_encode($shop['service_list']), ENT_QUOTES, 'UTF-8'); ?>"
@@ -452,6 +557,21 @@ $upload = save_uploaded_media(
                                     <?php endif; ?>
                                     <span> • Hours: <?php echo htmlspecialchars($shop['opening_time'] ? substr($shop['opening_time'], 0, 5) : '08:00'); ?>-<?php echo htmlspecialchars($shop['closing_time'] ? substr($shop['closing_time'], 0, 5) : '18:00'); ?></span>
                                 </div>
+                                <div class="text-muted small">
+                                    <strong>Capacity:</strong>
+                                    <?php if ($shop['capacity'] > 0): ?>
+                                        <?php echo $shop['active_orders']; ?> / <?php echo $shop['capacity']; ?> active
+                                    <?php else: ?>
+                                        Not set
+                                    <?php endif; ?>
+                                </div>
+                                <?php if (!empty($shop['portfolio_samples'])): ?>
+                                    <div class="portfolio-strip">
+                                        <?php foreach ($shop['portfolio_samples'] as $sample): ?>
+                                            <img src="../assets/uploads/<?php echo htmlspecialchars($sample['image_path']); ?>" alt="<?php echo htmlspecialchars($sample['title']); ?>">
+                                        <?php endforeach; ?>
+                                    </div>
+                                <?php endif; ?>
                             </div>
                         </div>
                         <input type="radio" name="shop_id" value="<?php echo $shop['id']; ?>" 

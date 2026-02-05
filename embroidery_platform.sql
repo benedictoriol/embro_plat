@@ -680,6 +680,21 @@ INSERT INTO `shops` (`id`, `owner_id`, `shop_name`, `shop_description`, `address
 -- --------------------------------------------------------
 
 --
+-- Table structure for table `shop_portfolio`
+--
+
+CREATE TABLE `shop_portfolio` (
+  `id` int(11) NOT NULL,
+  `shop_id` int(11) NOT NULL,
+  `title` varchar(150) NOT NULL,
+  `description` varchar(255) DEFAULT NULL,
+  `image_path` varchar(255) NOT NULL,
+  `created_at` timestamp NOT NULL DEFAULT current_timestamp()
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
+
+-- --------------------------------------------------------
+
+--
 -- Table structure for table `shop_employees`
 --
 
@@ -971,6 +986,13 @@ ALTER TABLE `shops`
   ADD UNIQUE KEY `owner_id` (`owner_id`);
 
 --
+-- Indexes for table `shop_portfolio`
+--
+ALTER TABLE `shop_portfolio`
+  ADD PRIMARY KEY (`id`),
+  ADD KEY `shop_id` (`shop_id`);
+
+--
 -- Indexes for table `shop_employees`
 --
 ALTER TABLE `shop_employees`
@@ -1172,6 +1194,12 @@ ALTER TABLE `shops`
   MODIFY `id` int(11) NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=4;
 
 --
+-- AUTO_INCREMENT for table `shop_portfolio`
+--
+ALTER TABLE `shop_portfolio`
+  MODIFY `id` int(11) NOT NULL AUTO_INCREMENT;
+
+--
 -- AUTO_INCREMENT for table `shop_employees`
 --
 ALTER TABLE `shop_employees`
@@ -1305,6 +1333,12 @@ ALTER TABLE `service_requests`
 --
 ALTER TABLE `shops`
   ADD CONSTRAINT `shops_ibfk_1` FOREIGN KEY (`owner_id`) REFERENCES `users` (`id`);
+
+--
+-- Constraints for table `shop_portfolio`
+--
+ALTER TABLE `shop_portfolio`
+  ADD CONSTRAINT `shop_portfolio_ibfk_1` FOREIGN KEY (`shop_id`) REFERENCES `shops` (`id`);
 
 --
 -- Constraints for table `shop_employees`

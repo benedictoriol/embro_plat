@@ -1,6 +1,7 @@
 <?php
 session_start();
 require_once '../config/db.php';
+require_once '../includes/media_manager.php';
 require_role('owner');
 
 $owner_id = $_SESSION['user']['id'];
@@ -73,106 +74,186 @@ $current_services = $shop['service_settings']
 $current_opening_time = $shop['opening_time'] ?: '08:00';
 $current_closing_time = $shop['closing_time'] ?: '18:00';
 $current_pricing_settings = resolve_pricing_settings($shop, $default_pricing_settings);
+$portfolio_stmt = $pdo->prepare("SELECT * FROM shop_portfolio WHERE shop_id = ? ORDER BY created_at DESC");
+$portfolio_stmt->execute([$shop['id']]);
+$portfolio_items = $portfolio_stmt->fetchAll();
+$capacity_stmt = $pdo->prepare("
+    SELECT COALESCE(SUM(max_active_orders), 0) 
+    FROM shop_employees 
+    WHERE shop_id = ? AND status = 'active'
+");
+$capacity_stmt->execute([$shop['id']]);
+$total_capacity = (int) $capacity_stmt->fetchColumn();
+$workload_stmt = $pdo->prepare("
+    SELECT COUNT(*) 
+    FROM orders 
+    WHERE shop_id = ? AND status IN ('pending', 'accepted', 'in_progress')
+");
+$workload_stmt->execute([$shop['id']]);
+$active_workload = (int) $workload_stmt->fetchColumn();
+$capacity_utilization = $total_capacity > 0 ? min(100, round(($active_workload / $total_capacity) * 100)) : 0;
 
 if($_SERVER['REQUEST_METHOD'] === 'POST') {
-    $shop_name = sanitize($_POST['shop_name']);
-    $shop_description = sanitize($_POST['shop_description']);
-    $address = sanitize($_POST['address']);
-    $phone = sanitize($_POST['phone']);
-    $email = sanitize($_POST['email']);
-    $business_permit = sanitize($_POST['business_permit']);
-    $opening_time = sanitize($_POST['opening_time']);
-    $closing_time = sanitize($_POST['closing_time']);
-    $operating_days = array_map('intval', $_POST['operating_days'] ?? []);
-    $enabled_services = array_values(array_intersect($available_services, $_POST['enabled_services'] ?? []));
-    $base_prices_input = $_POST['base_prices'] ?? [];
-    $complexity_input = $_POST['complexity_multipliers'] ?? [];
-    $add_on_input = $_POST['add_ons'] ?? [];
-    $rush_fee_percent = filter_var($_POST['rush_fee_percent'] ?? null, FILTER_VALIDATE_FLOAT);
+    $action = $_POST['action'] ?? 'update_profile';
 
     try {
-        if (empty($operating_days)) {
-            throw new RuntimeException('Please select at least one operating day.');
-        }
-        if (empty($enabled_services)) {
-            throw new RuntimeException('Please enable at least one service.');
-        }
-        if ($rush_fee_percent === false || $rush_fee_percent < 0) {
-            throw new RuntimeException('Please provide a valid rush fee percentage (0 or greater).');
-        }
-        $opening_timestamp = strtotime($opening_time);
-        $closing_timestamp = strtotime($closing_time);
-        if ($opening_timestamp === false || $closing_timestamp === false || $opening_timestamp >= $closing_timestamp) {
-            throw new RuntimeException('Please provide valid operating hours (opening time must be before closing time).');
-        }
+        if ($action === 'add_portfolio') {
+            $portfolio_title = sanitize($_POST['portfolio_title'] ?? '');
+            $portfolio_description = sanitize($_POST['portfolio_description'] ?? '');
 
-        $base_prices = [];
-        foreach ($default_pricing_settings['base_prices'] as $service => $default_price) {
-            $value = filter_var($base_prices_input[$service] ?? null, FILTER_VALIDATE_FLOAT);
-            if ($value === false || $value < 0) {
-                throw new RuntimeException('Base prices must be 0 or greater.');
+        if ($portfolio_title === '') {
+                throw new RuntimeException('Portfolio title is required.');
             }
-            $base_prices[$service] = (float) $value;
-        }
+            if (empty($_FILES['portfolio_image']['name'])) {
+                throw new RuntimeException('Please upload a portfolio image.');
+            }
+
+            $upload_result = save_uploaded_media(
+                $_FILES['portfolio_image'],
+                ['jpg', 'jpeg', 'png', 'webp'],
+                MAX_FILE_SIZE,
+                'portfolio',
+                'portfolio',
+                (string) $shop['id']
+            );
+
+        if (!$upload_result['success']) {
+                throw new RuntimeException($upload_result['error']);
+            }
+
+        $insert_stmt = $pdo->prepare("
+                INSERT INTO shop_portfolio (shop_id, title, description, image_path)
+                VALUES (?, ?, ?, ?)
+            ");
+            $insert_stmt->execute([
+                $shop['id'],
+                $portfolio_title,
+                $portfolio_description,
+                $upload_result['path'],
+            ]);
+
+            $portfolio_stmt->execute([$shop['id']]);
+            $portfolio_items = $portfolio_stmt->fetchAll();
+            $success = 'Portfolio item added successfully.';
+        } elseif ($action === 'delete_portfolio') {
+            $portfolio_id = (int) ($_POST['portfolio_id'] ?? 0);
+            $item_stmt = $pdo->prepare("SELECT image_path FROM shop_portfolio WHERE id = ? AND shop_id = ?");
+            $item_stmt->execute([$portfolio_id, $shop['id']]);
+            $item = $item_stmt->fetch();
+            if (!$item) {
+                throw new RuntimeException('Portfolio item not found.');
+            }
+
+            $delete_stmt = $pdo->prepare("DELETE FROM shop_portfolio WHERE id = ? AND shop_id = ?");
+            $delete_stmt->execute([$portfolio_id, $shop['id']]);
+            $path = (string) ($item['image_path'] ?? '');
+            $parts = explode('/', $path, 2);
+            if (count($parts) === 2) {
+                delete_media_file($parts[0], $parts[1]);
+            }
+
+            $portfolio_stmt->execute([$shop['id']]);
+            $portfolio_items = $portfolio_stmt->fetchAll();
+            $success = 'Portfolio item removed.';
+        } else {
+            $shop_name = sanitize($_POST['shop_name']);
+            $shop_description = sanitize($_POST['shop_description']);
+            $address = sanitize($_POST['address']);
+            $phone = sanitize($_POST['phone']);
+            $email = sanitize($_POST['email']);
+            $business_permit = sanitize($_POST['business_permit']);
+            $opening_time = sanitize($_POST['opening_time']);
+            $closing_time = sanitize($_POST['closing_time']);
+            $operating_days = array_map('intval', $_POST['operating_days'] ?? []);
+            $enabled_services = array_values(array_intersect($available_services, $_POST['enabled_services'] ?? []));
+            $base_prices_input = $_POST['base_prices'] ?? [];
+            $complexity_input = $_POST['complexity_multipliers'] ?? [];
+            $add_on_input = $_POST['add_ons'] ?? [];
+            $rush_fee_percent = filter_var($_POST['rush_fee_percent'] ?? null, FILTER_VALIDATE_FLOAT);
+
+            if (empty($operating_days)) {
+                throw new RuntimeException('Please select at least one operating day.');
+            }
+            if (empty($enabled_services)) {
+                throw new RuntimeException('Please enable at least one service.');
+            }
+            if ($rush_fee_percent === false || $rush_fee_percent < 0) {
+                throw new RuntimeException('Please provide a valid rush fee percentage (0 or greater).');
+            }
+            $opening_timestamp = strtotime($opening_time);
+            $closing_timestamp = strtotime($closing_time);
+            if ($opening_timestamp === false || $closing_timestamp === false || $opening_timestamp >= $closing_timestamp) {
+                throw new RuntimeException('Please provide valid operating hours (opening time must be before closing time).');
+            }
+
+            $base_prices = [];
+            foreach ($default_pricing_settings['base_prices'] as $service => $default_price) {
+                $value = filter_var($base_prices_input[$service] ?? null, FILTER_VALIDATE_FLOAT);
+                if ($value === false || $value < 0) {
+                    throw new RuntimeException('Base prices must be 0 or greater.');
+                }
+                $base_prices[$service] = (float) $value;
+            }
 
         $complexity_multipliers = [];
-        foreach ($default_pricing_settings['complexity_multipliers'] as $level => $default_multiplier) {
-            $value = filter_var($complexity_input[$level] ?? null, FILTER_VALIDATE_FLOAT);
-            if ($value === false || $value <= 0) {
-                throw new RuntimeException('Complexity multipliers must be greater than 0.');
+            foreach ($default_pricing_settings['complexity_multipliers'] as $level => $default_multiplier) {
+                $value = filter_var($complexity_input[$level] ?? null, FILTER_VALIDATE_FLOAT);
+                if ($value === false || $value <= 0) {
+                    throw new RuntimeException('Complexity multipliers must be greater than 0.');
+                }
+                $complexity_multipliers[$level] = (float) $value;
             }
-            $complexity_multipliers[$level] = (float) $value;
-        }
 
-        $add_ons = [];
-        foreach ($default_pricing_settings['add_ons'] as $addon => $default_fee) {
-            $value = filter_var($add_on_input[$addon] ?? null, FILTER_VALIDATE_FLOAT);
-            if ($value === false || $value < 0) {
-                throw new RuntimeException('Add-on fees must be 0 or greater.');
+            $add_ons = [];
+            foreach ($default_pricing_settings['add_ons'] as $addon => $default_fee) {
+                $value = filter_var($add_on_input[$addon] ?? null, FILTER_VALIDATE_FLOAT);
+                if ($value === false || $value < 0) {
+                    throw new RuntimeException('Add-on fees must be 0 or greater.');
+                }
+                $add_ons[$addon] = (float) $value;
             }
-            $add_ons[$addon] = (float) $value;
+
+            $pricing_payload = [
+                'base_prices' => $base_prices,
+                'complexity_multipliers' => $complexity_multipliers,
+                'rush_fee_percent' => (float) $rush_fee_percent,
+                'add_ons' => $add_ons,
+            ];
+
+            $update_stmt = $pdo->prepare("
+                UPDATE shops 
+                SET shop_name = ?, shop_description = ?, address = ?, phone = ?, email = ?, business_permit = ?,
+                    opening_time = ?, closing_time = ?, operating_days = ?, service_settings = ?, pricing_settings = ?
+                WHERE id = ?
+            ");
+            $update_stmt->execute([
+                $shop_name,
+                $shop_description,
+                $address,
+                $phone,
+                $email,
+                $business_permit,
+                $opening_time,
+                $closing_time,
+                json_encode(array_values($operating_days)),
+                json_encode(array_values($enabled_services)),
+                json_encode($pricing_payload),
+                $shop['id']
+            ]);
+
+            $shop_stmt->execute([$owner_id]);
+            $shop = $shop_stmt->fetch();
+            $current_operating_days = $shop['operating_days']
+                ? json_decode($shop['operating_days'], true)
+                : $current_operating_days;
+            $current_services = $shop['service_settings']
+                ? json_decode($shop['service_settings'], true)
+                : $current_services;
+            $current_opening_time = $shop['opening_time'] ?: $current_opening_time;
+            $current_closing_time = $shop['closing_time'] ?: $current_closing_time;
+            $current_pricing_settings = resolve_pricing_settings($shop, $default_pricing_settings);
+            $success = 'Shop profile updated successfully.';
         }
-
-        $pricing_payload = [
-            'base_prices' => $base_prices,
-            'complexity_multipliers' => $complexity_multipliers,
-            'rush_fee_percent' => (float) $rush_fee_percent,
-            'add_ons' => $add_ons,
-        ];
-
-        $update_stmt = $pdo->prepare("
-            UPDATE shops 
-            SET shop_name = ?, shop_description = ?, address = ?, phone = ?, email = ?, business_permit = ?,
-                opening_time = ?, closing_time = ?, operating_days = ?, service_settings = ?, pricing_settings = ?
-            WHERE id = ?
-        ");
-        $update_stmt->execute([
-            $shop_name,
-            $shop_description,
-            $address,
-            $phone,
-            $email,
-            $business_permit,
-            $opening_time,
-            $closing_time,
-            json_encode(array_values($operating_days)),
-            json_encode(array_values($enabled_services)),
-            json_encode($pricing_payload),
-            $shop['id']
-        ]);
-
-        $shop_stmt->execute([$owner_id]);
-        $shop = $shop_stmt->fetch();
-        $current_operating_days = $shop['operating_days']
-            ? json_decode($shop['operating_days'], true)
-            : $current_operating_days;
-        $current_services = $shop['service_settings']
-            ? json_decode($shop['service_settings'], true)
-            : $current_services;
-        $current_opening_time = $shop['opening_time'] ?: $current_opening_time;
-        $current_closing_time = $shop['closing_time'] ?: $current_closing_time;
-        $current_pricing_settings = resolve_pricing_settings($shop, $default_pricing_settings);
-        $success = 'Shop profile updated successfully.';
     } catch(RuntimeException $e) {
         $error = $e->getMessage();
     } catch(PDOException $e) {
@@ -233,6 +314,7 @@ if($_SERVER['REQUEST_METHOD'] === 'POST') {
 
         <div class="card">
             <form method="POST">
+                <input type="hidden" name="action" value="update_profile">
                 <div class="form-group">
                     <label>Shop Name *</label>
                     <input type="text" name="shop_name" class="form-control" required
@@ -366,6 +448,12 @@ if($_SERVER['REQUEST_METHOD'] === 'POST') {
                         <p class="text-muted">Total Orders: <?php echo $shop['total_orders']; ?></p>
                         <p class="text-muted">Total Earnings: ₱<?php echo number_format($shop['total_earnings'], 2); ?></p>
                     </div>
+                    <div class="card" style="flex: 1; background: #f8fafc;">
+                        <h4>Capacity Estimation</h4>
+                        <p class="text-muted">Active workload: <?php echo $active_workload; ?> jobs</p>
+                        <p class="text-muted">Estimated capacity: <?php echo $total_capacity ?: 'Not set'; ?></p>
+                        <p class="text-muted">Utilization: <?php echo $total_capacity > 0 ? $capacity_utilization . '%' : 'N/A'; ?></p>
+                    </div>
                 </div>
 
                 <div class="text-center mt-4">
@@ -374,6 +462,54 @@ if($_SERVER['REQUEST_METHOD'] === 'POST') {
                     </button>
                 </div>
             </form>
+        </div>
+        
+        <div class="card mt-4">
+            <h3>Portfolio Samples</h3>
+            <p class="text-muted">Showcase completed work to help clients evaluate your shop.</p>
+            <form method="POST" enctype="multipart/form-data" class="mb-4">
+                <input type="hidden" name="action" value="add_portfolio">
+                <div class="row" style="display: flex; gap: 15px; flex-wrap: wrap;">
+                    <div class="form-group" style="flex: 1; min-width: 220px;">
+                        <label>Title *</label>
+                        <input type="text" name="portfolio_title" class="form-control" required>
+                    </div>
+                    <div class="form-group" style="flex: 2; min-width: 240px;">
+                        <label>Description</label>
+                        <input type="text" name="portfolio_description" class="form-control" maxlength="255">
+                    </div>
+                    <div class="form-group" style="flex: 1; min-width: 220px;">
+                        <label>Upload Image *</label>
+                        <input type="file" name="portfolio_image" class="form-control" accept=".jpg,.jpeg,.png,.webp" required>
+                    </div>
+                </div>
+                <button type="submit" class="btn btn-outline-primary">
+                    <i class="fas fa-image"></i> Add Sample
+                </button>
+            </form>
+
+            <?php if (empty($portfolio_items)): ?>
+                <p class="text-muted">No portfolio samples yet.</p>
+            <?php else: ?>
+                <div class="row" style="display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 15px;">
+                    <?php foreach ($portfolio_items as $item): ?>
+                        <div class="card" style="background: #f8fafc;">
+                            <img src="../assets/uploads/<?php echo htmlspecialchars($item['image_path']); ?>" alt="<?php echo htmlspecialchars($item['title']); ?>" style="width: 100%; height: 160px; object-fit: cover; border-radius: 6px;">
+                            <h5 class="mt-2 mb-1"><?php echo htmlspecialchars($item['title']); ?></h5>
+                            <?php if (!empty($item['description'])): ?>
+                                <p class="text-muted small mb-2"><?php echo htmlspecialchars($item['description']); ?></p>
+                            <?php endif; ?>
+                            <form method="POST">
+                                <input type="hidden" name="action" value="delete_portfolio">
+                                <input type="hidden" name="portfolio_id" value="<?php echo (int) $item['id']; ?>">
+                                <button type="submit" class="btn btn-sm btn-outline-danger">
+                                    <i class="fas fa-trash"></i> Remove
+                                </button>
+                            </form>
+                        </div>
+                    <?php endforeach; ?>
+                </div>
+            <?php endif; ?>
         </div>
     </div>
 </body>

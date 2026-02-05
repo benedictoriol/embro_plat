@@ -82,6 +82,7 @@ function collect_media_references(PDO $pdo): array {
         'job_photos' => [],
         'permits' => [],
         'logos' => [],
+        'portfolio' => [],
     ];
 
     $design_stmt = $pdo->query("SELECT design_file FROM orders WHERE design_file IS NOT NULL AND design_file <> ''");
@@ -112,6 +113,17 @@ function collect_media_references(PDO $pdo): array {
         }
         if (!empty($shop['logo'])) {
             $references['logos'][] = basename((string) $shop['logo']);
+        }
+    }
+
+    $portfolio_stmt = $pdo->query("SELECT image_path FROM shop_portfolio WHERE image_path IS NOT NULL AND image_path <> ''");
+    foreach ($portfolio_stmt->fetchAll(PDO::FETCH_COLUMN) as $file) {
+        $file = (string) $file;
+        $parts = explode('/', $file, 2);
+        if (count($parts) === 2) {
+            $references[$parts[0]][] = basename($parts[1]);
+        } else {
+            $references['portfolio'][] = basename($file);
         }
     }
 
