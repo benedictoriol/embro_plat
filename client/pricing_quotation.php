@@ -6,35 +6,34 @@ require_role('client');
 $client_id = $_SESSION['user']['id'];
 $unread_notifications = fetch_unread_notification_count($pdo, $client_id);
 
-$coreFlow = [
+$coreInputs = [
     [
-        'title' => 'Client order placed',
-        'detail' => 'Order details, artwork, and requirements are submitted to the shop.',
+        'title' => 'Design complexity profile',
+        'detail' => 'Threads, stitch count, color changes, and placement drive the base rate.',
+        'icon' => 'fas fa-layer-group',
     ],
     [
-        'title' => 'Review & confirmation',
-        'detail' => 'Shop reviews specs, confirms pricing, and validates production readiness.',
+        'title' => 'Workload & quantity factors',
+        'detail' => 'Rush flags, batch size, and material type adjust the pricing model.',
+        'icon' => 'fas fa-boxes-stacked',
     ],
     [
-        'title' => 'Production in progress',
-        'detail' => 'Jobs are scheduled, stitched, and quality-checked before packaging.',
-    ],
-    [
-        'title' => 'Completion & delivery',
-        'detail' => 'Finished orders are marked complete and handed off for pickup or delivery.',
+        'title' => 'Service-level selections',
+        'detail' => 'Add-ons like digitizing, patch backing, and finishing are quoted instantly.',
+        'icon' => 'fas fa-sliders',
     ],
 ];
 
 $automation = [
     [
-        'title' => 'Status progression updates',
-        'detail' => 'Automatic notifications keep clients aware of every stage shift.',
-        'icon' => 'fas fa-signal',
+        'title' => 'Complexity-based pricing',
+        'detail' => 'Stitch density, color count, and size automatically scale the quote range.',
+        'icon' => 'fas fa-calculator',
     ],
     [
-        'title' => 'Stall alerts',
-        'detail' => 'Escalations trigger when orders linger too long in a step.',
-        'icon' => 'fas fa-triangle-exclamation',
+        'title' => 'Time estimation',
+        'detail' => 'Projected production hours update lead times and delivery expectations.',
+        'icon' => 'fas fa-clock',
     ],
 ];
 ?>
@@ -43,11 +42,11 @@ $automation = [
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Order Management Module - Client</title>
+    <title>Pricing &amp; Quotation Automation Module - Client</title>
     <link rel="stylesheet" href="../assets/css/style.css">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
     <style>
-        .order-grid {
+        .pricing-grid {
             display: grid;
             grid-template-columns: repeat(12, 1fr);
             gap: 1.5rem;
@@ -58,7 +57,7 @@ $automation = [
             grid-column: span 12;
         }
 
-        .process-card {
+        .inputs-card {
             grid-column: span 7;
         }
 
@@ -66,31 +65,20 @@ $automation = [
             grid-column: span 5;
         }
 
-        .flow-step {
-            display: flex;
+        .input-list {
+            display: grid;
             gap: 1rem;
-            align-items: flex-start;
-            padding: 1rem;
-            border-radius: var(--radius);
+        }
+
+        .input-item {
             border: 1px solid var(--gray-200);
+            border-radius: var(--radius);
+            padding: 1rem;
             background: var(--bg-primary);
         }
 
-        .flow-step .badge {
-            width: 2rem;
-            height: 2rem;
-            border-radius: var(--radius-full);
-            display: inline-flex;
-            align-items: center;
-            justify-content: center;
-            font-weight: 700;
-            background: var(--primary-100);
-            color: var(--primary-700);
-        }
-
-        .flow-list {
-            display: grid;
-            gap: 1rem;
+        .input-item i {
+            color: var(--primary-600);
         }
 
         .automation-item {
@@ -128,12 +116,11 @@ $automation = [
                     </a>
                     <div class="dropdown-menu">
                         <a href="customize_design.php" class="dropdown-item"><i class="fas fa-paint-brush"></i> Customize Design</a>
-                        <a href="design_editor.php" class="dropdown-item"><i class="fas fa-pencil-ruler"></i> Design Editor</a>
                         <a href="rate_provider.php" class="dropdown-item"><i class="fas fa-star"></i> Rate Provider</a>
                         <a href="search_discovery.php" class="dropdown-item"><i class="fas fa-compass"></i> Search &amp; Discovery</a>
                         <a href="design_proofing.php" class="dropdown-item"><i class="fas fa-clipboard-check"></i> Design Proofing &amp; Approval</a>
-                        <a href="pricing_quotation.php" class="dropdown-item"><i class="fas fa-calculator"></i> Pricing &amp; Quotation</a>
-                        <a href="order_management.php" class="dropdown-item active"><i class="fas fa-clipboard-list"></i> Order Management</a>
+                        <a href="pricing_quotation.php" class="dropdown-item active"><i class="fas fa-calculator"></i> Pricing &amp; Quotation</a>
+                        <a href="order_management.php" class="dropdown-item"><i class="fas fa-clipboard-list"></i> Order Management</a>
                     </div>
                 </li>
                 <li><a href="messages.php" class="nav-link">Messages</a></li>
@@ -158,37 +145,37 @@ $automation = [
         <div class="dashboard-header fade-in">
             <div class="d-flex justify-between align-center">
                 <div>
-                    <h2>Order Management</h2>
-                    <p class="text-muted">Track every order from placement to delivery-ready completion.</p>
+                    <h2>Pricing &amp; Quotation Automation</h2>
+                    <p class="text-muted">Generate accurate price ranges and timelines before production begins.</p>
                 </div>
-                <span class="badge badge-primary"><i class="fas fa-clipboard-list"></i> Module 10</span>
+                <span class="badge badge-primary"><i class="fas fa-calculator"></i> Module 11</span>
             </div>
         </div>
 
-        <div class="order-grid">
+        <div class="pricing-grid">
             <div class="card overview-card">
                 <div class="card-header">
                     <h3><i class="fas fa-bullseye text-primary"></i> Purpose</h3>
                 </div>
                 <p class="text-muted mb-0">
-                    Tracks embroidery orders from placement through review, production, and completion
-                    with clear visibility into every milestone.
+                    Generates price estimates based on design complexity and workload inputs, ensuring clients receive
+                    consistent quotes alongside clear turnaround expectations.
                 </p>
             </div>
 
-            <div class="card process-card">
+            <div class="card inputs-card">
                 <div class="card-header">
-                    <h3><i class="fas fa-route text-primary"></i> Core Flow</h3>
-                    <p class="text-muted">Client order through completion.</p>
+                    <h3><i class="fas fa-list-check text-primary"></i> Quote Inputs</h3>
+                    <p class="text-muted">Data points that shape the estimated price range.</p>
                 </div>
-                <div class="flow-list">
-                    <?php foreach ($coreFlow as $index => $step): ?>
-                        <div class="flow-step">
-                            <span class="badge"><?php echo $index + 1; ?></span>
-                            <div>
-                                <strong><?php echo $step['title']; ?></strong>
-                                <p class="text-muted mb-0"><?php echo $step['detail']; ?></p>
-                            </div>
+                <div class="input-list">
+                    <?php foreach ($coreInputs as $input): ?>
+                        <div class="input-item">
+                            <h4 class="d-flex align-center gap-2">
+                                <i class="<?php echo $input['icon']; ?>"></i>
+                                <?php echo $input['title']; ?>
+                            </h4>
+                            <p class="text-muted mb-0"><?php echo $input['detail']; ?></p>
                         </div>
                     <?php endforeach; ?>
                 </div>
@@ -197,7 +184,7 @@ $automation = [
             <div class="card automation-card">
                 <div class="card-header">
                     <h3><i class="fas fa-robot text-primary"></i> Automation</h3>
-                    <p class="text-muted">Notifications and safeguards for every stage.</p>
+                    <p class="text-muted">Logic that keeps pricing and timing aligned.</p>
                 </div>
                 <div class="d-flex flex-column gap-3">
                     <?php foreach ($automation as $rule): ?>

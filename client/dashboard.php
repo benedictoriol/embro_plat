@@ -114,6 +114,7 @@ function client_status_badge($status) {
                         <a href="rate_provider.php" class="dropdown-item"><i class="fas fa-star"></i> Rate Provider</a>
                         <a href="search_discovery.php" class="dropdown-item"><i class="fas fa-compass"></i> Search &amp; Discovery</a>
                         <a href="design_proofing.php" class="dropdown-item"><i class="fas fa-clipboard-check"></i> Design Proofing &amp; Approval</a>
+                        <a href="pricing_quotation.php" class="dropdown-item"><i class="fas fa-calculator"></i> Pricing &amp; Quotation</a>
                         <a href="order_management.php" class="dropdown-item"><i class="fas fa-clipboard-list"></i> Order Management</a>
                     </div>
                 </li>
@@ -186,6 +187,10 @@ function client_status_badge($status) {
             <a href="design_proofing.php" class="action-card">
                 <h4><i class="fas fa-clipboard-check text-primary"></i> Design Proofing &amp; Approval</h4>
                 <p class="text-muted">Review proofs, approve revisions, and unlock production.</p>
+            </a>
+            <a href="pricing_quotation.php" class="action-card">
+                <h4><i class="fas fa-calculator text-primary"></i> Pricing &amp; Quotation</h4>
+                <p class="text-muted">Preview automated quotes based on complexity and workload.</p>
             </a>
         </div>
         <div class="card">
