@@ -6,35 +6,35 @@ require_role('client');
 $client_id = $_SESSION['user']['id'];
 $unread_notifications = fetch_unread_notification_count($pdo, $client_id);
 
-$coreProcess = [
+$coreFlow = [
     [
-        'title' => 'Design submitted',
-        'detail' => 'Client uploads artwork or updates notes for the shop review.',
+        'title' => 'Client order placed',
+        'detail' => 'Order details, artwork, and requirements are submitted to the shop.',
     ],
     [
-        'title' => 'Proof prepared',
-        'detail' => 'Shop returns a production-ready proof with colors, sizing, and placement.',
+        'title' => 'Review & confirmation',
+        'detail' => 'Shop reviews specs, confirms pricing, and validates production readiness.',
     ],
     [
-        'title' => 'Client approves or requests revision',
-        'detail' => 'Approval or revision feedback is captured before moving forward.',
+        'title' => 'Production in progress',
+        'detail' => 'Jobs are scheduled, stitched, and quality-checked before packaging.',
     ],
     [
-        'title' => 'Production unlocked',
-        'detail' => 'Only approved proofs can be released to production and scheduling.',
+        'title' => 'Completion & delivery',
+        'detail' => 'Finished orders are marked complete and handed off for pickup or delivery.',
     ],
 ];
 
 $automation = [
     [
-        'title' => 'Approval reminders',
-        'detail' => 'Automated nudges keep approvals moving before delivery deadlines.',
-        'icon' => 'fas fa-bell',
+        'title' => 'Status progression updates',
+        'detail' => 'Automatic notifications keep clients aware of every stage shift.',
+        'icon' => 'fas fa-signal',
     ],
     [
-        'title' => 'Production lock enforcement',
-        'detail' => 'System blocks production start until an approval is recorded.',
-        'icon' => 'fas fa-lock',
+        'title' => 'Stall alerts',
+        'detail' => 'Escalations trigger when orders linger too long in a step.',
+        'icon' => 'fas fa-triangle-exclamation',
     ],
 ];
 ?>
@@ -43,11 +43,11 @@ $automation = [
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Design Proofing & Approval Module - Client</title>
+    <title>Order Management Module - Client</title>
     <link rel="stylesheet" href="../assets/css/style.css">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
     <style>
-        .proofing-grid {
+        .order-grid {
             display: grid;
             grid-template-columns: repeat(12, 1fr);
             gap: 1.5rem;
@@ -66,7 +66,7 @@ $automation = [
             grid-column: span 5;
         }
 
-        .process-step {
+        .flow-step {
             display: flex;
             gap: 1rem;
             align-items: flex-start;
@@ -76,7 +76,7 @@ $automation = [
             background: var(--bg-primary);
         }
 
-        .process-step .badge {
+        .flow-step .badge {
             width: 2rem;
             height: 2rem;
             border-radius: var(--radius-full);
@@ -88,7 +88,7 @@ $automation = [
             color: var(--primary-700);
         }
 
-        .process-list {
+        .flow-list {
             display: grid;
             gap: 1rem;
         }
@@ -128,10 +128,11 @@ $automation = [
                     </a>
                     <div class="dropdown-menu">
                         <a href="customize_design.php" class="dropdown-item"><i class="fas fa-paint-brush"></i> Customize Design</a>
+                        <a href="design_editor.php" class="dropdown-item"><i class="fas fa-pencil-ruler"></i> Design Editor</a>
                         <a href="rate_provider.php" class="dropdown-item"><i class="fas fa-star"></i> Rate Provider</a>
                         <a href="search_discovery.php" class="dropdown-item"><i class="fas fa-compass"></i> Search &amp; Discovery</a>
-                        <a href="design_proofing.php" class="dropdown-item active"><i class="fas fa-clipboard-check"></i> Design Proofing &amp; Approval</a>
-                        <a href="order_management.php" class="dropdown-item"><i class="fas fa-clipboard-list"></i> Order Management</a>
+                        <a href="design_proofing.php" class="dropdown-item"><i class="fas fa-clipboard-check"></i> Design Proofing &amp; Approval</a>
+                        <a href="order_management.php" class="dropdown-item active"><i class="fas fa-clipboard-list"></i> Order Management</a>
                     </div>
                 </li>
                 <li><a href="messages.php" class="nav-link">Messages</a></li>
@@ -156,32 +157,32 @@ $automation = [
         <div class="dashboard-header fade-in">
             <div class="d-flex justify-between align-center">
                 <div>
-                    <h2>Design Proofing &amp; Approval</h2>
-                    <p class="text-muted">Keep production locked until every proof is approved by the client.</p>
+                    <h2>Order Management</h2>
+                    <p class="text-muted">Track every order from placement to delivery-ready completion.</p>
                 </div>
-                <span class="badge badge-primary"><i class="fas fa-clipboard-check"></i> Module 9</span>
+                <span class="badge badge-primary"><i class="fas fa-clipboard-list"></i> Module 10</span>
             </div>
         </div>
 
-        <div class="proofing-grid">
+        <div class="order-grid">
             <div class="card overview-card">
                 <div class="card-header">
-                    <h3><i class="fas fa-shield-halved text-primary"></i> Purpose</h3>
+                    <h3><i class="fas fa-bullseye text-primary"></i> Purpose</h3>
                 </div>
                 <p class="text-muted mb-0">
-                    Prevents production without client approval by capturing feedback, documenting sign-off,
-                    and unlocking production only after an approved proof.
+                    Tracks embroidery orders from placement through review, production, and completion
+                    with clear visibility into every milestone.
                 </p>
             </div>
 
             <div class="card process-card">
                 <div class="card-header">
-                    <h3><i class="fas fa-route text-primary"></i> Core Process</h3>
-                    <p class="text-muted">From proof submission through approval gates.</p>
+                    <h3><i class="fas fa-route text-primary"></i> Core Flow</h3>
+                    <p class="text-muted">Client order through completion.</p>
                 </div>
-                <div class="process-list">
-                    <?php foreach ($coreProcess as $index => $step): ?>
-                        <div class="process-step">
+                <div class="flow-list">
+                    <?php foreach ($coreFlow as $index => $step): ?>
+                        <div class="flow-step">
                             <span class="badge"><?php echo $index + 1; ?></span>
                             <div>
                                 <strong><?php echo $step['title']; ?></strong>
@@ -195,7 +196,7 @@ $automation = [
             <div class="card automation-card">
                 <div class="card-header">
                     <h3><i class="fas fa-robot text-primary"></i> Automation</h3>
-                    <p class="text-muted">Reminders and safeguards that keep approvals on track.</p>
+                    <p class="text-muted">Notifications and safeguards for every stage.</p>
                 </div>
                 <div class="d-flex flex-column gap-3">
                     <?php foreach ($automation as $rule): ?>

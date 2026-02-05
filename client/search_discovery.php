@@ -168,6 +168,7 @@ $automation = [
                         <a href="rate_provider.php" class="dropdown-item"><i class="fas fa-star"></i> Rate Provider</a>
                         <a href="search_discovery.php" class="dropdown-item active"><i class="fas fa-compass"></i> Search & Discovery</a>
                         <a href="design_proofing.php" class="dropdown-item"><i class="fas fa-clipboard-check"></i> Design Proofing &amp; Approval</a>
+                        <a href="order_management.php" class="dropdown-item"><i class="fas fa-clipboard-list"></i> Order Management</a>
                     </div>
                 </li>
                 <li><a href="messages.php" class="nav-link">Messages</a></li>
