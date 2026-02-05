@@ -286,6 +286,31 @@ function fulfillment_pill(?string $status): string {
         }
         .alert-success { background: rgba(40, 167, 69, 0.12); color: #1e7e34; }
         .alert-error { background: rgba(220, 53, 69, 0.12); color: #a71d2a; }
+        .module-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            gap: 12px;
+            flex-wrap: wrap;
+            margin-bottom: 20px;
+        }
+        .module-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+            gap: 16px;
+            margin-bottom: 24px;
+        }
+        .module-card {
+            background: #fff;
+            border-radius: 12px;
+            border: 1px solid #e2e8f0;
+            padding: 18px;
+            box-shadow: 0 8px 20px rgba(15, 23, 42, 0.04);
+        }
+        .module-card h3 {
+            margin-bottom: 8px;
+            font-size: 16px;
+        }
     </style>
 </head>
 <body>
@@ -308,8 +333,24 @@ function fulfillment_pill(?string $status): string {
     </nav>
 
     <div class="container" style="margin-top: 30px;">
-        <h2>Delivery & Pickup Management</h2>
-        <p class="text-muted">Manage handoff details for completed orders, including pickup readiness and delivery confirmations.</p>
+        <div class="module-header">
+            <div>
+                <h2>Delivery & Pickup Management</h2>
+                <p class="text-muted">Manage handoff details for completed orders, including pickup readiness and delivery confirmations.</p>
+            </div>
+            <span class="badge badge-primary"><i class="fas fa-truck-fast"></i> Module 16</span>
+        </div>
+
+        <div class="module-grid">
+            <div class="module-card">
+                <h3><i class="fas fa-bullseye text-primary"></i> Purpose</h3>
+                <p class="text-muted mb-0">Handles pickup and delivery confirmation so every order reaches the client with a verified handoff.</p>
+            </div>
+            <div class="module-card">
+                <h3><i class="fas fa-robot text-primary"></i> Automation</h3>
+                <p class="text-muted mb-0">Payment release trigger once delivery or pickup is confirmed.</p>
+            </div>
+        </div>
 
         <?php if($success): ?>
             <div class="alert alert-success"><?php echo htmlspecialchars($success); ?></div>
