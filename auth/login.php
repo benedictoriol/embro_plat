@@ -81,6 +81,68 @@ if($_SERVER['REQUEST_METHOD'] == 'POST') {
                 [],
                 ['email' => $email]
             );
+            
+            $ipAddress = $_SERVER['REMOTE_ADDR'] ?? null;
+            $failureThreshold = 5;
+            $windowMinutes = 15;
+            $ipFailures = 0;
+            $emailFailures = 0;
+
+            if ($ipAddress) {
+                $ipStmt = $pdo->prepare("
+                    SELECT COUNT(*)
+                    FROM audit_logs
+                    WHERE action = 'login_failed'
+                      AND ip_address = ?
+                      AND created_at >= (NOW() - INTERVAL $windowMinutes MINUTE)
+                ");
+                $ipStmt->execute([$ipAddress]);
+                $ipFailures = (int) $ipStmt->fetchColumn();
+            }
+
+            if ($email !== '') {
+                $emailStmt = $pdo->prepare("
+                    SELECT COUNT(*)
+                    FROM audit_logs
+                    WHERE action = 'login_failed'
+                      AND new_values LIKE ?
+                      AND created_at >= (NOW() - INTERVAL $windowMinutes MINUTE)
+                ");
+                $emailStmt->execute(['%' . $email . '%']);
+                $emailFailures = (int) $emailStmt->fetchColumn();
+            }
+
+            $failureCount = max($ipFailures, $emailFailures);
+            if ($failureCount >= $failureThreshold) {
+                $alertStmt = $pdo->prepare("
+                    SELECT COUNT(*)
+                    FROM audit_logs
+                    WHERE action = 'suspicious_activity'
+                      AND created_at >= (NOW() - INTERVAL 1 HOUR)
+                      AND (
+                        (? IS NOT NULL AND ip_address = ?)
+                        OR (? != '' AND new_values LIKE ?)
+                      )
+                ");
+                $emailLike = '%' . $email . '%';
+                $alertStmt->execute([$ipAddress, $ipAddress, $email, $emailLike]);
+                $recentAlerts = (int) $alertStmt->fetchColumn();
+
+                if ($recentAlerts === 0) {
+                    log_suspicious_activity(
+                        $pdo,
+                        $failedUserId,
+                        $failedUserRole,
+                        'Repeated failed login attempts',
+                        [
+                            'email' => $email,
+                            'ip_address' => $ipAddress,
+                            'failure_count' => $failureCount,
+                            'window_minutes' => $windowMinutes
+                        ]
+                    );
+                }
+            }
         }
     } catch(PDOException $e) {
         $error = "Login failed: " . $e->getMessage();

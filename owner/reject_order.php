@@ -81,6 +81,17 @@ create_notification(
             ['status' => 'cancelled', 'cancellation_reason' => $rejection_reason]
         );
 
+        log_audit(
+            $pdo,
+            $owner_id,
+            $owner_role,
+            'dispute_resolution',
+            'orders',
+            $order_id,
+            ['status' => $order['status'] ?? null],
+            ['status' => 'cancelled', 'resolution' => 'order_rejected', 'reason' => $rejection_reason]
+        );
+
         if(($order['payment_status'] ?? 'unpaid') === 'paid') {
             $payment_stmt = $pdo->prepare("
                 SELECT id, amount FROM payments

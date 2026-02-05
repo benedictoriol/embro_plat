@@ -80,6 +80,27 @@ $actions = $pdo->query("SELECT DISTINCT action FROM audit_logs ORDER BY action")
 $roles = $pdo->query("SELECT DISTINCT actor_role FROM audit_logs WHERE actor_role IS NOT NULL ORDER BY actor_role")->fetchAll(PDO::FETCH_COLUMN);
 $entities = $pdo->query("SELECT DISTINCT entity_type FROM audit_logs ORDER BY entity_type")->fetchAll(PDO::FETCH_COLUMN);
 
+$alertWindowHours = 24;
+$suspiciousCountStmt = $pdo->prepare("
+    SELECT COUNT(*)
+    FROM audit_logs
+    WHERE action = 'suspicious_activity'
+      AND created_at >= (NOW() - INTERVAL $alertWindowHours HOUR)
+");
+$suspiciousCountStmt->execute();
+$suspiciousCount = (int) $suspiciousCountStmt->fetchColumn();
+
+$suspiciousStmt = $pdo->prepare("
+    SELECT a.*, u.fullname AS actor_name
+    FROM audit_logs a
+    LEFT JOIN users u ON u.id = a.actor_id
+    WHERE a.action = 'suspicious_activity'
+    ORDER BY a.created_at DESC
+    LIMIT 5
+");
+$suspiciousStmt->execute();
+$suspiciousLogs = $suspiciousStmt->fetchAll();
+
 $queryParams = $_GET;
 unset($queryParams['page']);
 $baseQuery = http_build_query($queryParams);
@@ -213,6 +234,47 @@ $baseQuery = $baseQuery ? $baseQuery . '&' : '';
                         </a>
                     </div>
                 </form>
+            </div>
+
+            <div class="card audit-card">
+                <div class="card-header">
+                    <h3><i class="fas fa-shield-alt text-danger"></i> Suspicious Activity Alerts</h3>
+                    <p class="text-muted">
+                        <?php echo number_format($suspiciousCount); ?> alert<?php echo $suspiciousCount === 1 ? '' : 's'; ?> in the last <?php echo $alertWindowHours; ?> hours.
+                    </p>
+                </div>
+                <?php if (empty($suspiciousLogs)): ?>
+                    <div class="empty-state">
+                        <i class="fas fa-shield-check fa-2x mb-2"></i>
+                        <p class="mb-0">No suspicious activity alerts logged recently.</p>
+                    </div>
+                <?php else: ?>
+                    <table class="table">
+                        <thead>
+                            <tr>
+                                <th>Detected At</th>
+                                <th>Actor</th>
+                                <th>Details</th>
+                                <th>IP Address</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            <?php foreach ($suspiciousLogs as $alert): ?>
+                                <tr>
+                                    <td><?php echo $alert['created_at'] ? date('M d, Y H:i', strtotime($alert['created_at'])) : '—'; ?></td>
+                                    <td>
+                                        <div><?php echo htmlspecialchars($alert['actor_name'] ?? 'System'); ?></div>
+                                        <small class="text-muted"><?php echo htmlspecialchars($alert['actor_role'] ?? 'system'); ?></small>
+                                    </td>
+                                    <td>
+                                        <?php echo htmlspecialchars($alert['new_values'] ?? 'No details provided.'); ?>
+                                    </td>
+                                    <td><?php echo htmlspecialchars($alert['ip_address'] ?? '—'); ?></td>
+                                </tr>
+                            <?php endforeach; ?>
+                        </tbody>
+                    </table>
+                <?php endif; ?>
             </div>
 
             <div class="card audit-card">

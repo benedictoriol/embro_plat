@@ -54,6 +54,29 @@ function log_audit(PDO $pdo, ?int $actorId, ?string $actorRole, string $action, 
     ]);
 }
 
+function fetch_sys_admin_ids(PDO $pdo): array {
+    $stmt = $pdo->prepare("SELECT id FROM users WHERE role = 'sys_admin' AND status = 'active'");
+    $stmt->execute();
+    return $stmt->fetchAll(PDO::FETCH_COLUMN);
+}
+
+function log_suspicious_activity(PDO $pdo, ?int $actorId, ?string $actorRole, string $reason, array $context = []): void {
+    $payload = array_merge(['reason' => $reason], $context);
+    log_audit($pdo, $actorId, $actorRole, 'suspicious_activity', 'security', null, [], $payload);
+
+    $message = 'Suspicious activity detected: ' . $reason;
+    if (!empty($context['email'])) {
+        $message .= ' (Email: ' . $context['email'] . ')';
+    }
+    if (!empty($context['ip_address'])) {
+        $message .= ' (IP: ' . $context['ip_address'] . ')';
+    }
+
+    foreach (fetch_sys_admin_ids($pdo) as $adminId) {
+        create_notification($pdo, (int) $adminId, null, 'security_alert', $message);
+    }
+}
+
 
 
 function fetch_unread_notification_count(PDO $pdo, int $user_id): int {

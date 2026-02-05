@@ -506,6 +506,87 @@ CREATE TABLE `raw_materials` (
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
 
 -- --------------------------------------------------------
+--
+-- Audit immutability and sensitive change tracking
+--
+
+DELIMITER //
+
+CREATE TRIGGER prevent_audit_logs_update
+BEFORE UPDATE ON audit_logs
+FOR EACH ROW
+BEGIN
+  SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'Audit logs are immutable';
+END//
+
+CREATE TRIGGER prevent_audit_logs_delete
+BEFORE DELETE ON audit_logs
+FOR EACH ROW
+BEGIN
+  SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'Audit logs are immutable';
+END//
+
+CREATE TRIGGER audit_payroll_update
+BEFORE UPDATE ON payroll
+FOR EACH ROW
+BEGIN
+  INSERT INTO audit_logs (actor_id, actor_role, action, entity_type, entity_id, old_values, new_values, ip_address, user_agent)
+  VALUES (
+    NULL,
+    'system',
+    'payroll_updated',
+    'payroll',
+    OLD.id,
+    JSON_OBJECT(
+      'basic_salary', OLD.basic_salary,
+      'allowances', OLD.allowances,
+      'deductions', OLD.deductions,
+      'net_salary', OLD.net_salary,
+      'status', OLD.status,
+      'paid_at', OLD.paid_at
+    ),
+    JSON_OBJECT(
+      'basic_salary', NEW.basic_salary,
+      'allowances', NEW.allowances,
+      'deductions', NEW.deductions,
+      'net_salary', NEW.net_salary,
+      'status', NEW.status,
+      'paid_at', NEW.paid_at
+    ),
+    NULL,
+    NULL
+  );
+END//
+
+CREATE TRIGGER audit_raw_materials_update
+BEFORE UPDATE ON raw_materials
+FOR EACH ROW
+BEGIN
+  INSERT INTO audit_logs (actor_id, actor_role, action, entity_type, entity_id, old_values, new_values, ip_address, user_agent)
+  VALUES (
+    NULL,
+    'system',
+    'inventory_adjusted',
+    'raw_materials',
+    OLD.id,
+    JSON_OBJECT(
+      'current_stock', OLD.current_stock,
+      'unit_cost', OLD.unit_cost,
+      'status', OLD.status
+    ),
+    JSON_OBJECT(
+      'current_stock', NEW.current_stock,
+      'unit_cost', NEW.unit_cost,
+      'status', NEW.status
+    ),
+    NULL,
+    NULL
+  );
+END//
+
+DELIMITER ;
+
+-- --------------------------------------------------------
 
 --
 -- Table structure for table `services`
