@@ -315,6 +315,7 @@ $receipt_by_payment = [];
 $fulfillment_by_order = [];
 $fulfillment_history_by_id = [];
 $status_history_by_order = [];
+$claimed_fulfillment_by_order = [];
 if(!empty($orders)) {
     $order_ids = array_column($orders, 'id');
     $placeholders = implode(',', array_fill(0, count($order_ids), '?'));
@@ -339,6 +340,18 @@ if(!empty($orders)) {
     $status_histories = $status_history_stmt->fetchAll();
     foreach($status_histories as $history) {
         $status_history_by_order[$history['order_id']][] = $history;
+    }
+    
+    $claimed_fulfillment_stmt = $pdo->prepare("
+        SELECT order_id
+        FROM order_fulfillments
+        WHERE order_id IN ($placeholders)
+          AND status = 'claimed'
+    ");
+    $claimed_fulfillment_stmt->execute($order_ids);
+    $claimed_fulfillments = $claimed_fulfillment_stmt->fetchAll();
+    foreach($claimed_fulfillments as $claimed) {
+        $claimed_fulfillment_by_order[$claimed['order_id']] = true;
     }
     
     $payments_stmt = $pdo->prepare("
@@ -586,6 +599,16 @@ function fulfillment_status_pill(?string $status): string {
             display: block;
             width: 100%;
         }
+        .rating-reminder {
+            border: 1px solid #fde68a;
+            background: #fffbeb;
+            border-radius: 12px;
+            padding: 14px;
+            margin-top: 16px;
+        }
+        .rating-reminder .btn {
+            margin-top: 10px;
+        }
     </style>
 </head>
 <body>
@@ -756,6 +779,22 @@ function fulfillment_status_pill(?string $status): string {
                             <?php endif; ?>
                         </div>
                     </div>
+                    <?php
+                        $needs_rating = $order['status'] === 'completed'
+                            && (empty($order['rating']) || (int) $order['rating'] === 0)
+                            && !empty($claimed_fulfillment_by_order[$order['id']]);
+                    ?>
+                    <?php if($needs_rating): ?>
+                        <div class="rating-reminder">
+                            <strong><i class="fas fa-star text-warning"></i> Rate this completed order</strong>
+                            <p class="text-muted small mb-0">
+                                Your feedback helps providers improve and keeps the marketplace accurate.
+                            </p>
+                            <a href="rate_provider.php" class="btn btn-sm btn-primary">
+                                Leave a rating
+                            </a>
+                        </div>
+                    <?php endif; ?>
                     <?php if($order['status'] === 'pending'): ?>
                         <div class="mt-3">
                             <strong>Price Quote</strong>

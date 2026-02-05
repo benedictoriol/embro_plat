@@ -252,6 +252,7 @@ $rated_orders = $rated_stmt->fetchAll();
                                 <textarea name="rating_comment" class="form-control" rows="3" placeholder="Share details about quality, communication, or delivery"></textarea>
                             </div>
                                 <button type="submit" name="submit_rating" class="btn btn-primary">
+                                <i class="fas fa-paper-plane"></i> Submit Rating
                             </button>
                         </form>
                     </div>

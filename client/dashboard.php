@@ -18,6 +18,41 @@ $stats_stmt = $pdo->prepare("
 $stats_stmt->execute([$client_id]);
 $stats = $stats_stmt->fetch();
 
+$pending_ratings_count_stmt = $pdo->prepare("
+    SELECT COUNT(*) as pending_count
+    FROM orders o
+    WHERE o.client_id = ?
+      AND o.status = 'completed'
+      AND (o.rating IS NULL OR o.rating = 0)
+      AND EXISTS (
+          SELECT 1
+          FROM order_fulfillments f
+          WHERE f.order_id = o.id
+            AND f.status = 'claimed'
+      )
+");
+$pending_ratings_count_stmt->execute([$client_id]);
+$pending_ratings_count = (int) ($pending_ratings_count_stmt->fetch()['pending_count'] ?? 0);
+
+$pending_ratings_stmt = $pdo->prepare("
+    SELECT o.id, o.order_number, o.service_type, o.completed_at, s.shop_name
+    FROM orders o
+    JOIN shops s ON o.shop_id = s.id
+    WHERE o.client_id = ?
+      AND o.status = 'completed'
+      AND (o.rating IS NULL OR o.rating = 0)
+      AND EXISTS (
+          SELECT 1
+          FROM order_fulfillments f
+          WHERE f.order_id = o.id
+            AND f.status = 'claimed'
+      )
+    ORDER BY o.completed_at DESC, o.created_at DESC
+    LIMIT 3
+");
+$pending_ratings_stmt->execute([$client_id]);
+$pending_ratings = $pending_ratings_stmt->fetchAll();
+
 $orders_stmt = $pdo->prepare("
     SELECT o.*, s.shop_name, s.logo
     FROM orders o
@@ -84,6 +119,21 @@ function client_status_badge($status) {
             margin-top: 12px;
             color: #64748b;
             font-size: 0.9rem;
+        }
+        .rating-prompt {
+            border: 1px solid #fde68a;
+            background: #fffbeb;
+            border-radius: 14px;
+            padding: 18px;
+            margin: 20px 0 10px;
+        }
+        .rating-prompt-list {
+            margin: 12px 0 0;
+            padding-left: 18px;
+            color: #92400e;
+        }
+        .rating-prompt-list li {
+            margin-bottom: 6px;
         }
     </style>
 </head>
@@ -164,6 +214,31 @@ function client_status_badge($status) {
                 <div class="stat-label">Cancelled</div>
             </div>
         </div>
+        <?php if($pending_ratings_count > 0): ?>
+            <div class="rating-prompt">
+                <div class="d-flex justify-between align-center">
+                    <div>
+                        <h3 class="mb-1"><i class="fas fa-star text-warning"></i> Share Your Feedback</h3>
+                        <p class="text-muted mb-0">
+                            You have <?php echo $pending_ratings_count; ?> completed
+                            <?php echo $pending_ratings_count === 1 ? 'order' : 'orders'; ?> ready for rating.
+                        </p>
+                    </div>
+                    <a href="rate_provider.php" class="btn btn-primary">Rate Now</a>
+                </div>
+                <?php if(!empty($pending_ratings)): ?>
+                    <ul class="rating-prompt-list">
+                        <?php foreach($pending_ratings as $pending): ?>
+                            <li>
+                                <?php echo htmlspecialchars($pending['service_type']); ?> with
+                                <?php echo htmlspecialchars($pending['shop_name']); ?>
+                                (<?php echo htmlspecialchars($pending['order_number']); ?>)
+                            </li>
+                        <?php endforeach; ?>
+                    </ul>
+                <?php endif; ?>
+            </div>
+        <?php endif; ?>
         <div class="quick-actions">
             <a href="place_order.php" class="action-card">
                 <h4><i class="fas fa-plus-circle text-primary"></i> Place a New Order</h4>
