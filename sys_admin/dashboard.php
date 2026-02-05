@@ -319,11 +319,11 @@ $system_health = [
                         </div>
                     </a>
                     
-                    <a href="reports.php" class="quick-action">
-                        <i class="fas fa-file-export"></i>
+                    <a href="content_moderation.php" class="quick-action">
+                        <i class="fas fa-shield-halved"></i>
                         <div>
-                            <strong>Export Reports</strong>
-                            <p class="text-muted mb-0">Generate system reports</p>
+                            <strong>Moderate Content</strong>
+                            <p class="text-muted mb-0">Review reports and enforcement</p>
                         </div>
                     </a>
                 </div>
