@@ -121,6 +121,7 @@ $automation = [
                         <a href="design_proofing.php" class="dropdown-item"><i class="fas fa-clipboard-check"></i> Design Proofing &amp; Approval</a>
                         <a href="pricing_quotation.php" class="dropdown-item active"><i class="fas fa-calculator"></i> Pricing &amp; Quotation</a>
                         <a href="order_management.php" class="dropdown-item"><i class="fas fa-clipboard-list"></i> Order Management</a>
+                        <a href="payment_handling.php" class="dropdown-item"><i class="fas fa-hand-holding-dollar"></i> Payment Handling &amp; Release</a>
                     </div>
                 </li>
                 <li><a href="messages.php" class="nav-link">Messages</a></li>
