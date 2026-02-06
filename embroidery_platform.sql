@@ -1538,7 +1538,6 @@ ALTER TABLE `shifts`
 ALTER TABLE `attendance_logs`
   ADD CONSTRAINT `attendance_logs_ibfk_1` FOREIGN KEY (`shop_id`) REFERENCES `shops` (`id`),
   ADD CONSTRAINT `attendance_logs_ibfk_2` FOREIGN KEY (`staff_user_id`) REFERENCES `users` (`id`);
-
 --
 -- Constraints for table `service_providers`
 --

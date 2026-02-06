@@ -285,7 +285,3 @@ $approvals = $approvals_stmt->fetchAll();
             <?php else: ?>
                 <p class="text-muted mb-0">No proofs are waiting for your approval right now.</p>
             <?php endif; ?>
-        </div>
-    </div>
-</body>
-</html>
