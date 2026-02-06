@@ -1,107 +1,171 @@
 <?php
 session_start();
 require_once '../config/db.php';
+require_once '../config/constants.php';
 require_role('client');
 
 $client_id = $_SESSION['user']['id'];
 $unread_notifications = fetch_unread_notification_count($pdo, $client_id);
 
-$coreProcess = [
-    [
-        'title' => 'Design submitted',
-        'detail' => 'Client uploads artwork or updates notes for the shop review.',
-    ],
-    [
-        'title' => 'Proof prepared',
-        'detail' => 'Shop returns a production-ready proof with colors, sizing, and placement.',
-    ],
-    [
-        'title' => 'Client approves or requests revision',
-        'detail' => 'Approval or revision feedback is captured before moving forward.',
-    ],
-    [
-        'title' => 'Production unlocked',
-        'detail' => 'Only approved proofs can be released to production and scheduling.',
-    ],
-];
+function is_design_image(?string $filename): bool {
+    if(!$filename) {
+        return false;
+    }
+    $extension = strtolower(pathinfo($filename, PATHINFO_EXTENSION));
+    return in_array($extension, ALLOWED_IMAGE_TYPES, true);
+}
 
-$automation = [
-    [
-        'title' => 'Approval reminders',
-        'detail' => 'Automated nudges keep approvals moving before delivery deadlines.',
-        'icon' => 'fas fa-bell',
-    ],
-    [
-        'title' => 'Production lock enforcement',
-        'detail' => 'System blocks production start until an approval is recorded.',
-        'icon' => 'fas fa-lock',
-    ],
-];
+function notify_shop_staff(PDO $pdo, int $shop_id, int $order_id, string $type, string $message): void {
+    $staff_stmt = $pdo->prepare("SELECT user_id FROM shop_staffs WHERE shop_id = ? AND status = 'active'");
+    $staff_stmt->execute([$shop_id]);
+    $staff_ids = $staff_stmt->fetchAll(PDO::FETCH_COLUMN);
+    foreach($staff_ids as $staff_id) {
+        create_notification($pdo, (int) $staff_id, $order_id, $type, $message);
+    }
+}
+
+if(isset($_POST['approve_proof'])) {
+    $order_id = (int) ($_POST['order_id'] ?? 0);
+    $approval_stmt = $pdo->prepare("
+        SELECT o.id, o.order_number, o.shop_id, o.client_id, s.owner_id, s.shop_name,
+               da.id as approval_id, da.design_file, da.status as approval_status
+        FROM orders o
+        JOIN shops s ON o.shop_id = s.id
+        JOIN design_approvals da ON da.order_id = o.id
+        WHERE o.id = ? AND o.client_id = ?
+        LIMIT 1
+    ");
+    $approval_stmt->execute([$order_id, $client_id]);
+    $approval = $approval_stmt->fetch();
+
+    if(!$approval) {
+        $error = 'Unable to locate the proof for approval.';
+    } elseif(empty($approval['design_file'])) {
+        $error = 'There is no proof file to approve yet.';
+    } elseif($approval['approval_status'] === 'approved') {
+        $error = 'This proof has already been approved.';
+    } else {
+        $update_stmt = $pdo->prepare("
+            UPDATE design_approvals
+            SET status = 'approved', approved_at = NOW(), updated_at = NOW()
+            WHERE id = ?
+        ");
+        $update_stmt->execute([$approval['approval_id']]);
+
+        $order_update = $pdo->prepare("UPDATE orders SET design_approved = 1, updated_at = NOW() WHERE id = ?");
+        $order_update->execute([$order_id]);
+
+        $message = sprintf('Design proof approved for order #%s.', $approval['order_number']);
+        create_notification($pdo, $client_id, $order_id, 'success', $message);
+        if(!empty($approval['owner_id'])) {
+            create_notification($pdo, (int) $approval['owner_id'], $order_id, 'order_status', $message);
+        }
+        notify_shop_staff($pdo, (int) $approval['shop_id'], $order_id, 'order_status', $message);
+
+        $success = 'Thank you! The proof is approved and production can begin.';
+    }
+}
+
+if(isset($_POST['request_revision'])) {
+    $order_id = (int) ($_POST['order_id'] ?? 0);
+    $revision_notes = sanitize($_POST['revision_notes'] ?? '');
+
+    $approval_stmt = $pdo->prepare("
+        SELECT o.id, o.order_number, o.shop_id, o.client_id, s.owner_id, s.shop_name,
+               da.id as approval_id, da.design_file, da.status as approval_status
+        FROM orders o
+        JOIN shops s ON o.shop_id = s.id
+        JOIN design_approvals da ON da.order_id = o.id
+        WHERE o.id = ? AND o.client_id = ?
+        LIMIT 1
+    ");
+    $approval_stmt->execute([$order_id, $client_id]);
+    $approval = $approval_stmt->fetch();
+
+    if(!$approval) {
+        $error = 'Unable to locate the proof for revision.';
+    } elseif($revision_notes === '') {
+        $error = 'Please add revision notes for the shop.';
+    } elseif(empty($approval['design_file'])) {
+        $error = 'There is no proof file to revise yet.';
+    } else {
+        $update_stmt = $pdo->prepare("
+            UPDATE design_approvals
+            SET status = 'revision', revision_count = revision_count + 1, customer_notes = ?, updated_at = NOW()
+            WHERE id = ?
+        ");
+        $update_stmt->execute([$revision_notes, $approval['approval_id']]);
+
+        $order_update = $pdo->prepare("
+            UPDATE orders
+            SET revision_count = revision_count + 1,
+                revision_notes = ?,
+                revision_requested_at = NOW(),
+                design_approved = 0,
+                updated_at = NOW()
+            WHERE id = ?
+        ");
+        $order_update->execute([$revision_notes, $order_id]);
+
+        $message = sprintf('Revision requested for order #%s.', $approval['order_number']);
+        create_notification($pdo, $client_id, $order_id, 'warning', $message);
+        if(!empty($approval['owner_id'])) {
+            create_notification($pdo, (int) $approval['owner_id'], $order_id, 'order_status', $message);
+        }
+        notify_shop_staff($pdo, (int) $approval['shop_id'], $order_id, 'order_status', $message);
+
+        $success = 'Your revision request has been sent to the shop.';
+    }
+}
+
+$approvals_stmt = $pdo->prepare("
+    SELECT o.id as order_id, o.order_number, o.status as order_status, o.design_approved,
+           s.shop_name, s.owner_id,
+           da.status as approval_status, da.design_file, da.revision_count, da.updated_at
+    FROM orders o
+    JOIN shops s ON o.shop_id = s.id
+    JOIN design_approvals da ON da.order_id = o.id
+    WHERE o.client_id = ? AND da.status IN ('pending', 'revision')
+    ORDER BY da.updated_at DESC
+");
+$approvals_stmt->execute([$client_id]);
+$approvals = $approvals_stmt->fetchAll();
 ?>
 <!DOCTYPE html>
 <html lang="en">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Design Proofing & Approval Module - Client</title>
+    <title>Design Proofing &amp; Approval Module - Client</title>
     <link rel="stylesheet" href="../assets/css/style.css">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
     <style>
         .proofing-grid {
             display: grid;
-            grid-template-columns: repeat(12, 1fr);
+            grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
             gap: 1.5rem;
             margin: 2rem 0;
         }
 
-        .overview-card {
-            grid-column: span 12;
-        }
-
-        .process-card {
-            grid-column: span 7;
-        }
-
-        .automation-card {
-            grid-column: span 5;
-        }
-
-        .process-step {
-            display: flex;
-            gap: 1rem;
-            align-items: flex-start;
-            padding: 1rem;
-            border-radius: var(--radius);
+        .proof-card {
             border: 1px solid var(--gray-200);
+            border-radius: var(--radius);
             background: var(--bg-primary);
+            padding: 1.5rem;
         }
 
-        .process-step .badge {
-            width: 2rem;
-            height: 2rem;
-            border-radius: var(--radius-full);
-            display: inline-flex;
-            align-items: center;
-            justify-content: center;
-            font-weight: 700;
-            background: var(--primary-100);
-            color: var(--primary-700);
-        }
-
-        .process-list {
-            display: grid;
-            gap: 1rem;
-        }
-
-        .automation-item {
-            border: 1px solid var(--gray-200);
+        .proof-card img {
+            width: 100%;
+            height: auto;
             border-radius: var(--radius);
-            padding: 1rem;
-            background: white;
+            border: 1px solid var(--gray-200);
+            margin-top: 1rem;
         }
 
-        .automation-item i {
-            color: var(--primary-600);
+        .proof-actions {
+            display: grid;
+            gap: 0.75rem;
+            margin-top: 1rem;
         }
     </style>
 </head>
@@ -160,58 +224,67 @@ $automation = [
             <div class="d-flex justify-between align-center">
                 <div>
                     <h2>Design Proofing &amp; Approval</h2>
-                    <p class="text-muted">Keep production locked until every proof is approved by the client.</p>
+                    <p class="text-muted">Review proofs and approve before production begins.</p>
                 </div>
                 <span class="badge badge-primary"><i class="fas fa-clipboard-check"></i> Module 9</span>
             </div>
         </div>
 
-        <div class="proofing-grid">
-            <div class="card overview-card">
-                <div class="card-header">
-                    <h3><i class="fas fa-shield-halved text-primary"></i> Purpose</h3>
-                </div>
-                <p class="text-muted mb-0">
-                    Prevents production without client approval by capturing feedback, documenting sign-off,
-                    and unlocking production only after an approved proof.
-                </p>
-            </div>
+        <?php if(isset($error)): ?>
+            <div class="alert alert-danger"><?php echo $error; ?></div>
+        <?php endif; ?>
 
-            <div class="card process-card">
-                <div class="card-header">
-                    <h3><i class="fas fa-route text-primary"></i> Core Process</h3>
-                    <p class="text-muted">From proof submission through approval gates.</p>
-                </div>
-                <div class="process-list">
-                    <?php foreach ($coreProcess as $index => $step): ?>
-                        <div class="process-step">
-                            <span class="badge"><?php echo $index + 1; ?></span>
-                            <div>
-                                <strong><?php echo $step['title']; ?></strong>
-                                <p class="text-muted mb-0"><?php echo $step['detail']; ?></p>
+            <?php if(isset($success)): ?>
+            <div class="alert alert-success"><?php echo $success; ?></div>
+        <?php endif; ?>
+
+        <div class="card">
+            <div class="card-header">
+                <h3><i class="fas fa-shield-halved text-primary"></i> Proofs Awaiting Your Approval</h3>
+                <p class="text-muted">Approve the proof to unlock production or request a revision.</p>
+            </div>
+            <?php if(!empty($approvals)): ?>
+                <div class="proofing-grid">
+                    <?php foreach($approvals as $approval): ?>
+                        <div class="proof-card">
+                            <h4>Order #<?php echo htmlspecialchars($approval['order_number']); ?></h4>
+                            <p class="text-muted mb-2"><i class="fas fa-store"></i> <?php echo htmlspecialchars($approval['shop_name']); ?></p>
+                            <span class="badge badge-warning">Proof <?php echo htmlspecialchars($approval['approval_status']); ?></span>
+
+            <?php if(!empty($approval['design_file'])): ?>
+                                <?php if(is_design_image($approval['design_file'])): ?>
+                                    <img src="../<?php echo htmlspecialchars($approval['design_file']); ?>" alt="Design proof">
+                                <?php endif; ?>
+                                <p class="mt-2 mb-0">
+                                    <a href="../<?php echo htmlspecialchars($approval['design_file']); ?>" target="_blank" rel="noopener noreferrer">
+                                        <i class="fas fa-paperclip"></i> View proof file
+                                    </a>
+                                </p>
+                            <?php endif; ?>
+
+                            <div class="proof-actions">
+                                <form method="POST">
+                                    <input type="hidden" name="order_id" value="<?php echo $approval['order_id']; ?>">
+                                    <button type="submit" name="approve_proof" class="btn btn-success btn-block">
+                                        <i class="fas fa-check-circle"></i> Approve Proof
+                                    </button>
+                                </form>
+                                <form method="POST">
+                                    <input type="hidden" name="order_id" value="<?php echo $approval['order_id']; ?>">
+                                    <div class="form-group">
+                                        <textarea name="revision_notes" class="form-control" rows="2" placeholder="Share revision notes" required></textarea>
+                                    </div>
+                                    <button type="submit" name="request_revision" class="btn btn-outline-warning btn-block">
+                                        <i class="fas fa-pen"></i> Request Revision
+                                    </button>
+                                </form>
                             </div>
                         </div>
                     <?php endforeach; ?>
                 </div>
-            </div>
-
-            <div class="card automation-card">
-                <div class="card-header">
-                    <h3><i class="fas fa-robot text-primary"></i> Automation</h3>
-                    <p class="text-muted">Reminders and safeguards that keep approvals on track.</p>
-                </div>
-                <div class="d-flex flex-column gap-3">
-                    <?php foreach ($automation as $rule): ?>
-                        <div class="automation-item">
-                            <h4 class="d-flex align-center gap-2">
-                                <i class="<?php echo $rule['icon']; ?>"></i>
-                                <?php echo $rule['title']; ?>
-                            </h4>
-                            <p class="text-muted mb-0"><?php echo $rule['detail']; ?></p>
-                        </div>
-                    <?php endforeach; ?>
-                </div>
-            </div>
+            <?php else: ?>
+                <p class="text-muted mb-0">No proofs are waiting for your approval right now.</p>
+            <?php endif; ?>
         </div>
     </div>
 </body>

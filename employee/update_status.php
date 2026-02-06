@@ -52,7 +52,7 @@ function is_design_image(?string $filename): bool {
 
 function fetch_order_info(PDO $pdo, int $staff_id, int $order_id): ?array {
     $order_info_stmt = $pdo->prepare("
-        SELECT o.status, o.progress, o.order_number, o.client_id, s.shop_name, s.owner_id
+        SELECT o.status, o.progress, o.order_number, o.client_id, o.design_approved, s.shop_name, s.owner_id
         FROM orders o
         JOIN shops s ON o.shop_id = s.id
         LEFT JOIN job_schedule js ON js.order_id = o.id AND js.staff_id = ?
@@ -63,6 +63,24 @@ function fetch_order_info(PDO $pdo, int $staff_id, int $order_id): ?array {
     $order_info = $order_info_stmt->fetch();
 
     return $order_info ?: null;
+}
+
+function is_design_approved(PDO $pdo, int $order_id): bool {
+    $approval_stmt = $pdo->prepare("
+        SELECT o.design_approved, da.status
+        FROM orders o
+        LEFT JOIN design_approvals da ON da.order_id = o.id
+        WHERE o.id = ?
+        LIMIT 1
+    ");
+    $approval_stmt->execute([$order_id]);
+    $approval = $approval_stmt->fetch();
+
+    if(!$approval) {
+        return false;
+    }
+
+    return (int) $approval['design_approved'] === 1 || ($approval['status'] ?? '') === 'approved';
 }
 
 if(!empty($jobs)) {
@@ -80,6 +98,70 @@ if(!empty($jobs)) {
 }
 
 // Update status
+if(isset($_POST['upload_proof'])) {
+    $order_id = (int) ($_POST['order_id'] ?? 0);
+    $design_file = sanitize($_POST['design_file'] ?? '');
+    $provider_notes = sanitize($_POST['provider_notes'] ?? '');
+
+    $order_info = fetch_order_info($pdo, $staff_id, $order_id);
+    if(!$order_info) {
+        $error = "Unable to upload proof for this order.";
+    } elseif($design_file === '') {
+        $error = "Please upload a proof file before submitting.";
+    } else {
+        $provider_stmt = $pdo->prepare("
+            SELECT sp.id
+            FROM shops s
+            JOIN service_providers sp ON sp.user_id = s.owner_id
+            WHERE s.id = ?
+            LIMIT 1
+        ");
+        $provider_stmt->execute([$staff['shop_id']]);
+        $service_provider_id = $provider_stmt->fetchColumn();
+
+        if(!$service_provider_id) {
+            $error = "Unable to locate the shop's service provider profile.";
+        } else {
+            $existing_stmt = $pdo->prepare("SELECT id FROM design_approvals WHERE order_id = ? LIMIT 1");
+            $existing_stmt->execute([$order_id]);
+            $approval_id = $existing_stmt->fetchColumn();
+
+            if($approval_id) {
+                $update_stmt = $pdo->prepare("
+                    UPDATE design_approvals
+                    SET design_file = ?, provider_notes = ?, status = 'pending', approved_at = NULL, updated_at = NOW()
+                    WHERE id = ?
+                ");
+                $update_stmt->execute([$design_file, $provider_notes ?: null, $approval_id]);
+            } else {
+                $insert_stmt = $pdo->prepare("
+                    INSERT INTO design_approvals (order_id, service_provider_id, design_file, provider_notes, status)
+                    VALUES (?, ?, ?, ?, 'pending')
+                ");
+                $insert_stmt->execute([$order_id, $service_provider_id, $design_file, $provider_notes ?: null]);
+            }
+
+            $reset_stmt = $pdo->prepare("
+                UPDATE orders
+                SET design_approved = 0, updated_at = NOW()
+                WHERE id = ?
+            ");
+            $reset_stmt->execute([$order_id]);
+
+            $message = sprintf(
+                'A new design proof is ready for order #%s.',
+                $order_info['order_number']
+            );
+            create_notification($pdo, (int) $order_info['client_id'], $order_id, 'order_status', $message);
+            if(!empty($order_info['owner_id'])) {
+                create_notification($pdo, (int) $order_info['owner_id'], $order_id, 'info', $message);
+            }
+
+            $success = 'Proof uploaded and sent to the client for approval.';
+        }
+    }
+}
+
 if(isset($_POST['escalate_issue'])) {
     $order_id = (int) ($_POST['order_id'] ?? 0);
     $escalation_type = $_POST['escalate_issue'] ?? '';
@@ -146,6 +228,8 @@ if(isset($_POST['update_status'])) {
         $error = "Unable to update this order.";
     } elseif($photo_count === 0) {
         $error = "Please upload a progress photo before updating the status.";
+    } elseif($status === STATUS_IN_PROGRESS && !is_design_approved($pdo, $order_id)) {
+        $error = "Design proof approval is required before production can begin.";
     } elseif(!in_array($status, $allowed_statuses, true)) {
         $error = "Invalid status selection.";
     } elseif(!can_transition_order_status($order_info['status'], $status)) {
@@ -490,6 +574,26 @@ if(isset($_POST['update_status'])) {
                     </div>
                 </form>
                 
+                <form method="POST" class="proof-upload-form mt-3" enctype="multipart/form-data">
+                    <input type="hidden" name="order_id" value="<?php echo $job['id']; ?>">
+                    <input type="hidden" name="design_file" value="">
+                    <div class="section-header">Upload Design Proof</div>
+                    <div class="form-group">
+                        <label>Proof File (Image)</label>
+                        <input type="file" name="proof_file" class="form-control" accept="image/*" required>
+                        <small class="text-muted">Upload the proof image to send for client approval.</small>
+                    </div>
+                    <div class="form-group">
+                        <label>Notes (Optional)</label>
+                        <textarea name="provider_notes" class="form-control" rows="2" placeholder="Add any notes for the client review."></textarea>
+                    </div>
+                    <div class="text-right">
+                        <button type="submit" name="upload_proof" class="btn btn-outline-primary">
+                            <i class="fas fa-upload"></i> Send Proof for Approval
+                        </button>
+                    </div>
+                </form>
+
                 <form method="POST" class="mt-3">
                     <input type="hidden" name="order_id" value="<?php echo $job['id']; ?>">
                     <div class="section-header">Escalation Path</div>
@@ -560,6 +664,35 @@ if(isset($_POST['update_status'])) {
             document.querySelectorAll('.progress-slider').forEach(slider => {
                 const jobId = slider.closest('.card').querySelector('input[name="order_id"]').value;
                 updateSteps(jobId, slider.value);
+            });
+            
+            document.querySelectorAll('.proof-upload-form').forEach(form => {
+                form.addEventListener('submit', async function(event) {
+                    event.preventDefault();
+                    const fileInput = form.querySelector('input[type="file"]');
+                    if(!fileInput || !fileInput.files.length) {
+                        alert('Please choose a proof file to upload.');
+                        return;
+                    }
+                    const formData = new FormData();
+                    formData.append('file', fileInput.files[0]);
+                    try {
+                        const response = await fetch('../api/upload_api.php', {
+                            method: 'POST',
+                            body: formData
+                        });
+                        const result = await response.json();
+                        if(!response.ok || result.error) {
+                            alert(result.error || 'Upload failed. Please try again.');
+                            return;
+                        }
+                        const designInput = form.querySelector('input[name="design_file"]');
+                        designInput.value = result.file.path;
+                        form.submit();
+                    } catch (error) {
+                        alert('Unable to upload the proof. Please try again.');
+                    }
+                });
             });
         });
     </script>
