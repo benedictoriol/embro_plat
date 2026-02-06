@@ -86,10 +86,10 @@ function redirect_based_on_role($role, $base_path = '..') {
             header("Location: {$base_path}/owner/dashboard.php");
             break;
         case 'hr':
-            header("Location: {$base_path}/hr/analytics_reporting.php");
+            header("Location: {$base_path}/hr/dashboard.php");
             break;
         case 'staff':
-            header("Location: {$base_path}/staff/dashboard.php");
+            header("Location: {$base_path}/employee/dashboard.php");
             break;
         case 'client':
             header("Location: {$base_path}/client/dashboard.php");

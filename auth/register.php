@@ -30,6 +30,10 @@ if($_SERVER['REQUEST_METHOD'] == 'POST') {
     $confirm_password = $_POST['confirm_password'];
     $phone = sanitize($_POST['phone']);
     $user_type = sanitize($_POST['type']);
+    $allowed = ['client', 'owner'];
+    if (!in_array($user_type, $allowed, true)) {
+        $user_type = 'client';
+    }
     
     // Validation
     $hasLower = preg_match('/[a-z]/', $password);

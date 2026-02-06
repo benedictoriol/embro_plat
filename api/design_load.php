@@ -67,7 +67,7 @@ if ($version_id > 0) {
 }
 
 $map_preview = function ($filename) {
-    return $filename ? 'assets/uploads/designs/' . $filename : null;
+    return $filename ? '../assets/uploads/designs/' . $filename : null;
 };
 
 if ($selected_version) {

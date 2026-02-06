@@ -94,6 +94,6 @@ echo json_encode([
         'id' => $version_id,
         'version_no' => $next_version,
         'preview_file' => $preview_file,
-        'preview_url' => $preview_file ? 'assets/uploads/designs/' . $preview_file : null
+        'preview_url' => $preview_file ? '../assets/uploads/designs/' . $preview_file : null
     ]
 ]);
