@@ -8,26 +8,148 @@ $shop_stmt = $pdo->prepare("SELECT shop_name FROM shops WHERE owner_id = ?");
 $shop_stmt->execute([$owner_id]);
 $shop = $shop_stmt->fetch();
 
+$success = '';
+$error = '';
+$editing_material = null;
+
+if ($_SERVER['REQUEST_METHOD'] === 'POST') {
+    $action = $_POST['action'] ?? '';
+
+    if ($action === 'create_material') {
+        $name = trim($_POST['name'] ?? '');
+        $category = trim($_POST['category'] ?? '');
+        $unit = trim($_POST['unit'] ?? '');
+        $current_stock = $_POST['current_stock'] ?? '';
+        $min_stock_level = $_POST['min_stock_level'] ?? null;
+        $max_stock_level = $_POST['max_stock_level'] ?? null;
+        $unit_cost = $_POST['unit_cost'] ?? null;
+        $supplier = trim($_POST['supplier'] ?? '');
+        $status = $_POST['status'] ?? 'active';
+
+        if ($name === '' || $unit === '' || $current_stock === '') {
+            $error = 'Please provide a material name, unit, and current stock.';
+        } elseif (!is_numeric($current_stock)) {
+            $error = 'Current stock must be a valid number.';
+        } else {
+            $stmt = $pdo->prepare(
+                "INSERT INTO raw_materials (name, category, unit, current_stock, min_stock_level, max_stock_level, unit_cost, supplier, status)
+                 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)"
+            );
+            $stmt->execute([
+                $name,
+                $category !== '' ? $category : null,
+                $unit,
+                $current_stock,
+                $min_stock_level !== '' ? $min_stock_level : null,
+                $max_stock_level !== '' ? $max_stock_level : null,
+                $unit_cost !== '' ? $unit_cost : null,
+                $supplier !== '' ? $supplier : null,
+                $status,
+            ]);
+            $success = 'Raw material added successfully.';
+        }
+    }
+
+    if ($action === 'update_material') {
+        $material_id = (int) ($_POST['material_id'] ?? 0);
+        $name = trim($_POST['name'] ?? '');
+        $category = trim($_POST['category'] ?? '');
+        $unit = trim($_POST['unit'] ?? '');
+        $current_stock = $_POST['current_stock'] ?? '';
+        $min_stock_level = $_POST['min_stock_level'] ?? null;
+        $max_stock_level = $_POST['max_stock_level'] ?? null;
+        $unit_cost = $_POST['unit_cost'] ?? null;
+        $supplier = trim($_POST['supplier'] ?? '');
+        $status = $_POST['status'] ?? 'active';
+
+        if ($material_id <= 0 || $name === '' || $unit === '' || $current_stock === '') {
+            $error = 'Please provide all required fields to update the material.';
+        } elseif (!is_numeric($current_stock)) {
+            $error = 'Current stock must be a valid number.';
+        } else {
+            $stmt = $pdo->prepare(
+                "UPDATE raw_materials
+                 SET name = ?, category = ?, unit = ?, current_stock = ?, min_stock_level = ?, max_stock_level = ?, unit_cost = ?, supplier = ?, status = ?
+                 WHERE id = ?"
+            );
+            $stmt->execute([
+                $name,
+                $category !== '' ? $category : null,
+                $unit,
+                $current_stock,
+                $min_stock_level !== '' ? $min_stock_level : null,
+                $max_stock_level !== '' ? $max_stock_level : null,
+                $unit_cost !== '' ? $unit_cost : null,
+                $supplier !== '' ? $supplier : null,
+                $status,
+                $material_id,
+            ]);
+            $success = 'Raw material updated successfully.';
+        }
+    }
+
+    if ($action === 'delete_material') {
+        $material_id = (int) ($_POST['material_id'] ?? 0);
+        if ($material_id > 0) {
+            $stmt = $pdo->prepare("DELETE FROM raw_materials WHERE id = ?");
+            $stmt->execute([$material_id]);
+            $success = 'Raw material removed successfully.';
+        } else {
+            $error = 'Unable to delete the selected material.';
+        }
+    }
+}
+
+if (isset($_GET['edit_id'])) {
+    $edit_id = (int) $_GET['edit_id'];
+    if ($edit_id > 0) {
+        $edit_stmt = $pdo->prepare("SELECT * FROM raw_materials WHERE id = ?");
+        $edit_stmt->execute([$edit_id]);
+        $editing_material = $edit_stmt->fetch();
+    }
+}
+
+$materials_stmt = $pdo->query("SELECT * FROM raw_materials ORDER BY created_at DESC");
+$materials = $materials_stmt->fetchAll();
+
+$inventory_value = 0.0;
+$reorder_value = 0.0;
+$low_stock_materials = [];
+
+foreach ($materials as $material) {
+    $current_stock = (float) $material['current_stock'];
+    $unit_cost = $material['unit_cost'] !== null ? (float) $material['unit_cost'] : 0.0;
+    $inventory_value += $current_stock * $unit_cost;
+
+    if ($material['min_stock_level'] !== null && $current_stock <= (float) $material['min_stock_level']) {
+        $low_stock_materials[] = $material;
+        $deficit = (float) $material['min_stock_level'] - $current_stock;
+        if ($deficit > 0) {
+            $reorder_value += $deficit * $unit_cost;
+        }
+    }
+}
+
 $inventory_kpis = [
     [
-        'label' => 'Materials in stock',
-        'value' => 128,
-        'note' => 'Active SKUs tracked this week.',
+        'label' => 'Materials tracked',
+        'value' => count($materials),
+        'note' => 'Active SKUs available to production.',
         'icon' => 'fas fa-boxes-stacked',
         'tone' => 'primary',
     ],
     [
         'label' => 'Low-stock items',
-        'value' => 9,
-        'note' => 'Below reorder point.',
+        'value' => count($low_stock_materials),
+        'note' => 'Below or equal to reorder point.',
         'icon' => 'fas fa-triangle-exclamation',
         'tone' => 'warning',
     ],
     [
-        'label' => 'Reorder value',
-        'value' => '₱18,450',
-        'note' => 'Projected replenishment cost.',
-        'icon' => 'fas fa-receipt',
+        'label' => 'On-hand value',
+        'value' => '₱' . number_format($inventory_value, 2),
+        'note' => 'Estimated value of materials on hand.',
+        'icon' => 'fas fa-wallet',
         'tone' => 'info',
     ],
     [
@@ -36,85 +158,6 @@ $inventory_kpis = [
         'note' => 'Average run rate coverage.',
         'icon' => 'fas fa-calendar-day',
         'tone' => 'success',
-    ],
-];
-
-$materials = [
-    [
-        'name' => 'Polyester thread - Navy',
-        'category' => 'Thread',
-        'on_hand' => '28 cones',
-        'reorder_point' => '20 cones',
-        'next_delivery' => 'Sept 18',
-        'status' => 'Healthy',
-    ],
-    [
-        'name' => 'Rayon thread - Crimson',
-        'category' => 'Thread',
-        'on_hand' => '12 cones',
-        'reorder_point' => '15 cones',
-        'next_delivery' => 'Sept 14',
-        'status' => 'Low',
-    ],
-    [
-        'name' => 'Cut-away stabilizer 70gsm',
-        'category' => 'Stabilizer',
-        'on_hand' => '19 rolls',
-        'reorder_point' => '10 rolls',
-        'next_delivery' => 'Sept 22',
-        'status' => 'Healthy',
-    ],
-    [
-        'name' => '3D foam sheets (3mm)',
-        'category' => 'Foam',
-        'on_hand' => '6 packs',
-        'reorder_point' => '8 packs',
-        'next_delivery' => 'Sept 12',
-        'status' => 'Low',
-    ],
-    [
-        'name' => 'Backing fabric - Black',
-        'category' => 'Backing',
-        'on_hand' => '42 yards',
-        'reorder_point' => '30 yards',
-        'next_delivery' => 'Sept 20',
-        'status' => 'Healthy',
-    ],
-];
-
-$automation_rules = [
-    [
-        'title' => 'Production-based deduction',
-        'detail' => 'Deduct thread, stabilizer, and backing based on stitch count and hoop size once a job moves to production.',
-        'icon' => 'fas fa-robot',
-    ],
-    [
-        'title' => 'Batch usage reconciliation',
-        'detail' => 'Auto-reconcile actual consumption after QA to keep yields and waste percentages accurate.',
-        'icon' => 'fas fa-clipboard-check',
-    ],
-    [
-        'title' => 'Supplier lead-time mapping',
-        'detail' => 'Attach supplier SLAs so reorder dates adjust automatically based on shipping windows.',
-        'icon' => 'fas fa-truck-fast',
-    ],
-];
-
-$alert_channels = [
-    [
-        'channel' => 'Low-stock alerts',
-        'detail' => 'Notify owner and floor lead when inventory dips below the reorder point.',
-        'icon' => 'fas fa-bell',
-    ],
-    [
-        'channel' => 'Critical shortage',
-        'detail' => 'Escalate with SMS when coverage drops under 3 production days.',
-        'icon' => 'fas fa-circle-exclamation',
-    ],
-    [
-        'channel' => 'Incoming delivery',
-        'detail' => 'Reminder 24 hours before supplier drop-offs for stocking preparation.',
-        'icon' => 'fas fa-box-open',
     ],
 ];
 ?>
@@ -142,6 +185,10 @@ $alert_channels = [
             grid-column: span 12;
         }
 
+        .form-card {
+            grid-column: span 12;
+        }
+
         .stock-card {
             grid-column: span 8;
         }
@@ -163,6 +210,29 @@ $alert_channels = [
 
         .kpi-item i {
             font-size: 1.5rem;
+        }
+
+        .form-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+            gap: 1rem;
+        }
+
+        .form-grid .form-group {
+            display: flex;
+            flex-direction: column;
+        }
+
+        .form-grid label {
+            font-weight: 600;
+            margin-bottom: 0.35rem;
+        }
+
+        .form-actions {
+            display: flex;
+            gap: 0.75rem;
+            align-items: center;
+            margin-top: 1rem;
         }
 
         .automation-item {
@@ -195,6 +265,10 @@ $alert_channels = [
         .alert-item i {
             color: var(--primary-600);
             margin-top: 0.25rem;
+        }
+        
+        .stock-table td {
+            vertical-align: top;
         }
     </style>
 </head>
@@ -236,6 +310,13 @@ $alert_channels = [
             </div>
         </div>
 
+        <?php if ($error): ?>
+            <div class="alert alert-danger"><?php echo htmlspecialchars($error); ?></div>
+        <?php endif; ?>
+        <?php if ($success): ?>
+            <div class="alert alert-success"><?php echo htmlspecialchars($success); ?></div>
+        <?php endif; ?>
+
         <div class="inventory-grid">
             <div class="card purpose-card">
                 <div class="card-header">
@@ -262,34 +343,118 @@ $alert_channels = [
                 </div>
             <?php endforeach; ?>
 
+            <div class="card form-card">
+                <div class="card-header">
+                    <h3><i class="fas fa-pen text-primary"></i> <?php echo $editing_material ? 'Update Raw Material' : 'Add Raw Material'; ?></h3>
+                    <p class="text-muted">Capture material details, current stock, and reorder thresholds.</p>
+                </div>
+                <form method="post">
+                    <input type="hidden" name="action" value="<?php echo $editing_material ? 'update_material' : 'create_material'; ?>">
+                    <?php if ($editing_material): ?>
+                        <input type="hidden" name="material_id" value="<?php echo (int) $editing_material['id']; ?>">
+                    <?php endif; ?>
+                    <div class="form-grid">
+                        <div class="form-group">
+                            <label for="name">Material name *</label>
+                            <input type="text" id="name" name="name" required value="<?php echo htmlspecialchars($editing_material['name'] ?? ''); ?>">
+                        </div>
+                        <div class="form-group">
+                            <label for="category">Category</label>
+                            <input type="text" id="category" name="category" value="<?php echo htmlspecialchars($editing_material['category'] ?? ''); ?>">
+                        </div>
+                        <div class="form-group">
+                            <label for="unit">Unit *</label>
+                            <input type="text" id="unit" name="unit" required value="<?php echo htmlspecialchars($editing_material['unit'] ?? ''); ?>" placeholder="cones, rolls, yards">
+                        </div>
+                        <div class="form-group">
+                            <label for="current_stock">Current stock *</label>
+                            <input type="number" step="0.01" id="current_stock" name="current_stock" required value="<?php echo htmlspecialchars($editing_material['current_stock'] ?? ''); ?>">
+                        </div>
+                        <div class="form-group">
+                            <label for="min_stock_level">Reorder point</label>
+                            <input type="number" step="0.01" id="min_stock_level" name="min_stock_level" value="<?php echo htmlspecialchars($editing_material['min_stock_level'] ?? ''); ?>">
+                        </div>
+                        <div class="form-group">
+                            <label for="max_stock_level">Max stock level</label>
+                            <input type="number" step="0.01" id="max_stock_level" name="max_stock_level" value="<?php echo htmlspecialchars($editing_material['max_stock_level'] ?? ''); ?>">
+                        </div>
+                        <div class="form-group">
+                            <label for="unit_cost">Unit cost</label>
+                            <input type="number" step="0.01" id="unit_cost" name="unit_cost" value="<?php echo htmlspecialchars($editing_material['unit_cost'] ?? ''); ?>">
+                        </div>
+                        <div class="form-group">
+                            <label for="supplier">Supplier</label>
+                            <input type="text" id="supplier" name="supplier" value="<?php echo htmlspecialchars($editing_material['supplier'] ?? ''); ?>">
+                        </div>
+                        <div class="form-group">
+                            <label for="status">Status</label>
+                            <select id="status" name="status">
+                                <option value="active" <?php echo ($editing_material['status'] ?? 'active') === 'active' ? 'selected' : ''; ?>>Active</option>
+                                <option value="inactive" <?php echo ($editing_material['status'] ?? '') === 'inactive' ? 'selected' : ''; ?>>Inactive</option>
+                            </select>
+                        </div>
+                    </div>
+                    <div class="form-actions">
+                        <button type="submit" class="btn btn-primary">
+                            <?php echo $editing_material ? 'Update Material' : 'Add Material'; ?>
+                        </button>
+                        <?php if ($editing_material): ?>
+                            <a href="raw_material_inventory.php" class="btn btn-outline-secondary">Cancel</a>
+                        <?php endif; ?>
+                    </div>
+                </form>
+            </div>
+
             <div class="card stock-card">
                 <div class="card-header">
                     <h3><i class="fas fa-layer-group text-primary"></i> Material Stock Levels</h3>
                     <p class="text-muted">Current on-hand quantities with reorder thresholds.</p>
                 </div>
-                <table class="table">
+                <table class="table stock-table">
                     <thead>
                         <tr>
                             <th>Material</th>
                             <th>Category</th>
                             <th>On-hand</th>
                             <th>Reorder point</th>
-                            <th>Next delivery</th>
+                            <th>Unit cost</th>
+                            <th>Supplier</th>
                             <th>Status</th>
+                            <th>Actions</th>
                         </tr>
                     </thead>
                     <tbody>
+                        <?php if (!$materials): ?>
+                            <tr>
+                                <td colspan="8" class="text-muted">No raw materials recorded yet.</td>
+                            </tr>
+                        <?php endif; ?>
                         <?php foreach ($materials as $material): ?>
                             <tr>
-                                <td><?php echo htmlspecialchars($material['name']); ?></td>
-                                <td><?php echo htmlspecialchars($material['category']); ?></td>
-                                <td><?php echo htmlspecialchars($material['on_hand']); ?></td>
-                                <td><?php echo htmlspecialchars($material['reorder_point']); ?></td>
-                                <td class="text-muted"><?php echo htmlspecialchars($material['next_delivery']); ?></td>
                                 <td>
-                                    <span class="badge badge-<?php echo $material['status'] === 'Low' ? 'warning' : 'success'; ?>">
-                                        <?php echo $material['status']; ?>
+                                    <strong><?php echo htmlspecialchars($material['name']); ?></strong><br>
+                                    <small class="text-muted">Unit: <?php echo htmlspecialchars($material['unit']); ?></small>
+                                </td>
+                                <td><?php echo htmlspecialchars($material['category'] ?? '—'); ?></td>
+                                <td><?php echo htmlspecialchars($material['current_stock']); ?></td>
+                                <td><?php echo htmlspecialchars($material['min_stock_level'] ?? '—'); ?></td>
+                                <td><?php echo $material['unit_cost'] !== null ? '₱' . number_format((float) $material['unit_cost'], 2) : '—'; ?></td>
+                                <td><?php echo htmlspecialchars($material['supplier'] ?? '—'); ?></td>
+                                <td>
+                                    <span class="badge badge-<?php echo $material['status'] === 'active' ? 'success' : 'secondary'; ?>">
+                                        <?php echo htmlspecialchars(ucfirst($material['status'])); ?>
                                     </span>
+                                    <?php if ($material['min_stock_level'] !== null && (float) $material['current_stock'] <= (float) $material['min_stock_level']): ?>
+                                        <span class="badge badge-warning">Low</span>
+                                    <?php endif; ?>
+                                </td>
+                                <td>
+                                    <a class="btn btn-sm btn-outline-primary" href="raw_material_inventory.php?edit_id=<?php echo (int) $material['id']; ?>">Edit</a>
+                                    <form method="post" style="display:inline-block" onsubmit="return confirm('Remove this material from inventory?');">
+                                        <input type="hidden" name="action" value="delete_material">
+                                        <input type="hidden" name="material_id" value="<?php echo (int) $material['id']; ?>">
+                                        <button type="submit" class="btn btn-sm btn-outline-danger">Delete</button>
+                                    </form>
                                 </td>
                             </tr>
                         <?php endforeach; ?>
@@ -299,35 +464,55 @@ $alert_channels = [
 
             <div class="card automation-card">
                 <div class="card-header">
-                    <h3><i class="fas fa-gear text-primary"></i> Automation</h3>
-                    <p class="text-muted">Smart controls that keep inventory synced with production.</p>
+                    <h3><i class="fas fa-gear text-primary"></i> Low-stock Alerts</h3>
+                    <p class="text-muted">Materials that need replenishment soon.</p>
                 </div>
-                <?php foreach ($automation_rules as $rule): ?>
+                <?php if (!$low_stock_materials): ?>
+                    <div class="automation-item">
+                        <p class="text-muted mb-0">All tracked materials are above reorder point.</p>
+                    </div>
+                <?php endif; ?>
+                <?php foreach ($low_stock_materials as $material): ?>
                     <div class="automation-item">
                         <div class="d-flex align-center gap-2 mb-2">
-                            <i class="<?php echo $rule['icon']; ?> text-primary"></i>
-                            <strong><?php echo $rule['title']; ?></strong>
+                            <i class="fas fa-triangle-exclamation text-warning"></i>
+                            <strong><?php echo htmlspecialchars($material['name']); ?></strong>
                         </div>
-                        <p class="text-muted mb-0"><?php echo $rule['detail']; ?></p>
+                        <p class="text-muted mb-0">
+                            On-hand: <?php echo htmlspecialchars($material['current_stock']); ?> <?php echo htmlspecialchars($material['unit']); ?> ·
+                            Reorder point: <?php echo htmlspecialchars($material['min_stock_level']); ?> <?php echo htmlspecialchars($material['unit']); ?>
+                        </p>
                     </div>
                 <?php endforeach; ?>
             </div>
 
             <div class="card alerts-card">
                 <div class="card-header">
-                    <h3><i class="fas fa-bell text-primary"></i> Alerts &amp; Notifications</h3>
-                    <p class="text-muted">Low-stock alerts help keep production uninterrupted.</p>
+                    <h3><i class="fas fa-bell text-primary"></i> Actionable Notes</h3>
+                    <p class="text-muted">Use this module as the source of truth for production inventory.</p>
                 </div>
                 <div class="alert-list">
-                    <?php foreach ($alert_channels as $alert): ?>
-                        <div class="alert-item">
-                            <i class="<?php echo $alert['icon']; ?>"></i>
-                            <div>
-                                <strong><?php echo $alert['channel']; ?></strong>
-                                <p class="text-muted mb-0"><?php echo $alert['detail']; ?></p>
-                            </div>
+                    <div class="alert-item">
+                        <i class="fas fa-bell"></i>
+                        <div>
+                            <strong>Low-stock alerts</strong>
+                            <p class="text-muted mb-0">Materials below reorder point appear immediately for owner follow-up.</p>
                         </div>
-                    <?php endforeach; ?>
+                    </div>
+                    <div class="alert-item">
+                        <i class="fas fa-clipboard-check"></i>
+                        <div>
+                            <strong>Inventory hygiene</strong>
+                            <p class="text-muted mb-0">Update stock levels after every delivery or production batch.</p>
+                        </div>
+                    </div>
+                    <div class="alert-item">
+                        <i class="fas fa-box-open"></i>
+                        <div>
+                            <strong>Supplier coordination</strong>
+                            <p class="text-muted mb-0">Track suppliers and unit costs to support smarter reorder decisions.</p>
+                        </div>
+                    </div>
                 </div>
             </div>
         </div>
