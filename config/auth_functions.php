@@ -49,25 +49,23 @@ function check_role($required_role) {
  *
  * @param string $required_role Role required to access the page
  */
-function require_role($required_role) {
-    if (isset($_SESSION['user']) && is_session_expired()) {
-        end_user_session();
-        header("Location: ../auth/login.php");
-        exit();
+function require_role($roles)
+{
+    if (!isset($_SESSION['user']['role'])) {
+        header("Location: /auth/login.php");
+        exit;
     }
 
-    if (!refresh_session_user_status()) {
-        end_user_session();
-        header("Location: ../auth/login.php");
-        exit();
+    $userRole = $_SESSION['user']['role'];
+
+    // Normalize to array
+    if (!is_array($roles)) {
+        $roles = [$roles];
     }
 
-    if (!check_role($required_role)) {
-        if (isset($_SESSION['user']) && !is_active_user()) {
-            end_user_session();
-        }
-        header("Location: ../auth/login.php");
-        exit();
+    if (!in_array($userRole, $roles, true)) {
+        header("Location: /auth/login.php");
+        exit;
     }
 }
 

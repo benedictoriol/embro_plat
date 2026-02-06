@@ -1,8 +1,7 @@
 <?php
 session_start();
 require_once '../config/db.php';
-require_role('hr');
-require_role(required_role: 'owner');
+require_role(['hr','owner']);
 
 $user = $_SESSION['user'];
 $role = $user['role'];
