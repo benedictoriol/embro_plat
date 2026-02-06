@@ -40,6 +40,7 @@ $default_pricing_settings = [
 $search_term = sanitize($_GET['search'] ?? '');
 $service_filter = sanitize($_GET['service'] ?? '');
 $open_filter = sanitize($_GET['open'] ?? '');
+$prefill_design_version_id = (int) ($_GET['design_version_id'] ?? 0);
 
 function validate_design_description(string $description): string {
     $trimmed = trim($description);
@@ -314,6 +315,7 @@ if(isset($_POST['place_order'])) {
     $quantity = (int) ($_POST['quantity'] ?? 0);
     $client_notes = sanitize($_POST['client_notes'] ?? '');
     $complexity_level = sanitize($_POST['complexity_level'] ?? 'Standard');
+    $design_version_id = (int) ($_POST['design_version_id'] ?? 0);
     $requested_add_ons = $_POST['add_ons'] ?? [];
     if (!is_array($requested_add_ons)) {
         $requested_add_ons = [];
@@ -364,6 +366,24 @@ if(isset($_POST['place_order'])) {
             throw new RuntimeException($design_error);
         }
 
+        $design_version = null;
+        if ($design_version_id > 0) {
+            if (isset($_FILES['design_file']) && $_FILES['design_file']['error'] !== UPLOAD_ERR_NO_FILE) {
+                throw new RuntimeException('Please choose either a saved design version or upload a file, not both.');
+            }
+            $design_version_stmt = $pdo->prepare("
+                SELECT dv.id, dv.preview_file
+                FROM design_versions dv
+                INNER JOIN design_projects dp ON dv.project_id = dp.id
+                WHERE dv.id = ? AND dp.client_id = ?
+            ");
+            $design_version_stmt->execute([$design_version_id, $client_id]);
+            $design_version = $design_version_stmt->fetch();
+            if (!$design_version) {
+                throw new RuntimeException('Selected design version is not available.');
+            }
+        }
+
         if (!is_shop_open($shop_policy)) {
             throw new RuntimeException('Selected shop is currently closed and cannot accept new orders.');
         }
@@ -399,6 +419,7 @@ if(isset($_POST['place_order'])) {
             'estimated_total' => round($estimated_total, 2),
         ];
         $quote_details_json = json_encode($quote_details);
+        $design_file = $design_version['preview_file'] ?? null;
 
         // Start transaction
         $pdo->beginTransaction();
@@ -406,8 +427,8 @@ if(isset($_POST['place_order'])) {
         // Insert order
         $order_stmt = $pdo->prepare("
             INSERT INTO orders (order_number, client_id, shop_id, service_type, design_description, 
-                                quantity, price, client_notes, quote_details, status) 
-            VALUES (?, ?, ?, ?, ?, ?, NULL, ?, ?, 'pending')
+                                quantity, price, client_notes, quote_details, design_file, design_version_id, status) 
+            VALUES (?, ?, ?, ?, ?, ?, NULL, ?, ?, ?, ?, 'pending')
         ");
         
         $order_stmt->execute([
@@ -418,13 +439,15 @@ if(isset($_POST['place_order'])) {
             $design_description,
             $quantity,
             $client_notes,
-            $quote_details_json
+            $quote_details_json,
+            $design_file,
+            $design_version_id > 0 ? $design_version_id : null
         ]);
         
         $order_id = $pdo->lastInsertId();
         
         // Handle file upload
-        if(isset($_FILES['design_file']) && $_FILES['design_file']['error'] !== UPLOAD_ERR_NO_FILE) {
+        if ($design_version_id <= 0 && isset($_FILES['design_file']) && $_FILES['design_file']['error'] !== UPLOAD_ERR_NO_FILE) {
             $file = $_FILES['design_file'];
             $allowed_extensions = array_merge(ALLOWED_IMAGE_TYPES, ALLOWED_DOC_TYPES);
 $upload = save_uploaded_media(
@@ -675,6 +698,7 @@ $upload = save_uploaded_media(
             </div>
         </form>
         <form method="POST" enctype="multipart/form-data" id="orderForm">
+            <input type="hidden" name="design_version_id" id="design_version_id" value="<?php echo $prefill_design_version_id; ?>">
             <!-- Step 1: Select Shop -->
             <div class="card mb-4">
                 <h3>Step 1: Select Service Provider</h3>

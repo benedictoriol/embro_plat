@@ -90,6 +90,11 @@ function collect_media_references(PDO $pdo): array {
         $references['designs'][] = basename((string) $file);
     }
 
+    $preview_stmt = $pdo->query("SELECT preview_file FROM design_versions WHERE preview_file IS NOT NULL AND preview_file <> ''");
+    foreach ($preview_stmt->fetchAll(PDO::FETCH_COLUMN) as $file) {
+        $references['designs'][] = basename((string) $file);
+    }
+
     $payment_stmt = $pdo->query("SELECT proof_file FROM payments WHERE proof_file IS NOT NULL AND proof_file <> ''");
     foreach ($payment_stmt->fetchAll(PDO::FETCH_COLUMN) as $file) {
         $references['payments'][] = basename((string) $file);
