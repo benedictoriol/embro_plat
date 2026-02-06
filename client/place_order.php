@@ -159,7 +159,7 @@ $shops = $shops_stmt->fetchAll();
 $capacity_map = [];
 $capacity_stmt = $pdo->query("
     SELECT shop_id, COALESCE(SUM(max_active_orders), 0) AS total_capacity
-    FROM shop_employees
+    FROM shop_staffs
     WHERE status = 'active'
     GROUP BY shop_id
 ");

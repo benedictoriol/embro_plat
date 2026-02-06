@@ -79,7 +79,7 @@ $active_staff_stmt = $pdo->prepare("
         se.availability_start,
         se.availability_end,
         se.max_active_orders
-    FROM shop_employees se
+    FROM shop_staffs se
     JOIN users u ON se.user_id = u.id
     WHERE se.shop_id = ? AND se.status = 'active'
     ORDER BY u.fullname ASC
@@ -93,7 +93,7 @@ foreach($active_staff as $staff_member) {
 
 if(isset($_POST['schedule_job'])) {
     $schedule_order_id = (int) ($_POST['order_id'] ?? 0);
-    $employee_id = (int) ($_POST['employee_id'] ?? 0);
+    $staff_id = (int) ($_POST['staff_id'] ?? 0);
     $scheduled_date = $_POST['scheduled_date'] ?? '';
     $scheduled_time = $_POST['scheduled_time'] ?? '';
     $task_description = sanitize($_POST['task_description'] ?? '');
@@ -114,17 +114,17 @@ if(isset($_POST['schedule_job'])) {
         $error = "Order not found for this shop.";
     } elseif(in_array($schedule_order['status'], ['completed', 'cancelled'], true)) {
         $error = "Completed or cancelled orders cannot be scheduled.";
-    } elseif($employee_id <= 0 || !isset($active_staff_map[$employee_id])) {
+    } elseif($staff_id <= 0 || !isset($active_staff_map[$staff_id])) {
         $error = "Please select an active staff member to schedule.";
     } elseif($scheduled_date === '' || !$date_object) {
         $error = "Please provide a valid scheduled date.";
     } elseif($scheduled_time_value !== null && !$time_object) {
         $error = "Please provide a valid scheduled time.";
     } else {
-        $employee = $active_staff_map[$employee_id];
+        $staff = $active_staff_map[$staff_id];
         $availability_days = [];
-        if(!empty($employee['availability_days'])) {
-            $decoded_days = json_decode($employee['availability_days'], true);
+        if(!empty($staff['availability_days'])) {
+            $decoded_days = json_decode($staff['availability_days'], true);
             if(is_array($decoded_days)) {
                 $availability_days = array_map('intval', $decoded_days);
             }
@@ -133,8 +133,8 @@ if(isset($_POST['schedule_job'])) {
         $schedule_day = (int) $date_object->format('N');
         if(!empty($availability_days) && !in_array($schedule_day, $availability_days, true)) {
             $error = "This staff member is not available on the selected date.";
-        } elseif($scheduled_time_value !== null && $employee['availability_start'] && $employee['availability_end']
-            && ($scheduled_time_value < $employee['availability_start'] || $scheduled_time_value > $employee['availability_end'])) {
+        } elseif($scheduled_time_value !== null && $staff['availability_start'] && $staff['availability_end']
+            && ($scheduled_time_value < $staff['availability_start'] || $scheduled_time_value > $staff['availability_end'])) {
             $error = "The scheduled time is outside this staff member's availability hours.";
         } else {
             $capacity_stmt = $pdo->prepare("
@@ -143,7 +143,7 @@ if(isset($_POST['schedule_job'])) {
                     SELECT js.order_id
                     FROM job_schedule js
                     JOIN orders o ON js.order_id = o.id
-                    WHERE js.employee_id = ?
+                    WHERE js.staff_id = ?
                       AND js.scheduled_date = ?
                       AND o.status NOT IN ('completed', 'cancelled')
                       AND js.order_id != ?
@@ -156,22 +156,22 @@ if(isset($_POST['schedule_job'])) {
                       AND o.id != ?
                       AND NOT EXISTS (
                         SELECT 1 FROM job_schedule js2
-                        WHERE js2.order_id = o.id AND js2.employee_id = ?
+                        WHERE js2.order_id = o.id AND js2.staff_id = ?
                       )
                 ) as scheduled_jobs
             ");
             $capacity_stmt->execute([
-                $employee_id,
+                $staff_id,
                 $scheduled_date,
                 $schedule_order_id,
-                $employee_id,
+                $staff_id,
                 $scheduled_date,
                 $schedule_order_id,
-                $employee_id,
+                $staff_id,
             ]);
             $scheduled_count = (int) $capacity_stmt->fetchColumn();
 
-            $max_active_orders = (int) ($employee['max_active_orders'] ?? 0);
+            $max_active_orders = (int) ($staff['max_active_orders'] ?? 0);
             if($max_active_orders > 0 && $scheduled_count >= $max_active_orders) {
                 $error = "Scheduling this job would exceed the staff member's daily capacity.";
             } else {
@@ -179,12 +179,12 @@ if(isset($_POST['schedule_job'])) {
                     $conflict_stmt = $pdo->prepare("
                         SELECT COUNT(*)
                         FROM job_schedule
-                        WHERE employee_id = ?
+                        WHERE staff_id = ?
                           AND scheduled_date = ?
                           AND scheduled_time = ?
                           AND order_id != ?
                     ");
-                    $conflict_stmt->execute([$employee_id, $scheduled_date, $scheduled_time_value, $schedule_order_id]);
+                    $conflict_stmt->execute([$staff_id, $scheduled_date, $scheduled_time_value, $schedule_order_id]);
                     $conflict_count = (int) $conflict_stmt->fetchColumn();
                     if($conflict_count > 0) {
                         $error = "This staff member already has a job scheduled at the same time.";
@@ -199,11 +199,11 @@ if(isset($_POST['schedule_job'])) {
                     if($existing_schedule) {
                         $update_schedule_stmt = $pdo->prepare("
                             UPDATE job_schedule
-                            SET employee_id = ?, scheduled_date = ?, scheduled_time = ?, task_description = ?
+                            SET staff_id = ?, scheduled_date = ?, scheduled_time = ?, task_description = ?
                             WHERE id = ?
                         ");
                         $update_schedule_stmt->execute([
-                            $employee_id,
+                            $staff_id,
                             $scheduled_date,
                             $scheduled_time_value,
                             $task_description ?: null,
@@ -211,12 +211,12 @@ if(isset($_POST['schedule_job'])) {
                         ]);
                     } else {
                         $insert_schedule_stmt = $pdo->prepare("
-                            INSERT INTO job_schedule (order_id, employee_id, scheduled_date, scheduled_time, task_description)
+                            INSERT INTO job_schedule (order_id, staff_id, scheduled_date, scheduled_time, task_description)
                             VALUES (?, ?, ?, ?, ?)
                         ");
                         $insert_schedule_stmt->execute([
                             $schedule_order_id,
-                            $employee_id,
+                            $staff_id,
                             $scheduled_date,
                             $scheduled_time_value,
                             $task_description ?: null
@@ -228,7 +228,7 @@ if(isset($_POST['schedule_job'])) {
                         SET assigned_to = ?, scheduled_date = ?, updated_at = NOW()
                         WHERE id = ? AND shop_id = ?
                     ");
-                    $update_order_stmt->execute([$employee_id, $scheduled_date, $schedule_order_id, $shop['id']]);
+                    $update_order_stmt->execute([$staff_id, $scheduled_date, $schedule_order_id, $shop['id']]);
 
                     if($max_active_orders > 0 && $scheduled_count + 1 === $max_active_orders) {
                         $warning = "Scheduling this job reaches the staff member's daily capacity.";
@@ -236,15 +236,15 @@ if(isset($_POST['schedule_job'])) {
 
                     create_notification(
                         $pdo,
-                        $employee_id,
+                        $staff_id,
                         $schedule_order_id,
                         'info',
                         'You have been scheduled for order #' . $schedule_order['order_number'] . ' on ' . date('M d, Y', strtotime($scheduled_date)) . '.'
                     );
 
                     $success = "Job scheduled successfully.";
-                    $order['assigned_to'] = $employee_id;
-                    $order['assigned_name'] = $employee['fullname'];
+                    $order['assigned_to'] = $staff_id;
+                    $order['assigned_name'] = $staff['fullname'];
                     $order['scheduled_date'] = $scheduled_date;
                 }
             }
@@ -253,24 +253,24 @@ if(isset($_POST['schedule_job'])) {
 }
 
 $schedule_stmt = $pdo->prepare("
-    SELECT js.*, u.fullname as employee_name
+    SELECT js.*, u.fullname as staff_name
     FROM job_schedule js
-    JOIN users u ON js.employee_id = u.id
+    JOIN users u ON js.staff_id = u.id
     WHERE js.order_id = ?
     LIMIT 1
 ");
 $schedule_stmt->execute([$order_id]);
 $schedule_entry = $schedule_stmt->fetch();
 $schedule_capacity = null;
-if($schedule_entry && isset($active_staff_map[(int) $schedule_entry['employee_id']])) {
-    $employee = $active_staff_map[(int) $schedule_entry['employee_id']];
+if($schedule_entry && isset($active_staff_map[(int) $schedule_entry['staff_id']])) {
+    $staff = $active_staff_map[(int) $schedule_entry['staff_id']];
     $capacity_stmt = $pdo->prepare("
         SELECT COUNT(*)
         FROM (
             SELECT js.order_id
             FROM job_schedule js
             JOIN orders o ON js.order_id = o.id
-            WHERE js.employee_id = ?
+            WHERE js.staff_id = ?
               AND js.scheduled_date = ?
               AND o.status NOT IN ('completed', 'cancelled')
             UNION
@@ -281,20 +281,20 @@ if($schedule_entry && isset($active_staff_map[(int) $schedule_entry['employee_id
               AND o.status NOT IN ('completed', 'cancelled')
               AND NOT EXISTS (
                 SELECT 1 FROM job_schedule js2
-                WHERE js2.order_id = o.id AND js2.employee_id = ?
+                WHERE js2.order_id = o.id AND js2.staff_id = ?
               )
         ) as scheduled_jobs
     ");
     $capacity_stmt->execute([
-        $schedule_entry['employee_id'],
+        $schedule_entry['staff_id'],
         $schedule_entry['scheduled_date'],
-        $schedule_entry['employee_id'],
+        $schedule_entry['staff_id'],
         $schedule_entry['scheduled_date'],
-        $schedule_entry['employee_id'],
+        $schedule_entry['staff_id'],
     ]);
     $schedule_capacity = [
         'count' => (int) $capacity_stmt->fetchColumn(),
-        'limit' => (int) ($employee['max_active_orders'] ?? 0),
+        'limit' => (int) ($staff['max_active_orders'] ?? 0),
     ];
 }
 
@@ -549,7 +549,7 @@ $is_design_image = $design_file_name && in_array($design_file_extension, ALLOWED
             <h3>Schedule & Capacity</h3>
             <?php if($schedule_entry): ?>
                 <div class="schedule-summary mb-3">
-                    <span><strong>Assigned staff:</strong> <?php echo htmlspecialchars($schedule_entry['employee_name']); ?></span>
+                    <span><strong>Assigned staff:</strong> <?php echo htmlspecialchars($schedule_entry['staff_name']); ?></span>
                     <span><strong>Date:</strong> <?php echo date('M d, Y', strtotime($schedule_entry['scheduled_date'])); ?></span>
                     <span>
                         <strong>Time:</strong>
@@ -570,14 +570,14 @@ $is_design_image = $design_file_name && in_array($design_file_extension, ALLOWED
                 <input type="hidden" name="order_id" value="<?php echo (int) $order['id']; ?>">
                 <div class="schedule-grid">
                     <div class="form-group">
-                        <label for="employee_id">Assign staff</label>
-                        <select name="employee_id" id="employee_id" class="form-control" required>
+                        <label for="staff_id">Assign staff</label>
+                        <select name="staff_id" id="staff_id" class="form-control" required>
                             <option value="">Select staff</option>
                             <?php foreach($active_staff as $staff_member): ?>
                                 <option value="<?php echo (int) $staff_member['user_id']; ?>"
                                     <?php
-                                        $selected_employee = $schedule_entry['employee_id'] ?? $order['assigned_to'] ?? null;
-                                        echo ((int) $staff_member['user_id'] === (int) $selected_employee) ? 'selected' : '';
+                                        $selected_staff = $schedule_entry['staff_id'] ?? $order['assigned_to'] ?? null;
+                                        echo ((int) $staff_member['user_id'] === (int) $selected_staff) ? 'selected' : '';
                                     ?>
                                 >
                                     <?php echo htmlspecialchars($staff_member['fullname']); ?>

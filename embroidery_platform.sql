@@ -206,10 +206,10 @@ CREATE TABLE `dss_configurations` (
 -- --------------------------------------------------------
 
 --
--- Table structure for table `employees`
+-- Table structure for table `staffs`
 --
 
-CREATE TABLE `employees` (
+CREATE TABLE `staffs` (
   `id` int(11) NOT NULL,
   `user_id` int(11) NOT NULL,
   `department` varchar(100) DEFAULT NULL,
@@ -263,7 +263,7 @@ CREATE TABLE `hiring_posts` (
 CREATE TABLE `job_schedule` (
   `id` int(11) NOT NULL,
   `order_id` int(11) NOT NULL,
-  `employee_id` int(11) NOT NULL,
+  `staff_id` int(11) NOT NULL,
   `scheduled_date` date NOT NULL,
   `scheduled_time` time DEFAULT NULL,
   `task_description` text DEFAULT NULL,
@@ -418,7 +418,7 @@ CREATE TABLE `order_fulfillment_history` (
 CREATE TABLE `order_photos` (
   `id` int(11) NOT NULL,
   `order_id` int(11) NOT NULL,
-  `employee_id` int(11) NOT NULL,
+  `staff_id` int(11) NOT NULL,
   `photo_url` varchar(255) NOT NULL,
   `caption` varchar(255) DEFAULT NULL,
   `uploaded_at` timestamp NOT NULL DEFAULT current_timestamp()
@@ -433,7 +433,7 @@ CREATE TABLE `order_photos` (
 CREATE TABLE `order_status_history` (
   `id` int(11) NOT NULL,
   `order_id` int(11) NOT NULL,
-  `employee_id` int(11) DEFAULT NULL,
+  `staff_id` int(11) DEFAULT NULL,
   `status` enum('pending','accepted','in_progress','completed','cancelled') NOT NULL,
   `progress` int(11) DEFAULT 0,
   `notes` text DEFAULT NULL,
@@ -536,7 +536,7 @@ CREATE TABLE `payment_refunds` (
 
 CREATE TABLE `payroll` (
   `id` int(11) NOT NULL,
-  `employee_id` int(11) NOT NULL,
+  `staff_id` int(11) NOT NULL,
   `pay_period_start` date NOT NULL,
   `pay_period_end` date NOT NULL,
   `basic_salary` decimal(12,2) DEFAULT NULL,
@@ -790,10 +790,10 @@ CREATE TABLE `shop_portfolio` (
 -- --------------------------------------------------------
 
 --
--- Table structure for table `shop_employees`
+-- Table structure for table `shop_staffs`
 --
 
-CREATE TABLE `shop_employees` (
+CREATE TABLE `shop_staffs` (
   `id` int(11) NOT NULL,
   `shop_id` int(11) NOT NULL,
   `user_id` int(11) NOT NULL,
@@ -939,9 +939,9 @@ ALTER TABLE `dss_configurations`
   ADD KEY `created_by` (`created_by`);
 
 --
--- Indexes for table `employees`
+-- Indexes for table `staffs`
 --
-ALTER TABLE `employees`
+ALTER TABLE `staffs`
   ADD PRIMARY KEY (`id`),
   ADD UNIQUE KEY `user_id` (`user_id`);
 
@@ -965,7 +965,7 @@ ALTER TABLE `hiring_posts`
 ALTER TABLE `job_schedule`
   ADD PRIMARY KEY (`id`),
   ADD KEY `order_id` (`order_id`),
-  ADD KEY `employee_id` (`employee_id`);
+  ADD KEY `staff_id` (`staff_id`);
 
 --
 -- Indexes for table `material_orders`
@@ -1028,7 +1028,7 @@ ALTER TABLE `order_fulfillment_history`
 ALTER TABLE `order_photos`
   ADD PRIMARY KEY (`id`),
   ADD KEY `order_id` (`order_id`),
-  ADD KEY `employee_id` (`employee_id`);
+  ADD KEY `staff_id` (`staff_id`);
 
 --
 -- Indexes for table `order_status_history`
@@ -1036,7 +1036,7 @@ ALTER TABLE `order_photos`
 ALTER TABLE `order_status_history`
   ADD PRIMARY KEY (`id`),
   ADD KEY `order_id` (`order_id`),
-  ADD KEY `employee_id` (`employee_id`);
+  ADD KEY `staff_id` (`staff_id`);
 
 --
 -- Indexes for table `otp_verifications`
@@ -1078,7 +1078,7 @@ ALTER TABLE `payment_refunds`
 --
 ALTER TABLE `payroll`
   ADD PRIMARY KEY (`id`),
-  ADD KEY `employee_id` (`employee_id`);
+  ADD KEY `staff_id` (`staff_id`);
 
 --
 -- Indexes for table `shifts`
@@ -1140,9 +1140,9 @@ ALTER TABLE `shop_portfolio`
   ADD KEY `shop_id` (`shop_id`);
 
 --
--- Indexes for table `shop_employees`
+-- Indexes for table `shop_staffs`
 --
-ALTER TABLE `shop_employees`
+ALTER TABLE `shop_staffs`
   ADD PRIMARY KEY (`id`),
   ADD UNIQUE KEY `user_id` (`user_id`),
   ADD KEY `shop_id` (`shop_id`);
@@ -1227,9 +1227,9 @@ ALTER TABLE `dss_configurations`
   MODIFY `id` int(11) NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=11;
 
 --
--- AUTO_INCREMENT for table `employees`
+-- AUTO_INCREMENT for table `staffs`
 --
-ALTER TABLE `employees`
+ALTER TABLE `staffs`
   MODIFY `id` int(11) NOT NULL AUTO_INCREMENT;
 
 --
@@ -1383,9 +1383,9 @@ ALTER TABLE `shop_portfolio`
   MODIFY `id` int(11) NOT NULL AUTO_INCREMENT;
 
 --
--- AUTO_INCREMENT for table `shop_employees`
+-- AUTO_INCREMENT for table `shop_staffs`
 --
-ALTER TABLE `shop_employees`
+ALTER TABLE `shop_staffs`
   MODIFY `id` int(11) NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=3;
 
 --
@@ -1452,10 +1452,10 @@ ALTER TABLE `dss_configurations`
   ADD CONSTRAINT `dss_configurations_ibfk_1` FOREIGN KEY (`created_by`) REFERENCES `users` (`id`);
 
 --
--- Constraints for table `employees`
+-- Constraints for table `staffs`
 --
-ALTER TABLE `employees`
-  ADD CONSTRAINT `employees_ibfk_1` FOREIGN KEY (`user_id`) REFERENCES `users` (`id`);
+ALTER TABLE `staffs`
+  ADD CONSTRAINT `staffs_ibfk_1` FOREIGN KEY (`user_id`) REFERENCES `users` (`id`);
 
 --
 -- Constraints for table `hiring_posts`
@@ -1469,7 +1469,7 @@ ALTER TABLE `hiring_posts`
 --
 ALTER TABLE `job_schedule`
   ADD CONSTRAINT `job_schedule_ibfk_1` FOREIGN KEY (`order_id`) REFERENCES `orders` (`id`),
-  ADD CONSTRAINT `job_schedule_ibfk_2` FOREIGN KEY (`employee_id`) REFERENCES `users` (`id`);
+  ADD CONSTRAINT `job_schedule_ibfk_2` FOREIGN KEY (`staff_id`) REFERENCES `users` (`id`);
 
 --
 -- Constraints for table `material_orders`
@@ -1504,14 +1504,14 @@ ALTER TABLE `orders`
 --
 ALTER TABLE `order_photos`
   ADD CONSTRAINT `order_photos_ibfk_1` FOREIGN KEY (`order_id`) REFERENCES `orders` (`id`),
-  ADD CONSTRAINT `order_photos_ibfk_2` FOREIGN KEY (`employee_id`) REFERENCES `users` (`id`);
+  ADD CONSTRAINT `order_photos_ibfk_2` FOREIGN KEY (`staff_id`) REFERENCES `users` (`id`);
 
 --
 -- Constraints for table `order_status_history`
 --
 ALTER TABLE `order_status_history`
   ADD CONSTRAINT `order_status_history_ibfk_1` FOREIGN KEY (`order_id`) REFERENCES `orders` (`id`),
-  ADD CONSTRAINT `order_status_history_ibfk_2` FOREIGN KEY (`employee_id`) REFERENCES `users` (`id`);
+  ADD CONSTRAINT `order_status_history_ibfk_2` FOREIGN KEY (`staff_id`) REFERENCES `users` (`id`);
 
 --
 -- Constraints for table `otp_verifications`
@@ -1523,7 +1523,7 @@ ALTER TABLE `otp_verifications`
 -- Constraints for table `payroll`
 --
 ALTER TABLE `payroll`
-  ADD CONSTRAINT `payroll_ibfk_1` FOREIGN KEY (`employee_id`) REFERENCES `employees` (`id`);
+  ADD CONSTRAINT `payroll_ibfk_1` FOREIGN KEY (`staff_id`) REFERENCES `staffs` (`id`);
 
 --
 -- Constraints for table `shifts`
@@ -1567,11 +1567,11 @@ ALTER TABLE `shop_portfolio`
   ADD CONSTRAINT `shop_portfolio_ibfk_1` FOREIGN KEY (`shop_id`) REFERENCES `shops` (`id`);
 
 --
--- Constraints for table `shop_employees`
+-- Constraints for table `shop_staffs`
 --
-ALTER TABLE `shop_employees`
-  ADD CONSTRAINT `shop_employees_ibfk_1` FOREIGN KEY (`shop_id`) REFERENCES `shops` (`id`),
-  ADD CONSTRAINT `shop_employees_ibfk_2` FOREIGN KEY (`user_id`) REFERENCES `users` (`id`);
+ALTER TABLE `shop_staffs`
+  ADD CONSTRAINT `shop_staffs_ibfk_1` FOREIGN KEY (`shop_id`) REFERENCES `shops` (`id`),
+  ADD CONSTRAINT `shop_staffs_ibfk_2` FOREIGN KEY (`user_id`) REFERENCES `users` (`id`);
 COMMIT;
 
 /*!40101 SET CHARACTER_SET_CLIENT=@OLD_CHARACTER_SET_CLIENT */;

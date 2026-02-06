@@ -79,7 +79,7 @@ $portfolio_stmt->execute([$shop['id']]);
 $portfolio_items = $portfolio_stmt->fetchAll();
 $capacity_stmt = $pdo->prepare("
     SELECT COALESCE(SUM(max_active_orders), 0) 
-    FROM shop_employees 
+    FROM shop_staffs 
     WHERE shop_id = ? AND status = 'active'
 ");
 $capacity_stmt->execute([$shop['id']]);

@@ -31,8 +31,8 @@ if(!$shop) {
 
 $shop_id = $shop['id'];
 
-// Add new employee
-if(isset($_POST['add_employee'])) {
+// Add new staff
+if(isset($_POST['add_staff'])) {
     $fullname = sanitize($_POST['fullname']);
     $email = sanitize($_POST['email']);
     $phone = sanitize($_POST['phone']);
@@ -69,18 +69,18 @@ if(isset($_POST['add_employee'])) {
             $user = $user_stmt->fetch();
         
         if($user) {
-                if($user['role'] !== 'employee') {
-                    $error = "Employee accounts must be created separately. Existing client or owner accounts cannot be promoted to employee.";
+                if($user['role'] !== 'staff') {
+                    $error = "staff accounts must be created separately. Existing client or owner accounts cannot be promoted to staff.";
                 } else {
-                    // Check if already an employee for this shop
-                    $check_stmt = $pdo->prepare("SELECT id, status FROM shop_employees WHERE user_id = ? AND shop_id = ?");
+                    // Check if already an staff for this shop
+                    $check_stmt = $pdo->prepare("SELECT id, status FROM shop_staffs WHERE user_id = ? AND shop_id = ?");
                     $check_stmt->execute([$user['id'], $shop_id]);
                     $existing = $check_stmt->fetch();
                     
                     if(!$existing) {
-                        // Add as employee
+                        // Add as staff
                         $add_stmt = $pdo->prepare("
-                            INSERT INTO shop_employees (shop_id, user_id, position, permissions, availability_days, availability_start, availability_end, max_active_orders, hired_date) 
+                            INSERT INTO shop_staffs (shop_id, user_id, position, permissions, availability_days, availability_start, availability_end, max_active_orders, hired_date) 
                             VALUES (?, ?, ?, ?, ?, ?, ?, ?, CURDATE())
                         ");
                         $add_stmt->execute([
@@ -94,10 +94,10 @@ if(isset($_POST['add_employee'])) {
                             $max_active_orders
                         ]);
                         
-                        $success = "Employee added successfully!";
+                        $success = "staff added successfully!";
                     } elseif($existing['status'] === 'inactive') {
                         $reactivate_stmt = $pdo->prepare("
-                            UPDATE shop_employees 
+                            UPDATE shop_staffs 
                             SET status = 'active', position = ?, permissions = ?, availability_days = ?, availability_start = ?, availability_end = ?, max_active_orders = ?, hired_date = CURDATE() 
                             WHERE id = ? AND shop_id = ?
                         ");
@@ -112,22 +112,22 @@ if(isset($_POST['add_employee'])) {
                             $shop_id
                         ]);
                         
-                        $success = "Employee reactivated successfully!";
+                        $success = "staff reactivated successfully!";
                     } else {
-                        $error = "User is already an active employee for this shop!";
+                        $error = "User is already an active staff for this shop!";
                     }
                 }
             } else {
                 $hashed_password = password_hash($password, PASSWORD_DEFAULT);
                 $user_stmt = $pdo->prepare("
                     INSERT INTO users (fullname, email, password, phone, role, status) 
-                    VALUES (?, ?, ?, ?, 'employee', 'active')
+                    VALUES (?, ?, ?, ?, 'staff', 'active')
                 ");
                 $user_stmt->execute([$fullname, $email, $hashed_password, $phone]);
                 $user_id = $pdo->lastInsertId();
 
                 $add_stmt = $pdo->prepare("
-                    INSERT INTO shop_employees (shop_id, user_id, position, permissions, availability_days, availability_start, availability_end, max_active_orders, hired_date) 
+                    INSERT INTO shop_staffs (shop_id, user_id, position, permissions, availability_days, availability_start, availability_end, max_active_orders, hired_date) 
                     VALUES (?, ?, ?, ?, ?, ?, ?, ?, CURDATE())
                 ");
                 $add_stmt->execute([
@@ -141,23 +141,23 @@ if(isset($_POST['add_employee'])) {
                     $max_active_orders
                 ]);
 
-                $success = "Employee account created and added successfully!";
+                $success = "staff account created and added successfully!";
             }
         }
     } catch(PDOException $e) {
-        $error = "Failed to add employee: " . $e->getMessage();
+        $error = "Failed to add staff: " . $e->getMessage();
     }
 }
 
-// Deactivate employee
+// Deactivate staff
 if(isset($_GET['deactivate'])) {
     $emp_id = (int) $_GET['deactivate'];
-    $employee_stmt = $pdo->prepare("SELECT user_id FROM shop_employees WHERE id = ? AND shop_id = ?");
-    $employee_stmt->execute([$emp_id, $shop_id]);
-    $employee = $employee_stmt->fetch();
+    $staff_stmt = $pdo->prepare("SELECT user_id FROM shop_staffs WHERE id = ? AND shop_id = ?");
+    $staff_stmt->execute([$emp_id, $shop_id]);
+    $staff = $staff_stmt->fetch();
 
-    if($employee) {
-        $deactivate_stmt = $pdo->prepare("UPDATE shop_employees SET status = 'inactive' WHERE id = ? AND shop_id = ?");
+    if($staff) {
+        $deactivate_stmt = $pdo->prepare("UPDATE shop_staffs SET status = 'inactive' WHERE id = ? AND shop_id = ?");
         $deactivate_stmt->execute([$emp_id, $shop_id]);
 
         $unassign_stmt = $pdo->prepare("
@@ -165,45 +165,45 @@ if(isset($_GET['deactivate'])) {
             SET assigned_to = NULL 
             WHERE shop_id = ? AND assigned_to = ? AND status IN ('pending', 'accepted', 'in_progress')
         ");
-        $unassign_stmt->execute([$shop_id, $employee['user_id']]);
+        $unassign_stmt->execute([$shop_id, $staff['user_id']]);
 
-        $active_stmt = $pdo->prepare("SELECT COUNT(*) as count FROM shop_employees WHERE user_id = ? AND status = 'active'");
-        $active_stmt->execute([$employee['user_id']]);
+        $active_stmt = $pdo->prepare("SELECT COUNT(*) as count FROM shop_staffs WHERE user_id = ? AND status = 'active'");
+        $active_stmt->execute([$staff['user_id']]);
         $active_count = $active_stmt->fetch();
 
         if(($active_count['count'] ?? 0) == 0) {
-            $role_stmt = $pdo->prepare("UPDATE users SET role = 'client' WHERE id = ? AND role = 'employee'");
-            $role_stmt->execute([$employee['user_id']]);
+            $role_stmt = $pdo->prepare("UPDATE users SET role = 'client' WHERE id = ? AND role = 'staff'");
+            $role_stmt->execute([$staff['user_id']]);
         }
 
-        $success = "Employee deactivated successfully!";
+        $success = "staff deactivated successfully!";
     } else {
-        $error = "Employee not found for this shop.";
+        $error = "staff not found for this shop.";
     }
 }
 
-// Reactivate employee
+// Reactivate staff
 if(isset($_GET['reactivate'])) {
     $emp_id = (int) $_GET['reactivate'];
-    $employee_stmt = $pdo->prepare("SELECT user_id FROM shop_employees WHERE id = ? AND shop_id = ?");
-    $employee_stmt->execute([$emp_id, $shop_id]);
-    $employee = $employee_stmt->fetch();
+    $staff_stmt = $pdo->prepare("SELECT user_id FROM shop_staffs WHERE id = ? AND shop_id = ?");
+    $staff_stmt->execute([$emp_id, $shop_id]);
+    $staff = $staff_stmt->fetch();
 
-    if($employee) {
-        $reactivate_stmt = $pdo->prepare("UPDATE shop_employees SET status = 'active' WHERE id = ? AND shop_id = ?");
+    if($staff) {
+        $reactivate_stmt = $pdo->prepare("UPDATE shop_staffs SET status = 'active' WHERE id = ? AND shop_id = ?");
         $reactivate_stmt->execute([$emp_id, $shop_id]);
 
-        $role_stmt = $pdo->prepare("UPDATE users SET role = 'employee' WHERE id = ?");
-        $role_stmt->execute([$employee['user_id']]);
+        $role_stmt = $pdo->prepare("UPDATE users SET role = 'staff' WHERE id = ?");
+        $role_stmt->execute([$staff['user_id']]);
 
-        $success = "Employee reactivated successfully!";
+        $success = "staff reactivated successfully!";
     } else {
-        $error = "Employee not found for this shop.";
+        $error = "staff not found for this shop.";
     }
 }
 
-// Get all employees
-$employees_stmt = $pdo->prepare("
+// Get all staffs
+$staffs_stmt = $pdo->prepare("
     SELECT 
         se.*, 
         u.fullname, 
@@ -217,13 +217,13 @@ $employees_stmt = $pdo->prepare("
               AND o.assigned_to = se.user_id 
               AND o.status IN ('pending', 'accepted', 'in_progress')
         ) as active_orders
-    FROM shop_employees se 
+    FROM shop_staffs se 
     JOIN users u ON se.user_id = u.id 
     WHERE se.shop_id = ? 
     ORDER BY se.created_at DESC
 ");
-$employees_stmt->execute([$shop_id]);
-$employees = $employees_stmt->fetchAll();
+$staffs_stmt->execute([$shop_id]);
+$staffs = $staffs_stmt->fetchAll();
 ?>
 <!DOCTYPE html>
 <html lang="en">
@@ -265,9 +265,9 @@ $employees = $employees_stmt->fetchAll();
     <div class="container">
         <div class="dashboard-header">
             <h2>Manage Staff</h2>
-            <p class="text-muted">Add and manage employees for your shop</p>
-            <button class="btn btn-primary" onclick="document.getElementById('addEmployeeModal').style.display='block'">
-                <i class="fas fa-user-plus"></i> Add New Employee
+            <p class="text-muted">Add and manage staffs for your shop</p>
+            <button class="btn btn-primary" onclick="document.getElementById('addstaffModal').style.display='block'">
+                <i class="fas fa-user-plus"></i> Add New staff
             </button>
         </div>
 
@@ -279,14 +279,14 @@ $employees = $employees_stmt->fetchAll();
             <div class="alert alert-success"><?php echo $success; ?></div>
         <?php endif; ?>
 
-        <!-- Employees Table -->
+        <!-- staffs Table -->
         <div class="card">
-            <h3>Current Employees (<?php echo count($employees); ?>)</h3>
-            <?php if(!empty($employees)): ?>
+            <h3>Current staffs (<?php echo count($staffs); ?>)</h3>
+            <?php if(!empty($staffs)): ?>
                 <table class="table">
                     <thead>
                         <tr>
-                            <th>Employee</th>
+                            <th>staff</th>
                             <th>Position</th>
                             <th>Contact</th>
                             <th>Joined</th>
@@ -297,7 +297,7 @@ $employees = $employees_stmt->fetchAll();
                         </tr>
                     </thead>
                     <tbody>
-                        <?php foreach($employees as $emp): ?>
+                        <?php foreach($staffs as $emp): ?>
                         <?php
                             $availability_summary = 'Not set';
                             $availability_days_list = [];
@@ -352,16 +352,16 @@ $employees = $employees_stmt->fetchAll();
                                 <?php endif; ?>
                             </td>
                             <td>
-                                <a href="edit_employee.php?id=<?php echo $emp['id']; ?>" 
+                                <a href="edit_staff.php?id=<?php echo $emp['id']; ?>" 
                                    class="btn btn-sm btn-outline-primary">Edit</a>
                                 <?php if($emp['status'] === 'active'): ?>
                                     <a href="manage_staff.php?deactivate=<?php echo $emp['id']; ?>" 
                                        class="btn btn-sm btn-outline-danger"
-                                       onclick="return confirm('Deactivate this employee and unassign active orders?')">Deactivate</a>
+                                       onclick="return confirm('Deactivate this staff and unassign active orders?')">Deactivate</a>
                                 <?php else: ?>
                                     <a href="manage_staff.php?reactivate=<?php echo $emp['id']; ?>" 
                                        class="btn btn-sm btn-outline-success"
-                                       onclick="return confirm('Reactivate this employee for the shop?')">Reactivate</a>
+                                       onclick="return confirm('Reactivate this staff for the shop?')">Reactivate</a>
                                 <?php endif; ?>
                             </td>
                         </tr>
@@ -371,20 +371,20 @@ $employees = $employees_stmt->fetchAll();
             <?php else: ?>
                 <div class="text-center p-4">
                     <i class="fas fa-users fa-3x text-muted mb-3"></i>
-                    <h4>No Employees Yet</h4>
-                    <p class="text-muted">Add your first employee to get started.</p>
+                    <h4>No staffs Yet</h4>
+                    <p class="text-muted">Add your first staff to get started.</p>
                 </div>
             <?php endif; ?>
         </div>
 
-        <!-- Employee Statistics -->
+        <!-- staff Statistics -->
         <div class="stats-grid">
             <div class="stat-card">
                 <div class="stat-icon">
                     <i class="fas fa-users"></i>
                 </div>
-                <div class="stat-number"><?php echo count($employees); ?></div>
-                <div class="stat-label">Total Employees</div>
+                <div class="stat-number"><?php echo count($staffs); ?></div>
+                <div class="stat-label">Total staffs</div>
             </div>
             <div class="stat-card">
                 <div class="stat-icon">
@@ -392,7 +392,7 @@ $employees = $employees_stmt->fetchAll();
                 </div>
                 <div class="stat-number">
                     <?php 
-                    $active = $pdo->prepare("SELECT COUNT(*) as count FROM shop_employees WHERE shop_id = ? AND status = 'active'");
+                    $active = $pdo->prepare("SELECT COUNT(*) as count FROM shop_staffs WHERE shop_id = ? AND status = 'active'");
                     $active->execute([$shop_id]);
                     echo $active->fetch()['count'];
                     ?>
@@ -402,32 +402,32 @@ $employees = $employees_stmt->fetchAll();
         </div>
     </div>
 
-    <!-- Add Employee Modal -->
-    <div id="addEmployeeModal" class="modal" style="display: none; position: fixed; z-index: 1000; left: 0; top: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.5);">
+    <!-- Add staff Modal -->
+    <div id="addstaffModal" class="modal" style="display: none; position: fixed; z-index: 1000; left: 0; top: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.5);">
         <div class="modal-content" style="background: white; margin: 5% auto; padding: 30px; width: 500px; border-radius: 10px; max-height: 90vh; overflow-y: auto;">
             <div class="modal-header d-flex justify-between align-center mb-3">
-                <h3>Add New Employee</h3>
-                <button onclick="document.getElementById('addEmployeeModal').style.display='none'" 
+                <h3>Add New staff</h3>
+                <button onclick="document.getElementById('addstaffModal').style.display='none'" 
                         style="background: none; border: none; font-size: 1.5rem;">&times;</button>
             </div>
             <form method="POST">
                 <div class="form-group">
-                    <label>Employee Full Name *</label>
+                    <label>staff Full Name *</label>
                     <input type="text" name="fullname" class="form-control" required 
-                           placeholder="Enter employee's full name">
+                           placeholder="Enter staff's full name">
                 </div>
 
                 <div class="form-group">
-                    <label>Employee Email *</label>
+                    <label>staff Email *</label>
                     <input type="email" name="email" class="form-control" required 
-                           placeholder="Enter employee's email">
-                    <small class="text-muted">Employee accounts are created here and cannot reuse client or owner emails.</small>
+                           placeholder="Enter staff's email">
+                    <small class="text-muted">staff accounts are created here and cannot reuse client or owner emails.</small>
                 </div>
 
                 <div class="form-group">
                     <label>Phone Number *</label>
                     <input type="tel" name="phone" class="form-control" required 
-                           placeholder="Enter employee's phone number">
+                           placeholder="Enter staff's phone number">
                 </div>
 
                 <div class="form-group">
@@ -510,25 +510,25 @@ $employees = $employees_stmt->fetchAll();
                 
                 <div class="modal-footer mt-4">
                     <button type="button" class="btn btn-secondary" 
-                            onclick="document.getElementById('addEmployeeModal').style.display='none'">Cancel</button>
-                    <button type="submit" name="add_employee" class="btn btn-primary">Add Employee</button>
+                            onclick="document.getElementById('addstaffModal').style.display='none'">Cancel</button>
+                    <button type="submit" name="add_staff" class="btn btn-primary">Add staff</button>
                 </div>
             </form>
         </div>
     </div>
 
     <script>
-        const addEmployeeModal = document.getElementById('addEmployeeModal');
+        const addstaffModal = document.getElementById('addstaffModal');
         const params = new URLSearchParams(window.location.search);
 
         if (params.get('add') === '1') {
-            addEmployeeModal.style.display = 'block';
+            addstaffModal.style.display = 'block';
         }
 
         // Close modal when clicking outside
         window.onclick = function(event) {
-            if (event.target == addEmployeeModal) {
-                addEmployeeModal.style.display = "none";
+            if (event.target == addstaffModal) {
+                addstaffModal.style.display = "none";
             }
         }
     </script>

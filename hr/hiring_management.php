@@ -86,7 +86,7 @@ $visibility_channels = [
     ],
     [
         'channel' => 'Referral program',
-        'audience' => 'Employee referrals',
+        'audience' => 'staff referrals',
         'reach' => '12 ambassadors',
         'status' => 'Active',
     ],

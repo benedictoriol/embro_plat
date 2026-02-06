@@ -29,25 +29,25 @@ if(!$shop) {
 }
 
 $shop_id = $shop['id'];
-$employee_id = (int) ($_GET['id'] ?? 0);
+$staff_id = (int) ($_GET['id'] ?? 0);
 $message = '';
 $message_type = 'success';
 
-$employee_stmt = $pdo->prepare("
+$staff_stmt = $pdo->prepare("
     SELECT se.*, u.fullname, u.email, u.phone
-    FROM shop_employees se
+    FROM shop_staffs se
     JOIN users u ON se.user_id = u.id
     WHERE se.id = ? AND se.shop_id = ?
 ");
-$employee_stmt->execute([$employee_id, $shop_id]);
-$employee = $employee_stmt->fetch();
+$staff_stmt->execute([$staff_id, $shop_id]);
+$staff = $staff_stmt->fetch();
 
-if(!$employee) {
-    $message = 'Employee not found for this shop.';
+if(!$staff) {
+    $message = 'staff not found for this shop.';
     $message_type = 'danger';
 }
 
-if($employee && isset($_POST['update_employee'])) {
+if($staff && isset($_POST['update_staff'])) {
     $fullname = sanitize($_POST['fullname'] ?? '');
     $email = sanitize($_POST['email'] ?? '');
     $phone = sanitize($_POST['phone'] ?? '');
@@ -79,47 +79,47 @@ if($employee && isset($_POST['update_employee'])) {
     } else {
         try {
             $email_stmt = $pdo->prepare("SELECT id FROM users WHERE email = ? AND id != ?");
-            $email_stmt->execute([$email, $employee['user_id']]);
+            $email_stmt->execute([$email, $staff['user_id']]);
 
             if($email_stmt->fetch()) {
                 $message = 'That email is already in use.';
                 $message_type = 'danger';
             } else {
                 $update_user = $pdo->prepare("UPDATE users SET fullname = ?, email = ?, phone = ? WHERE id = ?");
-                $update_user->execute([$fullname, $email, $phone, $employee['user_id']]);
+                $update_user->execute([$fullname, $email, $phone, $staff['user_id']]);
 
-                $update_employee = $pdo->prepare("
-                    UPDATE shop_employees 
+                $update_staff = $pdo->prepare("
+                    UPDATE shop_staffs 
                     SET position = ?, permissions = ?, availability_days = ?, availability_start = ?, availability_end = ?, max_active_orders = ?
                     WHERE id = ? AND shop_id = ?
                 ");
-                $update_employee->execute([
+                $update_staff->execute([
                     $position,
                     $permissions,
                     $availability_days_json,
                     $availability_start ?: null,
                     $availability_end ?: null,
                     $max_active_orders,
-                    $employee_id,
+                    $staff_id,
                     $shop_id
                 ]);
 
-                $message = 'Employee updated successfully!';
+                $message = 'staff updated successfully!';
                 $message_type = 'success';
 
-                $employee_stmt->execute([$employee_id, $shop_id]);
-                $employee = $employee_stmt->fetch();
+                $staff_stmt->execute([$staff_id, $shop_id]);
+                $staff = $staff_stmt->fetch();
             }
         } catch(PDOException $e) {
-            $message = 'Failed to update employee: ' . $e->getMessage();
+            $message = 'Failed to update staff: ' . $e->getMessage();
             $message_type = 'danger';
         }
     }
 }
 
 $current_permissions = [];
-if($employee && !empty($employee['permissions'])) {
-    $decoded_permissions = json_decode($employee['permissions'], true);
+if($staff && !empty($staff['permissions'])) {
+    $decoded_permissions = json_decode($staff['permissions'], true);
     if(is_array($decoded_permissions)) {
         $current_permissions = $decoded_permissions;
     }
@@ -132,8 +132,8 @@ foreach ($available_permissions as $permission_key => $permission_label) {
 }
 
 $current_availability_days = [];
-if($employee && !empty($employee['availability_days'])) {
-    $decoded_days = json_decode($employee['availability_days'], true);
+if($staff && !empty($staff['availability_days'])) {
+    $decoded_days = json_decode($staff['availability_days'], true);
     if(is_array($decoded_days)) {
         $current_availability_days = array_map('intval', $decoded_days);
     }
@@ -141,9 +141,9 @@ if($employee && !empty($employee['availability_days'])) {
 if(empty($current_availability_days)) {
     $current_availability_days = array_keys($availability_days);
 }
-$availability_start_value = $employee['availability_start'] ?? '09:00';
-$availability_end_value = $employee['availability_end'] ?? '18:00';
-$max_active_orders_value = $employee['max_active_orders'] ?? 3;
+$availability_start_value = $staff['availability_start'] ?? '09:00';
+$availability_end_value = $staff['availability_end'] ?? '18:00';
+$max_active_orders_value = $staff['max_active_orders'] ?? 3;
 ?>
 <!DOCTYPE html>
 <html lang="en">
@@ -183,7 +183,7 @@ $max_active_orders_value = $employee['max_active_orders'] ?? 3;
 
     <div class="container">
         <div class="dashboard-header">
-            <h2>Edit Employee</h2>
+            <h2>Edit staff</h2>
             <p class="text-muted">Update staff details and permissions.</p>
         </div>
 
@@ -194,24 +194,24 @@ $max_active_orders_value = $employee['max_active_orders'] ?? 3;
         <?php endif; ?>
 
         <div class="card">
-            <?php if($employee): ?>
+            <?php if($staff): ?>
                 <form method="POST">
                     <div class="form-group">
-                        <label>Employee Full Name *</label>
+                        <label>staff Full Name *</label>
                         <input type="text" name="fullname" class="form-control" required
-                               value="<?php echo htmlspecialchars($employee['fullname']); ?>">
+                               value="<?php echo htmlspecialchars($staff['fullname']); ?>">
                     </div>
 
                     <div class="form-group">
-                        <label>Employee Email *</label>
+                        <label>staff Email *</label>
                         <input type="email" name="email" class="form-control" required
-                               value="<?php echo htmlspecialchars($employee['email']); ?>">
+                               value="<?php echo htmlspecialchars($staff['email']); ?>">
                     </div>
 
                     <div class="form-group">
                         <label>Phone Number</label>
                         <input type="tel" name="phone" class="form-control"
-                               value="<?php echo htmlspecialchars($employee['phone']); ?>">
+                               value="<?php echo htmlspecialchars($staff['phone']); ?>">
                     </div>
 
                     <div class="form-group">
@@ -227,7 +227,7 @@ $max_active_orders_value = $employee['max_active_orders'] ?? 3;
                             ];
                             foreach($positions as $role):
                             ?>
-                                <option value="<?php echo $role; ?>" <?php echo $employee['position'] === $role ? 'selected' : ''; ?>>
+                                <option value="<?php echo $role; ?>" <?php echo $staff['position'] === $role ? 'selected' : ''; ?>>
                                     <?php echo $role; ?>
                                 </option>
                             <?php endforeach; ?>
@@ -294,7 +294,7 @@ $max_active_orders_value = $employee['max_active_orders'] ?? 3;
                         <a href="manage_staff.php" class="btn btn-secondary">
                             <i class="fas fa-arrow-left"></i> Back
                         </a>
-                        <button type="submit" name="update_employee" class="btn btn-primary">
+                        <button type="submit" name="update_staff" class="btn btn-primary">
                             <i class="fas fa-save"></i> Save Changes
                         </button>
                     </div>
@@ -302,8 +302,8 @@ $max_active_orders_value = $employee['max_active_orders'] ?? 3;
             <?php else: ?>
                 <div class="text-center p-4">
                     <i class="fas fa-user-times fa-3x text-muted mb-3"></i>
-                    <h4>Employee not found</h4>
-                    <p class="text-muted">Return to staff management to pick another employee.</p>
+                    <h4>staff not found</h4>
+                    <p class="text-muted">Return to staff management to pick another staff.</p>
                     <a href="manage_staff.php" class="btn btn-primary">
                         <i class="fas fa-arrow-left"></i> Back to Staff
                     </a>

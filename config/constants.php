@@ -9,7 +9,7 @@ define('ROLE_SYS_ADMIN', 'sys_admin');
 define('ROLE_OWNER', 'owner');
 define('ROLE_HR', 'hr');
 define('ROLE_STAFF', 'staff');
-define('ROLE_EMPLOYEE', 'employee');
+define('ROLE_staff', 'staff');
 define('ROLE_CLIENT', 'client');
 
 // Session settings

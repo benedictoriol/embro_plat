@@ -2,26 +2,26 @@
 session_start();
 require_once '../config/db.php';
 require_once '../config/constants.php';
-require_role('employee');
+require_role('staff');
 
-$employee_id = $_SESSION['user']['id'];
-$employee_role = $_SESSION['user']['role'] ?? null;
+$staff_id = $_SESSION['user']['id'];
+$staff_role = $_SESSION['user']['role'] ?? null;
 
 $emp_stmt = $pdo->prepare("
     SELECT se.*, s.shop_name, s.logo 
-    FROM shop_employees se 
+    FROM shop_staffs se 
     JOIN shops s ON se.shop_id = s.id 
     WHERE se.user_id = ? AND se.status = 'active'
 ");
-$emp_stmt->execute([$employee_id]);
-$employee = $emp_stmt->fetch();
+$emp_stmt->execute([$staff_id]);
+$staff = $emp_stmt->fetch();
 
-if(!$employee) {
+if(!$staff) {
     die("You are not assigned to any shop. Please contact your shop owner.");
 }
 
-$employee_permissions = fetch_employee_permissions($pdo, $employee_id);
-require_employee_permission($pdo, $employee_id, 'update_status');
+$staff_permissions = fetch_staff_permissions($pdo, $staff_id);
+require_staff_permission($pdo, $staff_id, 'update_status');
 
 // Get assigned jobs
 $jobs_stmt = $pdo->prepare("
@@ -34,12 +34,12 @@ $jobs_stmt = $pdo->prepare("
     FROM orders o 
     JOIN users u ON o.client_id = u.id 
     JOIN shops s ON o.shop_id = s.id 
-    LEFT JOIN job_schedule js ON js.order_id = o.id AND js.employee_id = ?
-    WHERE (o.assigned_to = ? OR js.employee_id = ?)
+    LEFT JOIN job_schedule js ON js.order_id = o.id AND js.staff_id = ?
+    WHERE (o.assigned_to = ? OR js.staff_id = ?)
       AND o.status IN ('accepted', 'in_progress')
     ORDER BY schedule_date ASC, js.scheduled_time ASC
 ");
-$jobs_stmt->execute([$employee_id, $employee_id, $employee_id]);
+$jobs_stmt->execute([$staff_id, $staff_id, $staff_id]);
 $jobs = $jobs_stmt->fetchAll();
 $photo_counts = [];
 function is_design_image(?string $filename): bool {
@@ -50,16 +50,16 @@ function is_design_image(?string $filename): bool {
     return in_array($extension, ALLOWED_IMAGE_TYPES, true);
 }
 
-function fetch_order_info(PDO $pdo, int $employee_id, int $order_id): ?array {
+function fetch_order_info(PDO $pdo, int $staff_id, int $order_id): ?array {
     $order_info_stmt = $pdo->prepare("
         SELECT o.status, o.progress, o.order_number, o.client_id, s.shop_name, s.owner_id
         FROM orders o
         JOIN shops s ON o.shop_id = s.id
-        LEFT JOIN job_schedule js ON js.order_id = o.id AND js.employee_id = ?
-        WHERE o.id = ? AND (o.assigned_to = ? OR js.employee_id = ?)
+        LEFT JOIN job_schedule js ON js.order_id = o.id AND js.staff_id = ?
+        WHERE o.id = ? AND (o.assigned_to = ? OR js.staff_id = ?)
         LIMIT 1
     ");
-    $order_info_stmt->execute([$employee_id, $order_id, $employee_id, $employee_id]);
+    $order_info_stmt->execute([$staff_id, $order_id, $staff_id, $staff_id]);
     $order_info = $order_info_stmt->fetch();
 
     return $order_info ?: null;
@@ -71,11 +71,11 @@ if(!empty($jobs)) {
     $photo_stmt = $pdo->prepare("
         SELECT order_id, COUNT(*) as photo_count
         FROM order_photos
-        WHERE employee_id = ?
+        WHERE staff_id = ?
           AND order_id IN ($placeholders)
         GROUP BY order_id
     ");
-    $photo_stmt->execute(array_merge([$employee_id], $job_ids));
+    $photo_stmt->execute(array_merge([$staff_id], $job_ids));
     $photo_counts = $photo_stmt->fetchAll(PDO::FETCH_KEY_PAIR);
 }
 
@@ -88,7 +88,7 @@ if(isset($_POST['escalate_issue'])) {
         'needs_clarification' => 'Needs clarification',
         'blocked' => 'Blocked',
     ];
-    $order_info = fetch_order_info($pdo, $employee_id, $order_id);
+    $order_info = fetch_order_info($pdo, $staff_id, $order_id);
 
     if(!$order_info) {
         $error = "Unable to escalate this order.";
@@ -103,10 +103,10 @@ if(isset($_POST['escalate_issue'])) {
             UPDATE orders 
             SET shop_notes = CONCAT(COALESCE(shop_notes, ''), '\n', ?), updated_at = NOW()
             WHERE id = ? AND (assigned_to = ? OR EXISTS (
-                SELECT 1 FROM job_schedule js WHERE js.order_id = orders.id AND js.employee_id = ?
+                SELECT 1 FROM job_schedule js WHERE js.order_id = orders.id AND js.staff_id = ?
             ))
         ");
-        $update_stmt->execute([$note, $order_id, $employee_id, $employee_id]);
+        $update_stmt->execute([$note, $order_id, $staff_id, $staff_id]);
 
         $message = sprintf(
             'Order #%s needs attention: %s.',
@@ -128,17 +128,17 @@ if(isset($_POST['update_status'])) {
     $order_id = (int) ($_POST['order_id'] ?? 0);
     $progress = (int) ($_POST['progress'] ?? 0);
     $status = $_POST['status'] ?? '';
-    $employee_notes = sanitize($_POST['employee_notes'] ?? '');
+    $staff_notes = sanitize($_POST['staff_notes'] ?? '');
 
     $photo_check_stmt = $pdo->prepare("
         SELECT COUNT(*)
         FROM order_photos
-        WHERE order_id = ? AND employee_id = ?
+        WHERE order_id = ? AND staff_id = ?
     ");
-    $photo_check_stmt->execute([$order_id, $employee_id]);
+    $photo_check_stmt->execute([$order_id, $staff_id]);
     $photo_count = (int) $photo_check_stmt->fetchColumn();
 
-    $order_info = fetch_order_info($pdo, $employee_id, $order_id);
+    $order_info = fetch_order_info($pdo, $staff_id, $order_id);
 
     $allowed_statuses = [STATUS_IN_PROGRESS, STATUS_COMPLETED];
 
@@ -157,10 +157,10 @@ if(isset($_POST['update_status'])) {
                 SET progress = ?, status = ?, shop_notes = CONCAT(COALESCE(shop_notes, ''), '\n', ?), 
                     updated_at = NOW() 
                 WHERE id = ? AND (assigned_to = ? OR EXISTS (
-                    SELECT 1 FROM job_schedule js WHERE js.order_id = orders.id AND js.employee_id = ?
+                    SELECT 1 FROM job_schedule js WHERE js.order_id = orders.id AND js.staff_id = ?
                 ))
             ");
-            $update_stmt->execute([$progress, $status, $employee_notes, $order_id, $employee_id, $employee_id]);
+            $update_stmt->execute([$progress, $status, $staff_notes, $order_id, $staff_id, $staff_id]);
 
             if($status === 'completed') {
                 $complete_stmt = $pdo->prepare("UPDATE orders SET completed_at = NOW() WHERE id = ?");
@@ -173,8 +173,8 @@ if(isset($_POST['update_status'])) {
                     $order_id,
                     $status,
                     (int) $progress,
-                    $employee_notes !== '' ? $employee_notes : null,
-                    $employee_id
+                    $staff_notes !== '' ? $staff_notes : null,
+                    $staff_id
                 );
                 $message = sprintf(
                     'Order #%s status updated to %s by %s.',
@@ -205,8 +205,8 @@ if(isset($_POST['update_status'])) {
 
                 log_audit(
                 $pdo,
-                $employee_id,
-                $employee_role,
+                $staff_id,
+                $staff_role,
                 'update_order_status',
                 'orders',
                 (int) $order_id,
@@ -228,7 +228,7 @@ if(isset($_POST['update_status'])) {
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Update Job Status - Employee Dashboard</title>
+    <title>Update Job Status - staff Dashboard</title>
     <link rel="stylesheet" href="../assets/css/style.css">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
     <style>
@@ -344,14 +344,14 @@ if(isset($_POST['update_status'])) {
             </a>
             <ul class="navbar-nav">
                 <li><a href="dashboard.php" class="nav-link">Dashboard</a></li>
-                <?php if(!empty($employee_permissions['view_jobs'])): ?>
+                <?php if(!empty($staff_permissions['view_jobs'])): ?>
                     <li><a href="assigned_jobs.php" class="nav-link">My Jobs</a></li>
                     <li><a href="schedule.php" class="nav-link">Schedule</a></li>
                 <?php endif; ?>
-                <?php if(!empty($employee_permissions['update_status'])): ?>
+                <?php if(!empty($staff_permissions['update_status'])): ?>
                     <li><a href="update_status.php" class="nav-link active">Update Status</a></li>
                 <?php endif; ?>
-                <?php if(!empty($employee_permissions['upload_photos'])): ?>
+                <?php if(!empty($staff_permissions['upload_photos'])): ?>
                     <li><a href="upload_photos.php" class="nav-link">Upload Photos</a></li>
                 <?php endif; ?>
                 <li><a href="../auth/logout.php" class="nav-link">Logout</a></li>
@@ -472,7 +472,7 @@ if(isset($_POST['update_status'])) {
 
                     <div class="form-group">
                         <label>Add Notes (Optional)</label>
-                        <textarea name="employee_notes" class="form-control" rows="3"
+                        <textarea name="staff_notes" class="form-control" rows="3"
                                   placeholder="Add any notes about this update..."></textarea>
                     </div>
 

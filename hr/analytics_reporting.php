@@ -9,7 +9,7 @@ $kpis = [
     [
         'label' => 'Headcount tracked',
         'value' => '214',
-        'note' => 'Active employees across departments.',
+        'note' => 'Active staffs across departments.',
         'icon' => 'fas fa-users',
         'tone' => 'primary',
     ],
@@ -84,7 +84,7 @@ $performance_alerts = [
     ],
     [
         'title' => 'Training overdue',
-        'detail' => '12 employees require safety training refresh.',
+        'detail' => '12 staffs require safety training refresh.',
         'tone' => 'danger',
         'time' => 'Triggered 1d ago',
     ],

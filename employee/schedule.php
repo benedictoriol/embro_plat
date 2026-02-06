@@ -1,25 +1,25 @@
 <?php
 session_start();
 require_once '../config/db.php';
-require_role('employee');
+require_role('staff');
 
-$employee_id = $_SESSION['user']['id'];
+$staff_id = $_SESSION['user']['id'];
 
 $emp_stmt = $pdo->prepare("
     SELECT se.*, s.shop_name, s.logo 
-    FROM shop_employees se 
+    FROM shop_staffs se 
     JOIN shops s ON se.shop_id = s.id 
     WHERE se.user_id = ? AND se.status = 'active'
 ");
-$emp_stmt->execute([$employee_id]);
-$employee = $emp_stmt->fetch();
+$emp_stmt->execute([$staff_id]);
+$staff = $emp_stmt->fetch();
 
-if(!$employee) {
+if(!$staff) {
     die("You are not assigned to any shop. Please contact your shop owner.");
 }
 
-$employee_permissions = fetch_employee_permissions($pdo, $employee_id);
-require_employee_permission($pdo, $employee_id, 'view_jobs');
+$staff_permissions = fetch_staff_permissions($pdo, $staff_id);
+require_staff_permission($pdo, $staff_id, 'view_jobs');
 
 $schedule_stmt = $pdo->prepare("
     SELECT 
@@ -33,12 +33,12 @@ $schedule_stmt = $pdo->prepare("
         js.task_description
     FROM orders o
     JOIN users u ON o.client_id = u.id
-    LEFT JOIN job_schedule js ON js.order_id = o.id AND js.employee_id = ?
-    WHERE (o.assigned_to = ? OR js.employee_id = ?)
+    LEFT JOIN job_schedule js ON js.order_id = o.id AND js.staff_id = ?
+    WHERE (o.assigned_to = ? OR js.staff_id = ?)
       AND COALESCE(js.scheduled_date, o.scheduled_date) IS NOT NULL
     ORDER BY schedule_date ASC, schedule_time ASC
 ");
-$schedule_stmt->execute([$employee_id, $employee_id, $employee_id]);
+$schedule_stmt->execute([$staff_id, $staff_id, $staff_id]);
 $schedule = $schedule_stmt->fetchAll();
 ?>
 <!DOCTYPE html>
@@ -46,7 +46,7 @@ $schedule = $schedule_stmt->fetchAll();
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Schedule - <?php echo htmlspecialchars($employee['shop_name']); ?></title>
+    <title>Schedule - <?php echo htmlspecialchars($staff['shop_name']); ?></title>
     <link rel="stylesheet" href="../assets/css/style.css">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
     <style>
@@ -74,18 +74,18 @@ $schedule = $schedule_stmt->fetchAll();
     <nav class="navbar">
         <div class="container d-flex justify-between align-center">
             <a href="dashboard.php" class="navbar-brand">
-                <i class="fas fa-user-tie"></i> Employee Dashboard
+                <i class="fas fa-user-tie"></i> staff Dashboard
             </a>
             <ul class="navbar-nav">
                 <li><a href="dashboard.php" class="nav-link">Dashboard</a></li>
-                <?php if(!empty($employee_permissions['view_jobs'])): ?>
+                <?php if(!empty($staff_permissions['view_jobs'])): ?>
                     <li><a href="assigned_jobs.php" class="nav-link">My Jobs</a></li>
                     <li><a href="schedule.php" class="nav-link active">Schedule</a></li>
                 <?php endif; ?>
-                <?php if(!empty($employee_permissions['update_status'])): ?>
+                <?php if(!empty($staff_permissions['update_status'])): ?>
                     <li><a href="update_status.php" class="nav-link">Update Status</a></li>
                 <?php endif; ?>
-                <?php if(!empty($employee_permissions['upload_photos'])): ?>
+                <?php if(!empty($staff_permissions['upload_photos'])): ?>
                     <li><a href="upload_photos.php" class="nav-link">Upload Photos</a></li>
                 <?php endif; ?>
                 <li class="dropdown">

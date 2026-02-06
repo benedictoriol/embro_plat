@@ -30,9 +30,9 @@ require_once 'config/db.php';
                     switch($_SESSION['user']['role']) {
                         case 'sys_admin': $dashboard_url = 'sys_admin/dashboard.php'; break;
                         case 'owner': $dashboard_url = 'owner/dashboard.php'; break;
-                        case 'hr': $dashboard_url = 'employee/dashboard.php'; break;
-                        case 'staff': $dashboard_url = 'employee/dashboard.php'; break;
-                        case 'employee': $dashboard_url = 'employee/dashboard.php'; break;
+                        case 'hr': $dashboard_url = 'staff/dashboard.php'; break;
+                        case 'staff': $dashboard_url = 'staff/dashboard.php'; break;
+                        case 'staff': $dashboard_url = 'staff/dashboard.php'; break;
                         case 'client': $dashboard_url = 'client/dashboard.php'; break;
                         default: $dashboard_url = 'index.php'; break;
                     }

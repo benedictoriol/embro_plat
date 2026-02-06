@@ -1,31 +1,31 @@
 <?php
 session_start();
 require_once '../config/db.php';
-require_role('employee');
+require_role('staff');
 
-$employee_id = $_SESSION['user']['id'];
+$staff_id = $_SESSION['user']['id'];
 
-// Get employee shop info
+// Get staff shop info
 $emp_stmt = $pdo->prepare("
     SELECT se.*, s.shop_name, s.logo 
-    FROM shop_employees se 
+    FROM shop_staffs se 
     JOIN shops s ON se.shop_id = s.id 
     WHERE se.user_id = ? AND se.status = 'active'
 ");
-$emp_stmt->execute([$employee_id]);
-$employee = $emp_stmt->fetch();
+$emp_stmt->execute([$staff_id]);
+$staff = $emp_stmt->fetch();
 
 // If not associated with any shop
-if(!$employee) {
+if(!$staff) {
     die("You are not assigned to any shop. Please contact your shop owner.");
 }
 
-$shop_id = $employee['shop_id'];
+$shop_id = $staff['shop_id'];
 
-$employee_permissions = fetch_employee_permissions($pdo, $employee_id);
-$can_view_jobs = !empty($employee_permissions['view_jobs']);
-$can_update_status = !empty($employee_permissions['update_status']);
-$can_upload_photos = !empty($employee_permissions['upload_photos']);
+$staff_permissions = fetch_staff_permissions($pdo, $staff_id);
+$can_view_jobs = !empty($staff_permissions['view_jobs']);
+$can_update_status = !empty($staff_permissions['update_status']);
+$can_upload_photos = !empty($staff_permissions['upload_photos']);
 
 if ($can_view_jobs) {
     // Get assigned jobs
@@ -37,12 +37,12 @@ if ($can_view_jobs) {
             js.scheduled_time as schedule_time 
         FROM orders o 
         JOIN users u ON o.client_id = u.id 
-        LEFT JOIN job_schedule js ON js.order_id = o.id AND js.employee_id = ?
-        WHERE (o.assigned_to = ? OR js.employee_id = ?)
+        LEFT JOIN job_schedule js ON js.order_id = o.id AND js.staff_id = ?
+        WHERE (o.assigned_to = ? OR js.staff_id = ?)
           AND o.status IN ('accepted', 'in_progress')
         ORDER BY schedule_date ASC, js.scheduled_time ASC
     ");
-    $jobs_stmt->execute([$employee_id, $employee_id, $employee_id]);
+    $jobs_stmt->execute([$staff_id, $staff_id, $staff_id]);
     $assigned_jobs = $jobs_stmt->fetchAll();
 
     // Get today's schedule
@@ -59,23 +59,23 @@ if ($can_view_jobs) {
             js.task_description
         FROM orders o
         JOIN users u ON o.client_id = u.id
-        LEFT JOIN job_schedule js ON js.order_id = o.id AND js.employee_id = ?
-        WHERE (o.assigned_to = ? OR js.employee_id = ?)
+        LEFT JOIN job_schedule js ON js.order_id = o.id AND js.staff_id = ?
+        WHERE (o.assigned_to = ? OR js.staff_id = ?)
           AND COALESCE(js.scheduled_date, o.scheduled_date) = CURDATE()
         ORDER BY schedule_time ASC
     ");
-    $schedule_stmt->execute([$employee_id, $employee_id, $employee_id]);
+    $schedule_stmt->execute([$staff_id, $staff_id, $staff_id]);
     $today_schedule = $schedule_stmt->fetchAll();
 
     // Get job statistics
     $stats_stmt = $pdo->prepare("
         SELECT 
-            (SELECT COUNT(*) FROM orders o WHERE (o.assigned_to = ? OR EXISTS (SELECT 1 FROM job_schedule js WHERE js.order_id = o.id AND js.employee_id = ?)) AND o.status = 'in_progress') as in_progress,
-            (SELECT COUNT(*) FROM orders o WHERE (o.assigned_to = ? OR EXISTS (SELECT 1 FROM job_schedule js WHERE js.order_id = o.id AND js.employee_id = ?)) AND o.status = 'completed') as completed,
-            (SELECT COUNT(*) FROM orders o WHERE (o.assigned_to = ? OR EXISTS (SELECT 1 FROM job_schedule js WHERE js.order_id = o.id AND js.employee_id = ?)) AND COALESCE((SELECT js2.scheduled_date FROM job_schedule js2 WHERE js2.order_id = o.id AND js2.employee_id = ? LIMIT 1), o.scheduled_date) = CURDATE()) as today_tasks,
-            (SELECT AVG(o.rating) FROM orders o WHERE (o.assigned_to = ? OR EXISTS (SELECT 1 FROM job_schedule js WHERE js.order_id = o.id AND js.employee_id = ?)) AND o.rating IS NOT NULL) as avg_rating
+            (SELECT COUNT(*) FROM orders o WHERE (o.assigned_to = ? OR EXISTS (SELECT 1 FROM job_schedule js WHERE js.order_id = o.id AND js.staff_id = ?)) AND o.status = 'in_progress') as in_progress,
+            (SELECT COUNT(*) FROM orders o WHERE (o.assigned_to = ? OR EXISTS (SELECT 1 FROM job_schedule js WHERE js.order_id = o.id AND js.staff_id = ?)) AND o.status = 'completed') as completed,
+            (SELECT COUNT(*) FROM orders o WHERE (o.assigned_to = ? OR EXISTS (SELECT 1 FROM job_schedule js WHERE js.order_id = o.id AND js.staff_id = ?)) AND COALESCE((SELECT js2.scheduled_date FROM job_schedule js2 WHERE js2.order_id = o.id AND js2.staff_id = ? LIMIT 1), o.scheduled_date) = CURDATE()) as today_tasks,
+            (SELECT AVG(o.rating) FROM orders o WHERE (o.assigned_to = ? OR EXISTS (SELECT 1 FROM job_schedule js WHERE js.order_id = o.id AND js.staff_id = ?)) AND o.rating IS NOT NULL) as avg_rating
     ");
-    $stats_stmt->execute([$employee_id, $employee_id, $employee_id, $employee_id, $employee_id, $employee_id, $employee_id, $employee_id, $employee_id]);
+    $stats_stmt->execute([$staff_id, $staff_id, $staff_id, $staff_id, $staff_id, $staff_id, $staff_id, $staff_id, $staff_id]);
     $stats = $stats_stmt->fetch();
 } else {
     $assigned_jobs = [];
@@ -93,11 +93,11 @@ if ($can_view_jobs) {
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Employee Dashboard - <?php echo htmlspecialchars($employee['shop_name']); ?></title>
+    <title>staff Dashboard - <?php echo htmlspecialchars($staff['shop_name']); ?></title>
     <link rel="stylesheet" href="../assets/css/style.css">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
     <style>
-        .employee-header {
+        .staff-header {
             background: linear-gradient(135deg, #00b09b 0%, #96c93d 100%);
             color: white;
             padding: 25px;
@@ -146,7 +146,7 @@ if ($can_view_jobs) {
     <nav class="navbar">
         <div class="container d-flex justify-between align-center">
             <a href="dashboard.php" class="navbar-brand">
-                <i class="fas fa-user-tie"></i> Employee Dashboard
+                <i class="fas fa-user-tie"></i> staff Dashboard
             </a>
             <ul class="navbar-nav">
                 <li><a href="dashboard.php" class="nav-link active">Dashboard</a></li>
@@ -174,14 +174,14 @@ if ($can_view_jobs) {
     </nav>
 
     <div class="container">
-        <!-- Employee Header -->
-        <div class="employee-header">
+        <!-- staff Header -->
+        <div class="staff-header">
             <div class="d-flex justify-between align-center">
                 <div>
                     <h2>Welcome, <?php echo htmlspecialchars($_SESSION['user']['fullname']); ?>!</h2>
                     <p class="mb-0">
-                        <i class="fas fa-store"></i> <?php echo htmlspecialchars($employee['shop_name']); ?>
-                        | <i class="fas fa-briefcase"></i> <?php echo htmlspecialchars($employee['position']); ?>
+                        <i class="fas fa-store"></i> <?php echo htmlspecialchars($staff['shop_name']); ?>
+                        | <i class="fas fa-briefcase"></i> <?php echo htmlspecialchars($staff['position']); ?>
                     </p>
                 </div>
                 <div class="text-right">
@@ -427,8 +427,8 @@ if ($can_view_jobs) {
     <!-- Footer -->
     <footer class="footer">
         <div class="container">
-            <p>&copy; 2024 <?php echo htmlspecialchars($employee['shop_name']); ?> - Employee Portal</p>
-            <small class="text-muted">Employee ID: <?php echo $employee['id']; ?> | Position: <?php echo $employee['position']; ?></small>
+            <p>&copy; 2024 <?php echo htmlspecialchars($staff['shop_name']); ?> - staff Portal</p>
+            <small class="text-muted">staff ID: <?php echo $staff['id']; ?> | Position: <?php echo $staff['position']; ?></small>
         </div>
     </footer>
 

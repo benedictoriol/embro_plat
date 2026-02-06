@@ -119,7 +119,7 @@ $shopPerformance = $pdo->query("
     LIMIT 5
 ")->fetchAll();
 
-$employeeProductivity = $pdo->query("
+$staffProductivity = $pdo->query("
     SELECT
         u.id,
         u.fullname,
@@ -130,7 +130,7 @@ $employeeProductivity = $pdo->query("
         AVG(CASE WHEN o.status = 'completed' AND o.completed_at IS NOT NULL THEN TIMESTAMPDIFF(HOUR, o.created_at, o.completed_at) END) as avg_completion_hours
     FROM users u
     LEFT JOIN orders o ON o.assigned_to = u.id
-    WHERE u.role = 'employee'
+    WHERE u.role = 'staff'
     GROUP BY u.id, u.fullname
     ORDER BY completed_orders DESC, active_orders DESC
     LIMIT 5
@@ -497,15 +497,15 @@ $turnaroundByService = $pdo->query("
             <div class="card half-card">
                 <div class="card-header">
                     <h3><i class="fas fa-user-clock text-info"></i> Staff Performance</h3>
-                    <p class="text-muted">Top employees by output and workload.</p>
+                    <p class="text-muted">Top staffs by output and workload.</p>
                 </div>
-                <?php if (empty($employeeProductivity)): ?>
-                    <p class="text-muted">No employee productivity data yet.</p>
+                <?php if (empty($staffProductivity)): ?>
+                    <p class="text-muted">No staff productivity data yet.</p>
                 <?php else: ?>
                     <table class="analytics-table">
                         <thead>
                             <tr>
-                                <th>Employee</th>
+                                <th>staff</th>
                                 <th>Assigned</th>
                                 <th>Active</th>
                                 <th>Completed</th>
@@ -514,14 +514,14 @@ $turnaroundByService = $pdo->query("
                             </tr>
                         </thead>
                         <tbody>
-                            <?php foreach ($employeeProductivity as $employee): ?>
+                            <?php foreach ($staffProductivity as $staff): ?>
                                 <tr>
-                                    <td><?php echo htmlspecialchars($employee['fullname']); ?></td>
-                                    <td><?php echo number_format($employee['total_assigned']); ?></td>
-                                    <td><?php echo number_format($employee['active_orders']); ?></td>
-                                    <td><?php echo number_format($employee['completed_orders']); ?></td>
-                                    <td><?php echo number_format($employee['cancelled_orders']); ?></td>
-                                    <td><?php echo $employee['avg_completion_hours'] !== null ? number_format($employee['avg_completion_hours'], 1) : '—'; ?></td>
+                                    <td><?php echo htmlspecialchars($staff['fullname']); ?></td>
+                                    <td><?php echo number_format($staff['total_assigned']); ?></td>
+                                    <td><?php echo number_format($staff['active_orders']); ?></td>
+                                    <td><?php echo number_format($staff['completed_orders']); ?></td>
+                                    <td><?php echo number_format($staff['cancelled_orders']); ?></td>
+                                    <td><?php echo $staff['avg_completion_hours'] !== null ? number_format($staff['avg_completion_hours'], 1) : '—'; ?></td>
                                 </tr>
                             <?php endforeach; ?>
                         </tbody>

@@ -30,12 +30,12 @@ function record_order_status_history(
     string $status,
     int $progress = 0,
     ?string $notes = null,
-    ?int $employee_id = null
+    ?int $staff_id = null
 ): void {
     $stmt = $pdo->prepare("
-        INSERT INTO order_status_history (order_id, employee_id, status, progress, notes)
+        INSERT INTO order_status_history (order_id, staff_id, status, progress, notes)
         VALUES (?, ?, ?, ?, ?)
     ");
-    $stmt->execute([$order_id, $employee_id, $status, $progress, $notes]);
+    $stmt->execute([$order_id, $staff_id, $status, $progress, $notes]);
 }
 ?>

@@ -86,9 +86,10 @@ function redirect_based_on_role($role, $base_path = '..') {
             header("Location: {$base_path}/owner/dashboard.php");
             break;
         case 'hr':
+            header("Location: {$base_path}/hr/analytics_reporting.php");
+            break;
         case 'staff':
-        case 'employee':
-            header("Location: {$base_path}/employee/dashboard.php");
+            header("Location: {$base_path}/staff/dashboard.php");
             break;
         case 'client':
             header("Location: {$base_path}/client/dashboard.php");
@@ -147,7 +148,7 @@ function refresh_session_user_status(): bool {
 
     return $user['status'] === 'active';
 }
-function employee_permission_defaults(): array {
+function staff_permission_defaults(): array {
     return [
         'view_jobs' => true,
         'update_status' => true,
@@ -155,11 +156,11 @@ function employee_permission_defaults(): array {
     ];
 }
 
-function fetch_employee_permissions(PDO $pdo, int $userId): array {
-    $defaults = employee_permission_defaults();
+function fetch_staff_permissions(PDO $pdo, int $userId): array {
+    $defaults = staff_permission_defaults();
     $stmt = $pdo->prepare("
         SELECT permissions 
-        FROM shop_employees 
+        FROM shop_staffs 
         WHERE user_id = ? AND status = 'active'
         ORDER BY created_at DESC
         LIMIT 1
@@ -184,8 +185,8 @@ function fetch_employee_permissions(PDO $pdo, int $userId): array {
     return $permissions;
 }
 
-function require_employee_permission(PDO $pdo, int $userId, string $permissionKey): void {
-    $permissions = fetch_employee_permissions($pdo, $userId);
+function require_staff_permission(PDO $pdo, int $userId, string $permissionKey): void {
+    $permissions = fetch_staff_permissions($pdo, $userId);
 
     if (empty($permissions[$permissionKey])) {
         http_response_code(403);

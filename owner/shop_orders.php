@@ -33,7 +33,7 @@ $active_staff_stmt = $pdo->prepare("
               AND o.assigned_to = se.user_id 
               AND o.status IN ('pending', 'accepted', 'in_progress')
         ) as active_orders
-    FROM shop_employees se
+    FROM shop_staffs se
     JOIN users u ON se.user_id = u.id
     WHERE se.shop_id = ? AND se.status = 'active'
     ORDER BY u.fullname ASC
@@ -87,7 +87,7 @@ if(isset($_POST['set_price'])) {
 
 if(isset($_POST['assign_order'])) {
     $order_id = (int) $_POST['order_id'];
-    $employee_id = (int) $_POST['employee_id'];
+    $staff_id = (int) $_POST['staff_id'];
 
     $order_stmt = $pdo->prepare("SELECT id, status, assigned_to, scheduled_date FROM orders WHERE id = ? AND shop_id = ?");
     $order_stmt->execute([$order_id, $shop_id]);
@@ -98,8 +98,8 @@ if(isset($_POST['assign_order'])) {
     } elseif(in_array($order['status'], ['completed', 'cancelled'], true)) {
         $error = "Completed or cancelled orders cannot be reassigned.";
     } else {
-        if($employee_id > 0) {
-            $employee_stmt = $pdo->prepare("
+        if($staff_id > 0) {
+            $staff_stmt = $pdo->prepare("
                 SELECT 
                     se.user_id,
                     se.availability_days,
@@ -113,16 +113,16 @@ if(isset($_POST['assign_order'])) {
                           AND o.assigned_to = se.user_id 
                           AND o.status IN ('pending', 'accepted', 'in_progress')
                     ) as active_orders 
-                FROM shop_employees se 
+                FROM shop_staffs se 
                 WHERE se.shop_id = ? AND se.user_id = ? AND se.status = 'active'
             ");
-            $employee_stmt->execute([$shop_id, $employee_id]);
-            $employee = $employee_stmt->fetch();
+            $staff_stmt->execute([$shop_id, $staff_id]);
+            $staff = $staff_stmt->fetch();
 
-            if($employee) {
+            if($staff) {
                 $availability_days = [];
-                if(!empty($employee['availability_days'])) {
-                    $decoded_days = json_decode($employee['availability_days'], true);
+                if(!empty($staff['availability_days'])) {
+                    $decoded_days = json_decode($staff['availability_days'], true);
                     if(is_array($decoded_days)) {
                         $availability_days = array_map('intval', $decoded_days);
                     }
@@ -132,24 +132,24 @@ if(isset($_POST['assign_order'])) {
                 $schedule_day = (int) date('N', strtotime($schedule_date));
                 $current_time = date('H:i:s');
 
-                $max_active_orders = (int) ($employee['max_active_orders'] ?? 0);
-                $active_orders = (int) ($employee['active_orders'] ?? 0);
-                $is_same_assignee = !empty($order['assigned_to']) && (int) $order['assigned_to'] === $employee_id;
+                $max_active_orders = (int) ($staff['max_active_orders'] ?? 0);
+                $active_orders = (int) ($staff['active_orders'] ?? 0);
+                $is_same_assignee = !empty($order['assigned_to']) && (int) $order['assigned_to'] === $staff_id;
 
                 if($max_active_orders > 0 && $active_orders >= $max_active_orders && !$is_same_assignee) {
                     $error = "This staff member is already at their active order capacity.";
                 } elseif(!empty($availability_days) && !in_array($schedule_day, $availability_days, true)) {
                     $error = "This staff member is not available on the scheduled day.";
-                } elseif($employee['availability_start'] && $employee['availability_end']
-                    && ($current_time < $employee['availability_start'] || $current_time > $employee['availability_end'])) {
+                } elseif($staff['availability_start'] && $staff['availability_end']
+                    && ($current_time < $staff['availability_start'] || $current_time > $staff['availability_end'])) {
                     $error = "This staff member is outside their availability hours right now.";
                 } else {
                     $assign_stmt = $pdo->prepare("UPDATE orders SET assigned_to = ? WHERE id = ? AND shop_id = ?");
-                    $assign_stmt->execute([$employee_id, $order_id, $shop_id]);
+                    $assign_stmt->execute([$staff_id, $order_id, $shop_id]);
                     $success = "Order assignment updated.";
                 }
             } else {
-                $error = "Selected employee is not active for this shop.";
+                $error = "Selected staff is not active for this shop.";
             }
         } else {
             $assign_stmt = $pdo->prepare("UPDATE orders SET assigned_to = NULL WHERE id = ? AND shop_id = ?");
@@ -303,7 +303,7 @@ function format_quote_details(?array $quote_details): array {
 
         <?php if(empty($active_staff)): ?>
             <div class="alert alert-warning">
-                No active staff available. Add or reactivate employees to assign orders.
+                No active staff available. Add or reactivate staffs to assign orders.
             </div>
         <?php endif; ?>
 
@@ -395,7 +395,7 @@ function format_quote_details(?array $quote_details): array {
                                     <?php if(!in_array($order['status'], ['completed', 'cancelled'], true)): ?>
                                         <form method="POST" class="assignment-form">
                                             <input type="hidden" name="order_id" value="<?php echo $order['id']; ?>">
-                                            <select name="employee_id" class="form-control" <?php echo empty($active_staff) ? 'disabled' : ''; ?>>
+                                            <select name="staff_id" class="form-control" <?php echo empty($active_staff) ? 'disabled' : ''; ?>>
                                                 <option value="">Unassigned</option>
                                                 <?php foreach($active_staff as $staff): ?>
                                                     <?php

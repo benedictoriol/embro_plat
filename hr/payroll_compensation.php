@@ -7,7 +7,7 @@ $hr_name = htmlspecialchars($_SESSION['user']['fullname'] ?? 'HR Lead');
 
 $payroll_kpis = [
     [
-        'label' => 'Active employees',
+        'label' => 'Active staffs',
         'value' => 128,
         'note' => 'Across production & support',
         'icon' => 'fas fa-users',
@@ -83,19 +83,19 @@ $approval_queue = [
 
 $exception_log = [
     [
-        'employee' => 'Mara Santos',
+        'staff' => 'Mara Santos',
         'issue' => 'Missing production output',
         'impact' => 'Auto-rate held',
         'status' => 'Review',
     ],
     [
-        'employee' => 'Jonas Lim',
+        'staff' => 'Jonas Lim',
         'issue' => 'Backdated leave entry',
         'impact' => 'Net pay adjusted',
         'status' => 'Resolved',
     ],
     [
-        'employee' => 'Ellen Cruz',
+        'staff' => 'Ellen Cruz',
         'issue' => 'Shift differential update',
         'impact' => 'Supervisor approval',
         'status' => 'Pending',
@@ -127,7 +127,7 @@ $workflow_steps = [
     ],
     [
         'title' => 'Payroll draft',
-        'detail' => 'Generate earnings, deductions, and incentives per employee.',
+        'detail' => 'Generate earnings, deductions, and incentives per staff.',
     ],
     [
         'title' => 'HR review',
@@ -139,7 +139,7 @@ $workflow_steps = [
     ],
     [
         'title' => 'Payslip release',
-        'detail' => 'Distribute payslips and notify employees automatically.',
+        'detail' => 'Distribute payslips and notify staffs automatically.',
     ],
 ];
 ?>
@@ -300,7 +300,7 @@ $workflow_steps = [
                     <table>
                         <thead>
                             <tr>
-                                <th>Employee</th>
+                                <th>staff</th>
                                 <th>Issue</th>
                                 <th>Impact</th>
                                 <th>Status</th>
@@ -309,7 +309,7 @@ $workflow_steps = [
                         <tbody>
                             <?php foreach ($exception_log as $exception): ?>
                                 <tr>
-                                    <td><?php echo $exception['employee']; ?></td>
+                                    <td><?php echo $exception['staff']; ?></td>
                                     <td><?php echo $exception['issue']; ?></td>
                                     <td><?php echo $exception['impact']; ?></td>
                                     <td><span class="badge badge-outline"><?php echo $exception['status']; ?></span></td>

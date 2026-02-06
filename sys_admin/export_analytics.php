@@ -63,7 +63,7 @@ if ($type === 'orders_turnaround') {
 
 if ($type === 'staff_performance') {
     fputcsv($output, [
-        'Employee',
+        'staff',
         'Total Assigned',
         'Active Orders',
         'Completed Orders',
@@ -81,7 +81,7 @@ if ($type === 'staff_performance') {
             AVG(CASE WHEN o.status = 'completed' AND o.completed_at IS NOT NULL THEN TIMESTAMPDIFF(HOUR, o.created_at, o.completed_at) END) as avg_completion_hours
         FROM users u
         LEFT JOIN orders o ON o.assigned_to = u.id
-        WHERE u.role = 'employee'
+        WHERE u.role = 'staff'
         GROUP BY u.id, u.fullname
         ORDER BY completed_orders DESC, active_orders DESC
     ");

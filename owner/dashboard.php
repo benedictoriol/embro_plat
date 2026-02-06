@@ -27,7 +27,7 @@ $stats_stmt = $pdo->prepare("
         (SELECT COUNT(*) FROM orders WHERE shop_id = ? AND status = 'in_progress') as active_orders,
         (SELECT COUNT(*) FROM orders WHERE shop_id = ? AND status = 'completed') as completed_orders,
         (SELECT SUM(price) FROM orders WHERE shop_id = ? AND status = 'completed') as total_earnings,
-        (SELECT COUNT(*) FROM shop_employees WHERE shop_id = ? AND status = 'active') as total_staff
+        (SELECT COUNT(*) FROM shop_staffs WHERE shop_id = ? AND status = 'active') as total_staff
 ");
 $stats_stmt->execute([$shop_id, $shop_id, $shop_id, $shop_id, $shop_id, $shop_id]);
 $stats = $stats_stmt->fetch();
@@ -44,17 +44,17 @@ $orders_stmt = $pdo->prepare("
 $orders_stmt->execute([$shop_id]);
 $recent_orders = $orders_stmt->fetchAll();
 
-// Recent employees
-$employees_stmt = $pdo->prepare("
+// Recent staffs
+$staffs_stmt = $pdo->prepare("
     SELECT se.*, u.fullname, u.email 
-    FROM shop_employees se 
+    FROM shop_staffs se 
     JOIN users u ON se.user_id = u.id 
     WHERE se.shop_id = ? 
     ORDER BY se.created_at DESC 
     LIMIT 3
 ");
-$employees_stmt->execute([$shop_id]);
-$recent_employees = $employees_stmt->fetchAll();
+$staffs_stmt->execute([$shop_id]);
+$recent_staffs = $staffs_stmt->fetchAll();
 ?>
 <!DOCTYPE html>
 <html lang="en">
@@ -282,13 +282,13 @@ $recent_employees = $employees_stmt->fetchAll();
             <div style="flex: 1; display: flex; flex-direction: column; gap: 20px;">
                 <div class="card">
                     <h3>Recent Staff</h3>
-                    <?php if(!empty($recent_employees)): ?>
-                        <?php foreach($recent_employees as $employee): ?>
+                    <?php if(!empty($recent_staffs)): ?>
+                        <?php foreach($recent_staffs as $staff): ?>
                             <div class="d-flex justify-between align-center mb-3" style="border-bottom: 1px solid #eee; padding-bottom: 10px;">
                                 <div>
-                                    <strong><?php echo htmlspecialchars($employee['fullname']); ?></strong>
+                                    <strong><?php echo htmlspecialchars($staff['fullname']); ?></strong>
                                     <br>
-                                    <small class="text-muted"><?php echo htmlspecialchars($employee['email']); ?></small>
+                                    <small class="text-muted"><?php echo htmlspecialchars($staff['email']); ?></small>
                                 </div>
                                 <div>
                                     <a href="manage_staff.php" class="btn btn-sm btn-outline-primary">View</a>

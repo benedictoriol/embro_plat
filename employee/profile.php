@@ -1,7 +1,7 @@
 <?php
 session_start();
 require_once '../config/db.php';
-require_role('employee');
+require_role('staff');
 
 $userId = $_SESSION['user']['id'];
 
@@ -73,7 +73,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Profile Settings - Employee</title>
+    <title>Profile Settings - staff</title>
     <link rel="stylesheet" href="../assets/css/style.css">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
     <style>
@@ -97,7 +97,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     <nav class="navbar">
         <div class="container d-flex justify-between align-center">
             <a href="dashboard.php" class="navbar-brand">
-                <i class="fas fa-user-tie"></i> Employee Dashboard
+                <i class="fas fa-user-tie"></i> staff Dashboard
             </a>
             <ul class="navbar-nav">
                 <li><a href="dashboard.php" class="nav-link">Dashboard</a></li>
@@ -125,7 +125,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                     <h2>Profile Settings</h2>
                     <p class="text-muted">Update your personal details and credentials.</p>
                 </div>
-                <span class="badge badge-info"><i class="fas fa-user-cog"></i> Employee</span>
+                <span class="badge badge-info"><i class="fas fa-user-cog"></i> staff</span>
             </div>
         </div>
 
@@ -185,12 +185,12 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             <div class="card summary-card">
                 <div class="card-header">
                     <h3><i class="fas fa-briefcase text-success"></i> Profile Summary</h3>
-                    <p class="text-muted">Quick overview of your employee account.</p>
+                    <p class="text-muted">Quick overview of your staff account.</p>
                 </div>
                 <div class="d-flex flex-column gap-3">
                     <div>
                         <strong>Role</strong>
-                        <p class="text-muted mb-0"><?php echo ucfirst($profile['role'] ?? 'employee'); ?></p>
+                        <p class="text-muted mb-0"><?php echo ucfirst($profile['role'] ?? 'staff'); ?></p>
                     </div>
                     <div>
                         <strong>Status</strong>
