@@ -158,6 +158,37 @@ CREATE TABLE `design_approvals` (
 -- --------------------------------------------------------
 
 --
+-- Table structure for table `design_projects`
+--
+
+CREATE TABLE `design_projects` (
+  `id` int(11) NOT NULL,
+  `client_id` int(11) NOT NULL,
+  `shop_id` int(11) NOT NULL,
+  `title` varchar(150) DEFAULT NULL,
+  `status` enum('draft','submitted','archived') DEFAULT 'draft',
+  `created_at` timestamp NOT NULL DEFAULT current_timestamp()
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
+
+-- --------------------------------------------------------
+
+--
+-- Table structure for table `design_versions`
+--
+
+CREATE TABLE `design_versions` (
+  `id` int(11) NOT NULL,
+  `project_id` int(11) NOT NULL,
+  `version_no` int(11) NOT NULL,
+  `design_json` longtext NOT NULL,
+  `preview_file` varchar(255) DEFAULT NULL,
+  `created_by` int(11) NOT NULL,
+  `created_at` timestamp NOT NULL DEFAULT current_timestamp()
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
+
+-- --------------------------------------------------------
+
+--
 -- Table structure for table `dss_configurations`
 --
 
@@ -203,6 +234,23 @@ CREATE TABLE `financial_transactions` (
   `description` text DEFAULT NULL,
   `reference_id` int(11) DEFAULT NULL,
   `transaction_date` date NOT NULL,
+  `created_at` timestamp NOT NULL DEFAULT current_timestamp()
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
+
+-- --------------------------------------------------------
+
+--
+-- Table structure for table `hiring_posts`
+--
+
+CREATE TABLE `hiring_posts` (
+  `id` int(11) NOT NULL,
+  `shop_id` int(11) NOT NULL,
+  `created_by` int(11) NOT NULL,
+  `title` varchar(150) NOT NULL,
+  `description` text DEFAULT NULL,
+  `status` enum('draft','live','closed','expired') DEFAULT 'live',
+  `expires_at` datetime DEFAULT NULL,
   `created_at` timestamp NOT NULL DEFAULT current_timestamp()
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
 
@@ -266,6 +314,20 @@ CREATE TABLE `notifications` (
 -- --------------------------------------------------------
 
 --
+-- Table structure for table `notification_preferences`
+--
+
+CREATE TABLE `notification_preferences` (
+  `id` int(11) NOT NULL,
+  `user_id` int(11) NOT NULL,
+  `event_key` varchar(100) NOT NULL,
+  `channel` enum('in_app') DEFAULT 'in_app',
+  `enabled` tinyint(1) DEFAULT 1
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
+
+-- --------------------------------------------------------
+
+--
 -- Table structure for table `orders`
 --
 
@@ -286,6 +348,7 @@ CREATE TABLE `orders` (
   `scheduled_date` date DEFAULT NULL,
   `shop_notes` text DEFAULT NULL,
   `design_file` varchar(255) DEFAULT NULL,
+  `design_version_id` int(11) DEFAULT NULL,
   `design_approved` tinyint(1) DEFAULT 0,
   `rating` tinyint(1) DEFAULT NULL,
   `payment_status` enum('unpaid','pending','paid','rejected','refund_pending','refunded') DEFAULT 'unpaid',
@@ -482,6 +545,38 @@ CREATE TABLE `payroll` (
   `net_salary` decimal(12,2) DEFAULT NULL,
   `status` enum('pending','paid','cancelled') DEFAULT 'pending',
   `paid_at` timestamp NULL DEFAULT NULL,
+  `created_at` timestamp NOT NULL DEFAULT current_timestamp()
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
+
+-- --------------------------------------------------------
+
+--
+-- Table structure for table `shifts`
+--
+
+CREATE TABLE `shifts` (
+  `id` int(11) NOT NULL,
+  `shop_id` int(11) NOT NULL,
+  `staff_user_id` int(11) NOT NULL,
+  `start_time` datetime NOT NULL,
+  `end_time` datetime NOT NULL,
+  `created_by` int(11) DEFAULT NULL,
+  `created_at` timestamp NOT NULL DEFAULT current_timestamp()
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
+
+-- --------------------------------------------------------
+
+--
+-- Table structure for table `attendance_logs`
+--
+
+CREATE TABLE `attendance_logs` (
+  `id` int(11) NOT NULL,
+  `shop_id` int(11) NOT NULL,
+  `staff_user_id` int(11) NOT NULL,
+  `clock_in` datetime DEFAULT NULL,
+  `clock_out` datetime DEFAULT NULL,
+  `method` enum('manual','self') DEFAULT 'self',
   `created_at` timestamp NOT NULL DEFAULT current_timestamp()
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
 
@@ -702,6 +797,7 @@ CREATE TABLE `shop_employees` (
   `id` int(11) NOT NULL,
   `shop_id` int(11) NOT NULL,
   `user_id` int(11) NOT NULL,
+  `staff_role` enum('hr','staff') DEFAULT 'staff',
   `position` varchar(100) DEFAULT NULL,
   `permissions` longtext CHARACTER SET utf8mb4 COLLATE utf8mb4_bin DEFAULT NULL CHECK (json_valid(`permissions`)),
   `availability_days` longtext CHARACTER SET utf8mb4 COLLATE utf8mb4_bin DEFAULT NULL CHECK (json_valid(`availability_days`)),
@@ -739,7 +835,7 @@ CREATE TABLE `users` (
   `fullname` varchar(100) DEFAULT NULL,
   `email` varchar(100) DEFAULT NULL,
   `password` varchar(255) DEFAULT NULL,
-  `role` enum('sys_admin','owner','employee','client','hr') DEFAULT 'client',
+  `role` enum('sys_admin','staff','owner','hr','client') DEFAULT 'client',
   `status` enum('pending','active','inactive','rejected') DEFAULT 'active',
   `created_at` timestamp NOT NULL DEFAULT current_timestamp(),
   `email_verified` tinyint(1) DEFAULT 0,
@@ -754,7 +850,7 @@ CREATE TABLE `users` (
 
 INSERT INTO `users` (`id`, `fullname`, `email`, `password`, `role`, `status`, `created_at`, `email_verified`, `phone`, `phone_verified`, `last_login`) VALUES
 (1, 'Administrator', 'admin@embroidery.com', '$2y$10$92IXUNpkjO0rOQ5byMi.Ye4oKoEa3Ro9llC/.og/at2.uheWG/igi', 'sys_admin', 'active', '2026-01-19 15:28:09', 0, NULL, 0, '2026-01-31 14:00:06'),
-(2, 'Staff Member', 'staff@embroidery.com', '$2y$10$92IXUNpkjO0rOQ5byMi.Ye4oKoEa3Ro9llC/.og/at2.uheWG/igi', 'employee', 'active', '2026-01-19 15:28:09', 0, NULL, 0, '2026-01-31 09:53:28'),
+(2, 'Staff Member', 'staff@embroidery.com', '$2y$10$92IXUNpkjO0rOQ5byMi.Ye4oKoEa3Ro9llC/.og/at2.uheWG/igi', 'staff', 'active', '2026-01-19 15:28:09', 0, NULL, 0, '2026-01-31 09:53:28'),
 (3, 'Customer', 'customer@embroidery.com', '$2y$10$92IXUNpkjO0rOQ5byMi.Ye4oKoEa3Ro9llC/.og/at2.uheWG/igi', 'client', 'active', '2026-01-19 15:28:09', 0, NULL, 0, '2026-01-27 20:53:59'),
 (4, 'Shop Owner', 'owner@embroidery.com', '$2y$10$92IXUNpkjO0rOQ5byMi.Ye4oKoEa3Ro9llC/.og/at2.uheWG/igi', 'owner', 'active', '2026-01-19 15:28:09', 0, NULL, 0, '2026-01-27 19:15:00'),
 (5, 'HR', 'hr@embroidery.com', '$2y$10$92IXUNpkjO0rOQ5byMi.Ye4oKoEa3Ro9llC/.og/at2.uheWG/igi', 'hr', 'active', '2026-01-31 14:10:00', 0, NULL, 0, NULL);
@@ -819,6 +915,22 @@ ALTER TABLE `design_approvals`
   ADD KEY `service_provider_id` (`service_provider_id`);
 
 --
+-- Indexes for table `design_projects`
+--
+ALTER TABLE `design_projects`
+  ADD PRIMARY KEY (`id`),
+  ADD KEY `client_id` (`client_id`),
+  ADD KEY `shop_id` (`shop_id`);
+
+--
+-- Indexes for table `design_versions`
+--
+ALTER TABLE `design_versions`
+  ADD PRIMARY KEY (`id`),
+  ADD UNIQUE KEY `uniq_project_version` (`project_id`,`version_no`),
+  ADD KEY `created_by` (`created_by`);
+
+--
 -- Indexes for table `dss_configurations`
 --
 ALTER TABLE `dss_configurations`
@@ -838,6 +950,14 @@ ALTER TABLE `employees`
 --
 ALTER TABLE `financial_transactions`
   ADD PRIMARY KEY (`id`);
+
+--
+-- Indexes for table `hiring_posts`
+--
+ALTER TABLE `hiring_posts`
+  ADD PRIMARY KEY (`id`),
+  ADD KEY `shop_id` (`shop_id`),
+  ADD KEY `created_by` (`created_by`);
 
 --
 -- Indexes for table `job_schedule`
@@ -863,13 +983,22 @@ ALTER TABLE `notifications`
   ADD KEY `order_id` (`order_id`);
 
 --
+-- Indexes for table `hiring_posts`
+--
+ALTER TABLE `hiring_posts`
+  ADD PRIMARY KEY (`id`),
+  ADD KEY `shop_id` (`shop_id`),
+  ADD KEY `created_by` (`created_by`);
+
+--
 -- Indexes for table `orders`
 --
 ALTER TABLE `orders`
   ADD PRIMARY KEY (`id`),
   ADD KEY `client_id` (`client_id`),
   ADD KEY `shop_id` (`shop_id`),
-  ADD KEY `assigned_to` (`assigned_to`);
+  ADD KEY `assigned_to` (`assigned_to`),
+  ADD KEY `design_version_id` (`design_version_id`);
 
 --
 -- Indexes for table `order_invoices`
@@ -950,6 +1079,23 @@ ALTER TABLE `payment_refunds`
 ALTER TABLE `payroll`
   ADD PRIMARY KEY (`id`),
   ADD KEY `employee_id` (`employee_id`);
+
+--
+-- Indexes for table `shifts`
+--
+ALTER TABLE `shifts`
+  ADD PRIMARY KEY (`id`),
+  ADD KEY `shop_id` (`shop_id`),
+  ADD KEY `staff_user_id` (`staff_user_id`),
+  ADD KEY `created_by` (`created_by`);
+
+--
+-- Indexes for table `attendance_logs`
+--
+ALTER TABLE `attendance_logs`
+  ADD PRIMARY KEY (`id`),
+  ADD KEY `shop_id` (`shop_id`),
+  ADD KEY `staff_user_id` (`staff_user_id`);
 
 --
 -- Indexes for table `raw_materials`
@@ -1063,6 +1209,18 @@ ALTER TABLE `design_approvals`
   MODIFY `id` int(11) NOT NULL AUTO_INCREMENT;
 
 --
+-- AUTO_INCREMENT for table `design_projects`
+--
+ALTER TABLE `design_projects`
+  MODIFY `id` int(11) NOT NULL AUTO_INCREMENT;
+
+--
+-- AUTO_INCREMENT for table `design_versions`
+--
+ALTER TABLE `design_versions`
+  MODIFY `id` int(11) NOT NULL AUTO_INCREMENT;
+
+--
 -- AUTO_INCREMENT for table `dss_configurations`
 --
 ALTER TABLE `dss_configurations`
@@ -1078,6 +1236,12 @@ ALTER TABLE `employees`
 -- AUTO_INCREMENT for table `financial_transactions`
 --
 ALTER TABLE `financial_transactions`
+  MODIFY `id` int(11) NOT NULL AUTO_INCREMENT;
+
+--
+-- AUTO_INCREMENT for table `hiring_posts`
+--
+ALTER TABLE `hiring_posts`
   MODIFY `id` int(11) NOT NULL AUTO_INCREMENT;
 
 --
@@ -1097,6 +1261,12 @@ ALTER TABLE `material_orders`
 --
 ALTER TABLE `notifications`
   MODIFY `id` int(11) NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=42;
+
+--
+-- AUTO_INCREMENT for table `notification_preferences`
+--
+ALTER TABLE `notification_preferences`
+  MODIFY `id` int(11) NOT NULL AUTO_INCREMENT;
 
 --
 -- AUTO_INCREMENT for table `orders`
@@ -1162,6 +1332,18 @@ ALTER TABLE `payment_refunds`
 -- AUTO_INCREMENT for table `payroll`
 --
 ALTER TABLE `payroll`
+  MODIFY `id` int(11) NOT NULL AUTO_INCREMENT;
+
+--
+-- AUTO_INCREMENT for table `shifts`
+--
+ALTER TABLE `shifts`
+  MODIFY `id` int(11) NOT NULL AUTO_INCREMENT;
+
+--
+-- AUTO_INCREMENT for table `attendance_logs`
+--
+ALTER TABLE `attendance_logs`
   MODIFY `id` int(11) NOT NULL AUTO_INCREMENT;
 
 --
@@ -1250,6 +1432,20 @@ ALTER TABLE `design_approvals`
   ADD CONSTRAINT `design_approvals_ibfk_2` FOREIGN KEY (`service_provider_id`) REFERENCES `service_providers` (`id`);
 
 --
+-- Constraints for table `design_projects`
+--
+ALTER TABLE `design_projects`
+  ADD CONSTRAINT `design_projects_ibfk_1` FOREIGN KEY (`client_id`) REFERENCES `users` (`id`),
+  ADD CONSTRAINT `design_projects_ibfk_2` FOREIGN KEY (`shop_id`) REFERENCES `shops` (`id`);
+
+--
+-- Constraints for table `design_versions`
+--
+ALTER TABLE `design_versions`
+  ADD CONSTRAINT `design_versions_ibfk_1` FOREIGN KEY (`project_id`) REFERENCES `design_projects` (`id`),
+  ADD CONSTRAINT `design_versions_ibfk_2` FOREIGN KEY (`created_by`) REFERENCES `users` (`id`);
+
+--
 -- Constraints for table `dss_configurations`
 --
 ALTER TABLE `dss_configurations`
@@ -1260,6 +1456,13 @@ ALTER TABLE `dss_configurations`
 --
 ALTER TABLE `employees`
   ADD CONSTRAINT `employees_ibfk_1` FOREIGN KEY (`user_id`) REFERENCES `users` (`id`);
+
+--
+-- Constraints for table `hiring_posts`
+--
+ALTER TABLE `hiring_posts`
+  ADD CONSTRAINT `hiring_posts_ibfk_1` FOREIGN KEY (`shop_id`) REFERENCES `shops` (`id`),
+  ADD CONSTRAINT `hiring_posts_ibfk_2` FOREIGN KEY (`created_by`) REFERENCES `users` (`id`);
 
 --
 -- Constraints for table `job_schedule`
@@ -1282,12 +1485,19 @@ ALTER TABLE `notifications`
   ADD CONSTRAINT `notifications_ibfk_2` FOREIGN KEY (`order_id`) REFERENCES `orders` (`id`);
 
 --
+-- Constraints for table `notification_preferences`
+--
+ALTER TABLE `notification_preferences`
+  ADD CONSTRAINT `notification_preferences_ibfk_1` FOREIGN KEY (`user_id`) REFERENCES `users` (`id`);
+
+--
 -- Constraints for table `orders`
 --
 ALTER TABLE `orders`
   ADD CONSTRAINT `orders_ibfk_1` FOREIGN KEY (`client_id`) REFERENCES `users` (`id`),
   ADD CONSTRAINT `orders_ibfk_2` FOREIGN KEY (`shop_id`) REFERENCES `shops` (`id`),
-  ADD CONSTRAINT `orders_ibfk_3` FOREIGN KEY (`assigned_to`) REFERENCES `users` (`id`);
+  ADD CONSTRAINT `orders_ibfk_3` FOREIGN KEY (`assigned_to`) REFERENCES `users` (`id`),
+  ADD CONSTRAINT `orders_ibfk_4` FOREIGN KEY (`design_version_id`) REFERENCES `design_versions` (`id`);
 
 --
 -- Constraints for table `order_photos`
@@ -1315,6 +1525,21 @@ ALTER TABLE `otp_verifications`
 ALTER TABLE `payroll`
   ADD CONSTRAINT `payroll_ibfk_1` FOREIGN KEY (`employee_id`) REFERENCES `employees` (`id`);
 
+--
+-- Constraints for table `shifts`
+--
+ALTER TABLE `shifts`
+  ADD CONSTRAINT `shifts_ibfk_1` FOREIGN KEY (`shop_id`) REFERENCES `shops` (`id`),
+  ADD CONSTRAINT `shifts_ibfk_2` FOREIGN KEY (`staff_user_id`) REFERENCES `users` (`id`),
+  ADD CONSTRAINT `shifts_ibfk_3` FOREIGN KEY (`created_by`) REFERENCES `users` (`id`);
+
+--
+-- Constraints for table `attendance_logs`
+--
+ALTER TABLE `attendance_logs`
+  ADD CONSTRAINT `attendance_logs_ibfk_1` FOREIGN KEY (`shop_id`) REFERENCES `shops` (`id`),
+  ADD CONSTRAINT `attendance_logs_ibfk_2` FOREIGN KEY (`staff_user_id`) REFERENCES `users` (`id`);
+v
 --
 -- Constraints for table `service_providers`
 --
