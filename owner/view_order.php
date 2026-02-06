@@ -26,10 +26,16 @@ $order_stmt = $pdo->prepare("
            u.email AS client_email,
            u.phone AS client_phone,
            s.shop_name,
-           au.fullname AS assigned_name
+           au.fullname AS assigned_name,
+           dv.version_no AS design_version_no,
+           dv.preview_file AS design_version_preview,
+           dv.created_at AS design_version_created_at,
+           dp.title AS design_project_title
     FROM orders o
     JOIN users u ON o.client_id = u.id
     JOIN shops s ON o.shop_id = s.id
+    LEFT JOIN design_versions dv ON dv.id = o.design_version_id
+    LEFT JOIN design_projects dp ON dp.id = dv.project_id
     LEFT JOIN users au ON o.assigned_to = au.id
     WHERE o.id = ? AND o.shop_id = ?
     LIMIT 1
@@ -41,6 +47,16 @@ if(!$order) {
     header("Location: shop_orders.php");
     exit();
 }
+
+$proof_stmt = $pdo->prepare("
+    SELECT design_file, status, updated_at
+    FROM design_approvals
+    WHERE order_id = ?
+    ORDER BY updated_at DESC
+    LIMIT 1
+");
+$proof_stmt->execute([$order_id]);
+$latest_proof = $proof_stmt->fetch();
 
 $invoice_stmt = $pdo->prepare("SELECT * FROM order_invoices WHERE order_id = ?");
 $invoice_stmt->execute([$order_id]);
@@ -307,6 +323,14 @@ $design_file = $design_file_name
     : null;
     $design_file_extension = $design_file_name ? strtolower(pathinfo($design_file_name, PATHINFO_EXTENSION)) : '';
 $is_design_image = $design_file_name && in_array($design_file_extension, ALLOWED_IMAGE_TYPES, true);
+$design_version_name = $order['design_version_preview'] ?? null;
+$design_version_file = $design_version_name ? '../assets/uploads/designs/' . $design_version_name : null;
+$design_version_extension = $design_version_name ? strtolower(pathinfo($design_version_name, PATHINFO_EXTENSION)) : '';
+$is_design_version_image = $design_version_name && in_array($design_version_extension, ALLOWED_IMAGE_TYPES, true);
+$latest_proof_file = $latest_proof['design_file'] ?? null;
+$latest_proof_url = $latest_proof_file ? '../' . $latest_proof_file : null;
+$latest_proof_extension = $latest_proof_file ? strtolower(pathinfo($latest_proof_file, PATHINFO_EXTENSION)) : '';
+$is_latest_proof_image = $latest_proof_file && in_array($latest_proof_extension, ALLOWED_IMAGE_TYPES, true);
 ?>
 <!DOCTYPE html>
 <html lang="en">
@@ -529,6 +553,55 @@ $is_design_image = $design_file_name && in_array($design_file_extension, ALLOWED
             <p><?php echo nl2br(htmlspecialchars($order['design_description'] ?? 'No description provided.')); ?></p>
             <p><strong>Client Notes:</strong></p>
             <p><?php echo nl2br(htmlspecialchars($order['client_notes'] ?? 'No notes provided.')); ?></p>
+            <?php if(!empty($order['design_version_id'])): ?>
+                <div class="mt-3">
+                    <p class="mb-1"><strong>Latest saved design version</strong></p>
+                    <p class="text-muted mb-1">
+                        <?php if(!empty($order['design_project_title'])): ?>
+                            <?php echo htmlspecialchars($order['design_project_title']); ?>
+                        <?php endif; ?>
+                        <?php if(!empty($order['design_version_no'])): ?>
+                            (v<?php echo (int) $order['design_version_no']; ?>)
+                        <?php endif; ?>
+                    </p>
+                    <?php if(!empty($order['design_version_created_at'])): ?>
+                        <small class="text-muted">Saved <?php echo date('M d, Y', strtotime($order['design_version_created_at'])); ?></small>
+                    <?php endif; ?>
+                    <?php if($design_version_file): ?>
+                        <p class="mt-2">
+                            <a class="file-link" href="<?php echo htmlspecialchars($design_version_file); ?>" target="_blank" rel="noopener noreferrer">
+                                <i class="fas fa-paperclip"></i> View saved design version
+                            </a>
+                        </p>
+                        <?php if($is_design_version_image): ?>
+                            <div class="design-preview">
+                                <img src="<?php echo htmlspecialchars($design_version_file); ?>" alt="Saved design version preview">
+                            </div>
+                        <?php endif; ?>
+                    <?php endif; ?>
+                </div>
+            <?php endif; ?>
+            <?php if($latest_proof_url): ?>
+                <div class="mt-3">
+                    <p class="mb-1"><strong>Latest proof</strong></p>
+                    <?php if(!empty($latest_proof['status'])): ?>
+                        <span class="badge badge-secondary">Status: <?php echo htmlspecialchars($latest_proof['status']); ?></span>
+                    <?php endif; ?>
+                    <?php if(!empty($latest_proof['updated_at'])): ?>
+                        <small class="text-muted">Updated <?php echo date('M d, Y', strtotime($latest_proof['updated_at'])); ?></small>
+                    <?php endif; ?>
+                    <p class="mt-2">
+                        <a class="file-link" href="<?php echo htmlspecialchars($latest_proof_url); ?>" target="_blank" rel="noopener noreferrer">
+                            <i class="fas fa-file-download"></i> View proof file
+                        </a>
+                    </p>
+                    <?php if($is_latest_proof_image): ?>
+                        <div class="design-preview">
+                            <img src="<?php echo htmlspecialchars($latest_proof_url); ?>" alt="Latest proof file">
+                        </div>
+                    <?php endif; ?>
+                </div>
+            <?php endif; ?>
             <?php if($design_file): ?>
                 <p class="mt-3">
                     <a class="file-link" href="<?php echo htmlspecialchars($design_file); ?>" target="_blank" rel="noopener noreferrer">

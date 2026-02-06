@@ -120,11 +120,16 @@ if(isset($_POST['request_revision'])) {
 
 $approvals_stmt = $pdo->prepare("
     SELECT o.id as order_id, o.order_number, o.status as order_status, o.design_approved,
+           o.design_version_id,
            s.shop_name, s.owner_id,
-           da.status as approval_status, da.design_file, da.revision_count, da.updated_at
+           da.status as approval_status, da.design_file, da.revision_count, da.updated_at,
+           dv.version_no as design_version_no, dv.preview_file as design_version_preview,
+           dv.created_at as design_version_created_at, dp.title as design_project_title
     FROM orders o
     JOIN shops s ON o.shop_id = s.id
     JOIN design_approvals da ON da.order_id = o.id
+    LEFT JOIN design_versions dv ON dv.id = o.design_version_id
+    LEFT JOIN design_projects dp ON dp.id = dv.project_id
     WHERE o.client_id = ? AND da.status IN ('pending', 'revision')
     ORDER BY da.updated_at DESC
 ");
@@ -250,6 +255,40 @@ $approvals = $approvals_stmt->fetchAll();
                             <h4>Order #<?php echo htmlspecialchars($approval['order_number']); ?></h4>
                             <p class="text-muted mb-2"><i class="fas fa-store"></i> <?php echo htmlspecialchars($approval['shop_name']); ?></p>
                             <span class="badge badge-warning">Proof <?php echo htmlspecialchars($approval['approval_status']); ?></span>
+
+                            <?php
+                                $design_version_preview = !empty($approval['design_version_preview'])
+                                    ? '../assets/uploads/designs/' . $approval['design_version_preview']
+                                    : null;
+                                $has_design_version = !empty($approval['design_version_id']);
+                            ?>
+                            <?php if($has_design_version): ?>
+                                <div class="mt-3">
+                                    <p class="text-muted mb-1">
+                                        <i class="fas fa-layer-group"></i>
+                                        Latest saved version
+                                        <?php if(!empty($approval['design_version_no'])): ?>
+                                            (v<?php echo (int) $approval['design_version_no']; ?>)
+                                        <?php endif; ?>
+                                    </p>
+                                    <?php if(!empty($approval['design_project_title'])): ?>
+                                        <p class="mb-1"><strong><?php echo htmlspecialchars($approval['design_project_title']); ?></strong></p>
+                                    <?php endif; ?>
+                                    <?php if(!empty($approval['design_version_created_at'])): ?>
+                                        <small class="text-muted">Saved <?php echo date('M d, Y', strtotime($approval['design_version_created_at'])); ?></small>
+                                    <?php endif; ?>
+                                    <?php if($design_version_preview): ?>
+                                        <?php if(is_design_image($approval['design_version_preview'])): ?>
+                                            <img src="<?php echo htmlspecialchars($design_version_preview); ?>" alt="Saved design version" class="mt-2">
+                                        <?php endif; ?>
+                                        <p class="mt-2 mb-0">
+                                            <a href="<?php echo htmlspecialchars($design_version_preview); ?>" target="_blank" rel="noopener noreferrer">
+                                                <i class="fas fa-paperclip"></i> View saved design
+                                            </a>
+                                        </p>
+                                    <?php endif; ?>
+                                </div>
+                            <?php endif; ?>
 
             <?php if(!empty($approval['design_file'])): ?>
                                 <?php if(is_design_image($approval['design_file'])): ?>

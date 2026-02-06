@@ -305,6 +305,15 @@ usort($shops, function($a, $b) {
     return $b['ranking_score'] <=> $a['ranking_score'];
 });
 $max_upload_mb = (int) ceil(MAX_FILE_SIZE / (1024 * 1024));
+$design_versions_stmt = $pdo->prepare("
+    SELECT dv.id, dv.version_no, dv.preview_file, dv.created_at, dp.title AS project_title
+    FROM design_versions dv
+    INNER JOIN design_projects dp ON dp.id = dv.project_id
+    WHERE dp.client_id = ?
+    ORDER BY dv.created_at DESC
+");
+$design_versions_stmt->execute([$client_id]);
+$design_versions = $design_versions_stmt->fetchAll();
 
 // Place order
 if(isset($_POST['place_order'])) {
@@ -698,7 +707,6 @@ $upload = save_uploaded_media(
             </div>
         </form>
         <form method="POST" enctype="multipart/form-data" id="orderForm">
-            <input type="hidden" name="design_version_id" id="design_version_id" value="<?php echo $prefill_design_version_id; ?>">
             <!-- Step 1: Select Shop -->
             <div class="card mb-4">
                 <h3>Step 1: Select Service Provider</h3>
@@ -861,6 +869,24 @@ $upload = save_uploaded_media(
                     <textarea name="design_description" class="form-control" rows="4" required
                               placeholder="Placement: (e.g., left chest)&#10;Size: (e.g., 3in x 2in)&#10;Colors/Thread: (e.g., navy + white)&#10;Fabric/Item: (e.g., cotton polo)&#10;Notes: (optional)"></textarea>
                     <small class="text-muted">Provide at least 30 characters with placement, size, and color details for consistent quoting.</small>
+                </div>
+                
+                <div class="form-group">
+                    <label>Saved Design Version (Optional)</label>
+                    <select name="design_version_id" class="form-control" id="designVersionSelect">
+                        <option value="0">Select a saved design version</option>
+                        <?php foreach ($design_versions as $version): ?>
+                            <option value="<?php echo (int) $version['id']; ?>" <?php echo $prefill_design_version_id === (int) $version['id'] ? 'selected' : ''; ?>>
+                                <?php
+                                    $title = $version['project_title'] ? $version['project_title'] : 'Design';
+                                    $version_label = 'v' . (int) $version['version_no'];
+                                    $date_label = date('M d, Y', strtotime($version['created_at']));
+                                    echo htmlspecialchars($title . ' · ' . $version_label . ' · ' . $date_label);
+                                ?>
+                            </option>
+                        <?php endforeach; ?>
+                    </select>
+                    <small class="text-muted">Choose a saved design version or upload a new file below.</small>
                 </div>
                 
                 <div class="form-group">

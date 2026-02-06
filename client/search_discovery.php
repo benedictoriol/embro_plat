@@ -62,7 +62,9 @@ $hiring_stmt = $pdo->query("
     SELECT hp.*, s.shop_name
     FROM hiring_posts hp
     INNER JOIN shops s ON s.id = hp.shop_id
-    WHERE hp.status = 'live' AND s.status = 'active'
+    WHERE hp.status = 'live'
+      AND s.status = 'active'
+      AND (hp.expires_at IS NULL OR hp.expires_at >= NOW())
     ORDER BY hp.created_at DESC
 ");
 foreach ($hiring_stmt->fetchAll(PDO::FETCH_ASSOC) as $row) {
@@ -70,35 +72,34 @@ foreach ($hiring_stmt->fetchAll(PDO::FETCH_ASSOC) as $row) {
     if (!isset($hiring_posts_map[$shop_id])) {
         $hiring_posts_map[$shop_id] = [];
     }
+    $row['expiration_status'] = 'Open';
+    if (!empty($row['expires_at'])) {
+        $expires_ts = strtotime($row['expires_at']);
+        $row['expiration_status'] = $expires_ts && $expires_ts >= time() ? 'Active' : 'Expired';
+    }
     $hiring_posts_map[$shop_id][] = $row;
 }
 
-$max_total_orders = 0;
-foreach ($shops as $shop) {
-    $max_total_orders = max($max_total_orders, (int) $shop['total_orders']);
-}
-
-$shops = array_map(function(array $shop) use ($capacity_map, $workload_map, $reliability_map, $hiring_posts_map, $max_total_orders) {
+$shops = array_map(function(array $shop) use ($capacity_map, $workload_map, $reliability_map, $hiring_posts_map) {
     $shop_id = (int) $shop['id'];
     $capacity = $capacity_map[$shop_id] ?? 0;
     $active_orders = $workload_map[$shop_id] ?? 0;
     $reliability = $reliability_map[$shop_id] ?? ['total' => 0, 'completed' => 0, 'rate' => 0];
     $rating_score = min(1, max(0, ((float) $shop['rating']) / 5));
-    $capacity_score = $capacity > 0 ? max(0, min(1, ($capacity - $active_orders) / $capacity)) : 0.3;
+    $capacity_score = $capacity > 0 ? max(0, min(1, ($capacity - $active_orders) / $capacity)) : 0;
     $reliability_score = (float) ($reliability['rate'] ?? 0);
-    $order_volume_score = $max_total_orders > 0 ? min(1, ((int) $shop['total_orders']) / $max_total_orders) : 0.3;
 
-    $dss_score = (
-        ($rating_score * 0.35)
-        + ($capacity_score * 0.2)
-        + ($reliability_score * 0.25)
-        + ($order_volume_score * 0.2)
-    );
+    $dss_score = $rating_score + $reliability_score + $capacity_score;
 
     $shop['capacity'] = $capacity;
     $shop['active_orders'] = $active_orders;
     $shop['reliability'] = $reliability;
-    $shop['dss_score'] = round($dss_score * 100, 1);
+    $shop['dss_score'] = round($dss_score, 2);
+    $shop['dss_breakdown'] = [
+        'rating' => round($rating_score * 100, 1),
+        'completion' => round($reliability_score * 100, 1),
+        'capacity' => round($capacity_score * 100, 1),
+    ];
     $shop['hiring_posts'] = $hiring_posts_map[$shop_id] ?? [];
     return $shop;
 }, $shops);
@@ -223,6 +224,16 @@ usort($shops, function(array $a, array $b) {
             font-size: 0.75rem;
             font-weight: 600;
         }
+        
+        .pill--warning {
+            background: #fef3c7;
+            color: #92400e;
+        }
+
+        .pill--danger {
+            background: #fee2e2;
+            color: #991b1b;
+        }
     </style>
 </head>
 <body>
@@ -323,7 +334,7 @@ usort($shops, function(array $a, array $b) {
             <div class="card results-card">
                 <div class="card-header">
                     <h3><i class="fas fa-store text-primary"></i> Ranked Shops</h3>
-                    <p class="text-muted">Sorted by DSS score (capacity, reliability, rating, and order volume).</p>
+                    <p class="text-muted">Sorted by DSS score (rating + completion rate + capacity).</p>
                 </div>
                 <?php if (empty($shops)): ?>
                     <p class="text-muted mb-0">No shops matched your filters. Try adjusting the search or hiring filter.</p>
@@ -333,7 +344,7 @@ usort($shops, function(array $a, array $b) {
                             <div class="shop-card">
                                 <div class="d-flex justify-between align-center">
                                     <h4><?php echo htmlspecialchars($shop['shop_name']); ?></h4>
-                                    <span class="dss-badge"><i class="fas fa-chart-line"></i> DSS <?php echo number_format((float) $shop['dss_score'], 1); ?></span>
+                                    <span class="dss-badge"><i class="fas fa-chart-line"></i> DSS <?php echo number_format((float) $shop['dss_score'], 2); ?> / 3</span>
                                 </div>
                                 <p class="text-muted mb-0"><?php echo htmlspecialchars($shop['shop_description'] ?? ''); ?></p>
                                 <div class="shop-meta text-muted">
@@ -341,6 +352,11 @@ usort($shops, function(array $a, array $b) {
                                     <span><i class="fas fa-star text-warning"></i> Rating: <?php echo number_format((float) $shop['rating'], 1); ?> (<?php echo (int) $shop['rating_count']; ?>)</span>
                                     <span><i class="fas fa-clipboard-check text-success"></i> Reliability: <?php echo round(((float) ($shop['reliability']['rate'] ?? 0)) * 100); ?>%</span>
                                     <span><i class="fas fa-boxes-stacked text-info"></i> Capacity: <?php echo (int) $shop['active_orders']; ?>/<?php echo (int) $shop['capacity']; ?> active orders</span>
+                                    <span><i class="fas fa-chart-pie text-primary"></i> DSS Breakdown:
+                                        Rating <?php echo number_format((float) ($shop['dss_breakdown']['rating'] ?? 0), 1); ?>% ·
+                                        Completion <?php echo number_format((float) ($shop['dss_breakdown']['completion'] ?? 0), 1); ?>% ·
+                                        Capacity <?php echo number_format((float) ($shop['dss_breakdown']['capacity'] ?? 0), 1); ?>%
+                                    </span>
                                 </div>
                                 <?php if (!empty($shop['hiring_posts'])): ?>
                                     <div class="hiring-list">
@@ -349,7 +365,25 @@ usort($shops, function(array $a, array $b) {
                                             <div class="hiring-post">
                                                 <h5><?php echo htmlspecialchars($post['title']); ?></h5>
                                                 <p class="text-muted mb-1"><?php echo nl2br(htmlspecialchars($post['description'] ?? '')); ?></p>
-                                                <small class="text-muted">Posted <?php echo date('M d, Y', strtotime($post['created_at'])); ?><?php if (!empty($post['expires_at'])): ?> · Expires <?php echo date('M d, Y', strtotime($post['expires_at'])); ?><?php endif; ?></small>
+                                                <small class="text-muted">Posted <?php echo date('M d, Y', strtotime($post['created_at'])); ?>
+                                                    <?php if (!empty($post['expires_at'])): ?>
+                                                        · Expires <?php echo date('M d, Y', strtotime($post['expires_at'])); ?>
+                                                    <?php endif; ?>
+                                                </small>
+                                                <div class="mt-2">
+                                                    <?php
+                                                        $expiration_status = $post['expiration_status'] ?? 'Open';
+                                                        $status_class = 'pill--warning';
+                                                        if ($expiration_status === 'Active' || $expiration_status === 'Open') {
+                                                            $status_class = '';
+                                                        } elseif ($expiration_status === 'Expired') {
+                                                            $status_class = 'pill--danger';
+                                                        }
+                                                    ?>
+                                                    <span class="pill <?php echo $status_class; ?>">
+                                                        <i class="fas fa-hourglass-half"></i> <?php echo htmlspecialchars($expiration_status); ?>
+                                                    </span>
+                                                </div>
                                             </div>
                                         <?php endforeach; ?>
                                     </div>
