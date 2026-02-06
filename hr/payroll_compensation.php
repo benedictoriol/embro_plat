@@ -1,147 +1,185 @@
 <?php
 session_start();
 require_once '../config/db.php';
-require_role('hr');
+require_role(['hr', 'owner']);
 
-$hr_name = htmlspecialchars($_SESSION['user']['fullname'] ?? 'HR Lead');
+$user = $_SESSION['user'];
+$role = $user['role'];
+$display_name = htmlspecialchars($user['fullname'] ?? 'User');
 
-$payroll_kpis = [
-    [
-        'label' => 'Active staffs',
-        'value' => 128,
-        'note' => 'Across production & support',
-        'icon' => 'fas fa-users',
-        'tone' => 'primary',
-    ],
-    [
-        'label' => 'Next pay run',
-        'value' => 'Sep 30',
-        'note' => 'Bi-weekly cycle',
-        'icon' => 'fas fa-calendar-day',
-        'tone' => 'info',
-    ],
-    [
-        'label' => 'Draft payroll total',
-        'value' => '₱2.48M',
-        'note' => 'Pending HR review',
-        'icon' => 'fas fa-coins',
-        'tone' => 'warning',
-    ],
-    [
-        'label' => 'Payslips released',
-        'value' => '98%',
-        'note' => 'Last cycle completion',
-        'icon' => 'fas fa-file-invoice-dollar',
-        'tone' => 'success',
-    ],
-];
+$shop_id = null;
+$shop_name = null;
 
-$pay_periods = [
-    [
-        'period' => 'Sep 01 - Sep 15',
-        'status' => 'Draft',
-        'owner' => 'Payroll Ops',
-        'payout' => 'Sep 20',
-        'total' => '₱1.21M',
-    ],
-    [
-        'period' => 'Aug 16 - Aug 31',
-        'status' => 'Paid',
-        'owner' => 'Payroll Ops',
-        'payout' => 'Sep 05',
-        'total' => '₱1.27M',
-    ],
-    [
-        'period' => 'Aug 01 - Aug 15',
-        'status' => 'Paid',
-        'owner' => 'Payroll Ops',
-        'payout' => 'Aug 20',
-        'total' => '₱1.19M',
-    ],
-];
+if ($role === 'hr') {
+    $hr_stmt = $pdo->prepare("
+        SELECT se.shop_id, s.shop_name
+        FROM shop_staffs se
+        JOIN shops s ON se.shop_id = s.id
+        WHERE se.user_id = ? AND se.staff_role = 'hr' AND se.status = 'active'
+    ");
+    $hr_stmt->execute([$user['id']]);
+    $hr_shop = $hr_stmt->fetch();
+    if ($hr_shop) {
+        $shop_id = (int) $hr_shop['shop_id'];
+        $shop_name = $hr_shop['shop_name'];
+    }
+} elseif ($role === 'owner') {
+    $shop_stmt = $pdo->prepare("SELECT id, shop_name FROM shops WHERE owner_id = ?");
+    $shop_stmt->execute([$user['id']]);
+    $shop = $shop_stmt->fetch();
+    if ($shop) {
+        $shop_id = (int) $shop['id'];
+        $shop_name = $shop['shop_name'];
+    }
+}
 
-$approval_queue = [
-    [
-        'title' => 'Overtime reconciliation',
-        'detail' => 'Validate 14 overtime entries for Line B.',
-        'time' => 'Today',
-        'tone' => 'warning',
-    ],
-    [
-        'title' => 'Allowance update',
-        'detail' => 'Transport allowance revision for 6 staff.',
-        'time' => 'Yesterday',
-        'tone' => 'primary',
-    ],
-    [
-        'title' => 'Owner approval pending',
-        'detail' => 'Payroll draft ready for owner sign-off.',
-        'time' => '2 days ago',
-        'tone' => 'success',
-    ],
-];
+if (!$shop_id) {
+    die("No shop assignment found for this account.");
+}
 
-$exception_log = [
-    [
-        'staff' => 'Mara Santos',
-        'issue' => 'Missing production output',
-        'impact' => 'Auto-rate held',
-        'status' => 'Review',
-    ],
-    [
-        'staff' => 'Jonas Lim',
-        'issue' => 'Backdated leave entry',
-        'impact' => 'Net pay adjusted',
-        'status' => 'Resolved',
-    ],
-    [
-        'staff' => 'Ellen Cruz',
-        'issue' => 'Shift differential update',
-        'impact' => 'Supervisor approval',
-        'status' => 'Pending',
-    ],
-];
+$errors = [];
+$success = null;
 
-$automation_items = [
-    [
-        'title' => 'Production-based salary',
-        'detail' => 'Calculate pay from completed pieces, rate tiers, and quality scores.',
-        'icon' => 'fas fa-industry',
-    ],
-    [
-        'title' => 'Payroll draft builder',
-        'detail' => 'Auto-generate payroll drafts after timekeeping cutoff.',
-        'icon' => 'fas fa-robot',
-    ],
-    [
-        'title' => 'Payslip release',
-        'detail' => 'Trigger payslip delivery upon owner approval.',
-        'icon' => 'fas fa-paper-plane',
-    ],
-];
+if (isset($_POST['generate_payroll']) && $role === 'hr') {
+    $pay_period_start = $_POST['pay_period_start'] ?? '';
+    $pay_period_end = $_POST['pay_period_end'] ?? '';
 
-$workflow_steps = [
-    [
-        'title' => 'Pay period',
-        'detail' => 'Lock timekeeping, production output, and allowance inputs.',
-    ],
-    [
-        'title' => 'Payroll draft',
-        'detail' => 'Generate earnings, deductions, and incentives per staff.',
-    ],
-    [
-        'title' => 'HR review',
-        'detail' => 'Resolve exceptions and validate payroll totals.',
-    ],
-    [
-        'title' => 'Owner approval',
-        'detail' => 'Secure sign-off for fund release and compliance.',
-    ],
-    [
-        'title' => 'Payslip release',
-        'detail' => 'Distribute payslips and notify staffs automatically.',
-    ],
-];
+    if (!$pay_period_start || !$pay_period_end) {
+        $errors[] = 'Please select a valid pay period.';
+    } elseif (strtotime($pay_period_start) > strtotime($pay_period_end)) {
+        $errors[] = 'Pay period end must be on or after the start date.';
+    }
+
+    if (empty($errors)) {
+        $staff_stmt = $pdo->prepare("
+            SELECT s.id AS staff_id, s.salary, u.fullname, u.email
+            FROM staffs s
+            JOIN users u ON s.user_id = u.id
+            JOIN shop_staffs ss ON ss.user_id = u.id
+            WHERE ss.shop_id = ?
+              AND ss.status = 'active'
+              AND s.status = 'active'
+        ");
+        $staff_stmt->execute([$shop_id]);
+        $staff_members = $staff_stmt->fetchAll();
+
+        $existing_stmt = $pdo->prepare("
+            SELECT staff_id
+            FROM payroll
+            WHERE pay_period_start = ?
+              AND pay_period_end = ?
+        ");
+        $existing_stmt->execute([$pay_period_start, $pay_period_end]);
+        $existing_ids = $existing_stmt->fetchAll(PDO::FETCH_COLUMN);
+        $existing_ids = array_map('intval', $existing_ids);
+
+        $created = 0;
+        $skipped = 0;
+
+        $insert_stmt = $pdo->prepare("
+            INSERT INTO payroll (staff_id, pay_period_start, pay_period_end, basic_salary, allowances, deductions, net_salary, status)
+            VALUES (?, ?, ?, ?, ?, ?, ?, 'pending')
+        ");
+
+        foreach ($staff_members as $staff) {
+            $staff_id = (int) $staff['staff_id'];
+            if (in_array($staff_id, $existing_ids, true)) {
+                $skipped++;
+                continue;
+            }
+            $basic_salary = $staff['salary'] !== null ? (float) $staff['salary'] : 0.0;
+            $allowances = 0.0;
+            $deductions = 0.0;
+            $net_salary = $basic_salary + $allowances - $deductions;
+            $insert_stmt->execute([
+                $staff_id,
+                $pay_period_start,
+                $pay_period_end,
+                $basic_salary,
+                $allowances,
+                $deductions,
+                $net_salary,
+            ]);
+            $created++;
+        }
+
+        $success = "Generated payroll for {$created} staff. Skipped {$skipped} existing entries.";
+    }
+}
+
+if (isset($_POST['approve_payroll']) && $role === 'owner') {
+    $payroll_id = (int) ($_POST['payroll_id'] ?? 0);
+
+    $check_stmt = $pdo->prepare("
+        SELECT p.id
+        FROM payroll p
+        JOIN staffs s ON p.staff_id = s.id
+        JOIN users u ON s.user_id = u.id
+        JOIN shop_staffs ss ON ss.user_id = u.id
+        WHERE p.id = ?
+          AND ss.shop_id = ?
+          AND ss.status = 'active'
+    ");
+    $check_stmt->execute([$payroll_id, $shop_id]);
+    if ($check_stmt->fetch()) {
+        $update_stmt = $pdo->prepare("
+            UPDATE payroll
+            SET status = 'paid', paid_at = NOW()
+            WHERE id = ?
+        ");
+        $update_stmt->execute([$payroll_id]);
+        $success = 'Payroll entry approved and marked as paid.';
+    } else {
+        $errors[] = 'Unable to approve that payroll entry.';
+    }
+}
+
+$payslip = null;
+if (isset($_GET['payslip_id'])) {
+    $payslip_id = (int) $_GET['payslip_id'];
+    $payslip_stmt = $pdo->prepare("
+        SELECT p.*, u.fullname, u.email, s.department, s.position
+        FROM payroll p
+        JOIN staffs s ON p.staff_id = s.id
+        JOIN users u ON s.user_id = u.id
+        JOIN shop_staffs ss ON ss.user_id = u.id
+        WHERE p.id = ?
+          AND ss.shop_id = ?
+          AND ss.status = 'active'
+        LIMIT 1
+    ");
+    $payslip_stmt->execute([$payslip_id, $shop_id]);
+    $payslip = $payslip_stmt->fetch();
+}
+
+$payroll_stmt = $pdo->prepare("
+    SELECT p.*, u.fullname, u.email, s.department, s.position
+    FROM payroll p
+    JOIN staffs s ON p.staff_id = s.id
+    JOIN users u ON s.user_id = u.id
+    JOIN shop_staffs ss ON ss.user_id = u.id
+    WHERE ss.shop_id = ?
+      AND ss.status = 'active'
+    ORDER BY p.pay_period_end DESC, p.created_at DESC
+");
+$payroll_stmt->execute([$shop_id]);
+$payroll_entries = $payroll_stmt->fetchAll();
+
+$pending_count = 0;
+$total_pending = 0.0;
+$total_paid = 0.0;
+
+foreach ($payroll_entries as $entry) {
+    if ($entry['status'] === 'pending') {
+        $pending_count++;
+        $total_pending += (float) ($entry['net_salary'] ?? 0);
+    }
+    if ($entry['status'] === 'paid') {
+        $total_paid += (float) ($entry['net_salary'] ?? 0);
+    }
+}
+
+$dashboard_link = $role === 'owner' ? '../owner/dashboard.php' : 'dashboard.php';
 ?>
 <!DOCTYPE html>
 <html lang="en">
@@ -206,20 +244,46 @@ $workflow_steps = [
         .workflow-step + .workflow-step {
             margin-top: 1rem;
         }
+        
+        .form-grid {
+            display: grid;
+            grid-template-columns: repeat(12, 1fr);
+            gap: 1rem;
+        }
+
+        .form-grid .span-6 {
+            grid-column: span 6;
+        }
+
+        .form-grid .span-12 {
+            grid-column: span 12;
+        }
+
+        .payslip-card {
+            margin-top: 1.5rem;
+            padding: 1.5rem;
+            border: 1px solid var(--gray-200);
+            border-radius: var(--radius);
+            background: white;
+        }
     </style>
 </head>
 <body>
     <nav class="navbar navbar--compact">
         <div class="container d-flex justify-between align-center">
-            <a href="dashboard.php" class="navbar-brand">
-                <i class="fas fa-people-group"></i> <?php echo $hr_name; ?>
+            <a href="<?php echo $dashboard_link; ?>" class="navbar-brand">
+                <i class="fas fa-people-group"></i> <?php echo $display_name; ?>
             </a>
             <ul class="navbar-nav">
-                <li><a href="dashboard.php" class="nav-link">Dashboard</a></li>
-                <li><a href="hiring_management.php" class="nav-link">Hiring</a></li>
-                <li><a href="staff_productivity_performance.php" class="nav-link">Productivity</a></li>
-                <li><a href="payroll_compensation.php" class="nav-link active">Payroll</a></li>
-                <li><a href="analytics_reporting.php" class="nav-link">Analytics</a></li>
+                <li><a href="<?php echo $dashboard_link; ?>" class="nav-link">Dashboard</a></li>
+                <?php if ($role === 'hr'): ?>
+                    <li><a href="hiring_management.php" class="nav-link">Hiring</a></li>
+                    <li><a href="staff_productivity_performance.php" class="nav-link">Productivity</a></li>
+                    <li><a href="payroll_compensation.php" class="nav-link active">Payroll</a></li>
+                    <li><a href="analytics_reporting.php" class="nav-link">Analytics</a></li>
+                <?php else: ?>
+                    <li><a href="payroll_compensation.php" class="nav-link active">Payroll</a></li>
+                <?php endif; ?>
                 <li><a href="../auth/logout.php" class="nav-link">Logout</a></li>
             </ul>
         </div>
@@ -229,118 +293,161 @@ $workflow_steps = [
         <section class="page-header">
             <div>
                 <h1>Payroll &amp; Compensation</h1>
-                <p class="text-muted">Manage pay cycles, approvals, and production-based compensation in one workspace.</p>
+                <p class="text-muted">Generate payroll for <?php echo htmlspecialchars($shop_name); ?> and track approvals.</p>
             </div>
-            <span class="badge badge-primary"><i class="fas fa-file-invoice-dollar"></i> Module 29</span>
+            <span class="badge">Logged in as <?php echo $display_name; ?></span>
         </section>
 
-        <section class="payroll-grid">
-            <?php foreach ($payroll_kpis as $kpi): ?>
-                <div class="card payroll-kpi">
-                    <div class="metric">
-                        <div>
-                            <p class="text-muted mb-1"><?php echo $kpi['label']; ?></p>
-                            <h3 class="mb-1"><?php echo $kpi['value']; ?></h3>
-                            <small class="text-muted"><?php echo $kpi['note']; ?></small>
-                        </div>
-                        <div class="icon-circle bg-<?php echo $kpi['tone']; ?> text-white">
-                            <i class="<?php echo $kpi['icon']; ?>"></i>
-                        </div>
+        <?php if (!empty($errors)): ?>
+            <div class="alert alert-danger">
+                <ul>
+                    <?php foreach ($errors as $error): ?>
+                        <li><?php echo htmlspecialchars($error); ?></li>
+                    <?php endforeach; ?>
+                </ul>
+            </div>
+        <?php elseif ($success): ?>
+            <div class="alert alert-success"><?php echo htmlspecialchars($success); ?></div>
+        <?php endif; ?>
+
+        <?php if ($payslip): ?>
+            <div class="payslip-card">
+                <h2>Payslip: <?php echo htmlspecialchars($payslip['fullname']); ?></h2>
+                <p class="text-muted">Period: <?php echo htmlspecialchars($payslip['pay_period_start']); ?> to <?php echo htmlspecialchars($payslip['pay_period_end']); ?></p>
+                <div class="form-grid">
+                    <div class="span-6">
+                        <p><strong>Department:</strong> <?php echo htmlspecialchars($payslip['department'] ?? '—'); ?></p>
+                        <p><strong>Position:</strong> <?php echo htmlspecialchars($payslip['position'] ?? '—'); ?></p>
+                        <p><strong>Email:</strong> <?php echo htmlspecialchars($payslip['email']); ?></p>
+                    </div>
+                    <div class="span-6">
+                        <p><strong>Basic salary:</strong> ₱<?php echo number_format((float) ($payslip['basic_salary'] ?? 0), 2); ?></p>
+                        <p><strong>Allowances:</strong> ₱<?php echo number_format((float) ($payslip['allowances'] ?? 0), 2); ?></p>
+                        <p><strong>Deductions:</strong> ₱<?php echo number_format((float) ($payslip['deductions'] ?? 0), 2); ?></p>
+                        <p><strong>Net salary:</strong> ₱<?php echo number_format((float) ($payslip['net_salary'] ?? 0), 2); ?></p>
+                        <p><strong>Status:</strong> <?php echo htmlspecialchars(ucfirst($payslip['status'])); ?></p>
                     </div>
                 </div>
-            <?php endforeach; ?>
+            </div>
+        <?php endif; ?>
 
-            <div class="card purpose-card">
-                <h2>Purpose</h2>
-                <p class="text-muted">Coordinate salary computation, payroll drafts, approvals, and payslip delivery without manual handoffs.</p>
+            <section class="payroll-grid">
+            <div class="card payroll-kpi">
+                <div class="metric">
+                    <div>
+                        <h3>Pending approvals</h3>
+                        <p class="value"><?php echo $pending_count; ?></p>
+                        <p class="text-muted">Awaiting owner sign-off</p>
+                    </div>
+                    <i class="fas fa-hourglass-half text-warning"></i>
+                </div>
+            </div>
+            <div class="card payroll-kpi">
+                <div class="metric">
+                    <div>
+                        <h3>Pending total</h3>
+                        <p class="value">₱<?php echo number_format($total_pending, 2); ?></p>
+                        <p class="text-muted">Upcoming payouts</p>
+                    </div>
+                    <i class="fas fa-wallet text-primary"></i>
+                </div>
+            </div>
+            <div class="card payroll-kpi">
+                <div class="metric">
+                    <div>
+                        <h3>Paid total</h3>
+                        <p class="value">₱<?php echo number_format($total_paid, 2); ?></p>
+                        <p class="text-muted">Approved payroll</p>
+                    </div>
+                    <i class="fas fa-circle-check text-success"></i>
+                </div>
+            </div>
+            <div class="card payroll-kpi">
+                <div class="metric">
+                    <div>
+                        <h3>Payroll entries</h3>
+                        <p class="value"><?php echo count($payroll_entries); ?></p>
+                        <p class="text-muted">Total records</p>
+                    </div>
+                    <i class="fas fa-file-invoice-dollar text-info"></i>
+                </div>
             </div>
 
             <div class="card periods-card">
-                <h2>Pay period overview</h2>
-                <div class="table-responsive">
-                    <table>
-                        <thead>
-                            <tr>
-                                <th>Period</th>
-                                <th>Status</th>
-                                <th>Owner</th>
-                                <th>Payout</th>
-                                <th>Total</th>
-                            </tr>
-                        </thead>
-                        <tbody>
-                            <?php foreach ($pay_periods as $period): ?>
-                                <tr>
-                                    <td><?php echo $period['period']; ?></td>
-                                    <td><span class="badge badge-outline"><?php echo $period['status']; ?></span></td>
-                                    <td><?php echo $period['owner']; ?></td>
-                                    <td><?php echo $period['payout']; ?></td>
-                                    <td><?php echo $period['total']; ?></td>
-                                </tr>
-                            <?php endforeach; ?>
-                        </tbody>
-                    </table>
-                </div>
+                <h2>Generate payroll</h2>
+                <?php if ($role === 'hr'): ?>
+                    <form method="POST" class="form-grid">
+                        <div class="form-group span-6">
+                            <label>Pay period start</label>
+                            <input type="date" name="pay_period_start" required>
+                        </div>
+                        <div class="form-group span-6">
+                            <label>Pay period end</label>
+                            <input type="date" name="pay_period_end" required>
+                        </div>
+                        <div class="form-group span-12">
+                            <button type="submit" name="generate_payroll" class="btn btn-primary">Generate payroll</button>
+                        </div>
+                    </form>
+                <?php else: ?>
+                    <p class="text-muted">Only HR can generate payroll entries for a new pay period.</p>
+                <?php endif; ?>
             </div>
 
             <div class="card approvals-card">
-                <h2>HR review &amp; approvals</h2>
-                <?php foreach ($approval_queue as $item): ?>
-                    <div class="approval-item">
-                        <span class="badge badge-<?php echo $item['tone']; ?> mb-2"><?php echo $item['title']; ?></span>
-                        <p class="mb-2"><?php echo $item['detail']; ?></p>
-                        <small class="text-muted"><?php echo $item['time']; ?></small>
-                    </div>
-                <?php endforeach; ?>
+                <h2>Owner approvals</h2>
+                <p class="text-muted">Owner can approve payroll entries once verified.</p>
+                <p><strong>Pending:</strong> <?php echo $pending_count; ?></p>
+                <p><strong>Pending total:</strong> ₱<?php echo number_format($total_pending, 2); ?></p>
             </div>
 
-            <div class="card exceptions-card">
-                <h2>Payroll exceptions</h2>
+            <div class="card workflow-card">
+                <h2>Payroll register</h2>
                 <div class="table-responsive">
                     <table>
                         <thead>
                             <tr>
-                                <th>staff</th>
-                                <th>Issue</th>
-                                <th>Impact</th>
+                                <th>Staff</th>
+                                <th>Period</th>
+                                <th>Net salary</th>
                                 <th>Status</th>
+                                <th>Paid at</th>
+                                <th>Actions</th>
                             </tr>
                         </thead>
                         <tbody>
-                            <?php foreach ($exception_log as $exception): ?>
+                            <?php if (empty($payroll_entries)): ?>
                                 <tr>
-                                    <td><?php echo $exception['staff']; ?></td>
-                                    <td><?php echo $exception['issue']; ?></td>
-                                    <td><?php echo $exception['impact']; ?></td>
-                                    <td><span class="badge badge-outline"><?php echo $exception['status']; ?></span></td>
+                                    <td colspan="6">No payroll entries yet.</td>
                                 </tr>
-                            <?php endforeach; ?>
+                            <?php else: ?>
+                                <?php foreach ($payroll_entries as $entry): ?>
+                                    <tr>
+                                        <td>
+                                            <strong><?php echo htmlspecialchars($entry['fullname']); ?></strong>
+                                            <div class="text-muted"><?php echo htmlspecialchars($entry['position'] ?? ''); ?></div>
+                                        </td>
+                                        <td><?php echo htmlspecialchars($entry['pay_period_start']); ?> - <?php echo htmlspecialchars($entry['pay_period_end']); ?></td>
+                                        <td>₱<?php echo number_format((float) ($entry['net_salary'] ?? 0), 2); ?></td>
+                                        <td><?php echo htmlspecialchars(ucfirst($entry['status'])); ?></td>
+                                        <td><?php echo $entry['paid_at'] ? htmlspecialchars(date('M d, Y', strtotime($entry['paid_at']))) : '—'; ?></td>
+                                        <td>
+                                            <div class="table-actions">
+                                                <a class="btn btn-secondary" href="payroll_compensation.php?payslip_id=<?php echo $entry['id']; ?>">View payslip</a>
+                                                <?php if ($role === 'owner' && $entry['status'] === 'pending'): ?>
+                                                    <form method="POST" onsubmit="return confirm('Approve this payroll entry?');">
+                                                        <input type="hidden" name="payroll_id" value="<?php echo $entry['id']; ?>">
+                                                        <button type="submit" name="approve_payroll" class="btn btn-primary">Approve</button>
+                                                    </form>
+                                                <?php endif; ?>
+                                            </div>
+                                        </td>
+                                    </tr>
+                                <?php endforeach; ?>
+                            <?php endif; ?>
                         </tbody>
                     </table>
                 </div>
-            </div>
-
-            <div class="card automation-card">
-                <h2>Automation</h2>
-                <?php foreach ($automation_items as $automation): ?>
-                    <div class="automation-item">
-                        <div class="d-flex align-center gap-2 mb-2">
-                            <i class="<?php echo $automation['icon']; ?> text-primary"></i>
-                            <strong><?php echo $automation['title']; ?></strong>
-                        </div>
-                        <p class="text-muted mb-0"><?php echo $automation['detail']; ?></p>
-                    </div>
-                <?php endforeach; ?>
-            </div>
-
-            <div class="card workflow-card">
-                <h2>Payroll workflow</h2>
-                <?php foreach ($workflow_steps as $step): ?>
-                    <div class="workflow-step">
-                        <strong><?php echo $step['title']; ?></strong>
-                        <p class="text-muted mb-0"><?php echo $step['detail']; ?></p>
-                    </div>
-                <?php endforeach; ?>
             </div>
         </section>
     </main>

@@ -3,152 +3,154 @@ session_start();
 require_once '../config/db.php';
 require_role('hr');
 
+$hr_id = $_SESSION['user']['id'];
 $hr_name = htmlspecialchars($_SESSION['user']['fullname'] ?? 'HR Lead');
 
-$hiring_kpis = [
-    [
-        'label' => 'Open roles',
-        'value' => 8,
-        'note' => 'Across 3 departments',
-        'icon' => 'fas fa-briefcase',
-        'tone' => 'primary',
-    ],
-    [
-        'label' => 'Applicants this week',
-        'value' => 46,
-        'note' => 'Up 12% vs last week',
-        'icon' => 'fas fa-user-plus',
-        'tone' => 'success',
-    ],
-    [
-        'label' => 'Interviews scheduled',
-        'value' => 12,
-        'note' => 'Next 5 business days',
-        'icon' => 'fas fa-calendar-check',
-        'tone' => 'info',
-    ],
-    [
-        'label' => 'Offers pending',
-        'value' => 3,
-        'note' => 'Awaiting approvals',
-        'icon' => 'fas fa-file-signature',
-        'tone' => 'warning',
-    ],
-];
+$hr_stmt = $pdo->prepare("
+    SELECT se.shop_id, s.shop_name
+    FROM shop_staffs se
+    JOIN shops s ON se.shop_id = s.id
+    WHERE se.user_id = ? AND se.staff_role = 'hr' AND se.status = 'active'
+");
+$hr_stmt->execute([$hr_id]);
+$hr_shop = $hr_stmt->fetch();
 
-$active_postings = [
-    [
-        'role' => 'Senior Embroidery Technician',
-        'team' => 'Production',
-        'location' => 'Onsite - Cebu City',
-        'posted' => 'Aug 12, 2024',
-        'expires' => 'Sep 12, 2024',
-        'status' => 'Live',
-    ],
-    [
-        'role' => 'Quality Control Lead',
-        'team' => 'Quality Assurance',
-        'location' => 'Onsite - Makati',
-        'posted' => 'Aug 18, 2024',
-        'expires' => 'Sep 18, 2024',
-        'status' => 'Live',
-    ],
-    [
-        'role' => 'Customer Success Associate',
-        'team' => 'Client Support',
-        'location' => 'Hybrid - Taguig',
-        'posted' => 'Aug 21, 2024',
-        'expires' => 'Sep 4, 2024',
-        'status' => 'Closing soon',
-    ],
-    [
-        'role' => 'Warehouse Runner',
-        'team' => 'Logistics',
-        'location' => 'Onsite - Quezon City',
-        'posted' => 'Aug 23, 2024',
-        'expires' => 'Sep 23, 2024',
-        'status' => 'Live',
-    ],
-];
+if (!$hr_shop) {
+    die("You are not assigned to any shop as HR. Please contact your shop owner.");
+}
 
-$visibility_channels = [
-    [
-        'channel' => 'Internal talent pool',
-        'audience' => 'Active & alumni staff',
-        'reach' => '85 profiles',
-        'status' => 'Active',
-    ],
-    [
-        'channel' => 'Public job boards',
-        'audience' => 'External candidates',
-        'reach' => '3 platforms',
-        'status' => 'Scheduled',
-    ],
-    [
-        'channel' => 'Referral program',
-        'audience' => 'staff referrals',
-        'reach' => '12 ambassadors',
-        'status' => 'Active',
-    ],
-];
+$shop_id = (int) $hr_shop['shop_id'];
+$shop_name = $hr_shop['shop_name'];
 
-$alert_queue = [
-    [
-        'title' => 'New applicant',
-        'detail' => 'Alina Reyes applied for Senior Embroidery Technician.',
-        'time' => '2h ago',
-        'tone' => 'primary',
-    ],
-    [
-        'title' => 'Interview feedback overdue',
-        'detail' => 'QC Lead panel feedback pending for 2 candidates.',
-        'time' => 'Today',
-        'tone' => 'warning',
-    ],
-    [
-        'title' => 'Posting expiring soon',
-        'detail' => 'Customer Success Associate role expires in 3 days.',
-        'time' => 'Tomorrow',
-        'tone' => 'danger',
-    ],
-];
+$expire_stmt = $pdo->prepare("
+    UPDATE hiring_posts
+    SET status = 'expired'
+    WHERE shop_id = ?
+      AND expires_at IS NOT NULL
+      AND expires_at < NOW()
+      AND status IN ('draft', 'live')
+");
+$expire_stmt->execute([$shop_id]);
 
-$automation_rules = [
-    [
-        'title' => 'Auto-expiration',
-        'detail' => 'Close hiring posts 30 days after publishing unless extended.',
-        'icon' => 'fas fa-hourglass-end',
-    ],
-    [
-        'title' => 'Hiring alerts',
-        'detail' => 'Notify HR leads and hiring managers when new applicants arrive.',
-        'icon' => 'fas fa-bell',
-    ],
-    [
-        'title' => 'Visibility booster',
-        'detail' => 'Refresh listings across channels every 7 days for priority roles.',
-        'icon' => 'fas fa-bullhorn',
-    ],
-];
+$errors = [];
+$success = null;
 
-$workflow_steps = [
-    [
-        'title' => 'Post request intake',
-        'detail' => 'Capture hiring need, budget approval, and target start date.',
-    ],
-    [
-        'title' => 'Publish & distribute',
-        'detail' => 'Launch across internal pools, referrals, and job boards.',
-    ],
-    [
-        'title' => 'Screen & shortlist',
-        'detail' => 'Score applicants, schedule interviews, and log feedback.',
-    ],
-    [
-        'title' => 'Offer & onboarding',
-        'detail' => 'Issue offer letters and coordinate onboarding tasks.',
-    ],
-];
+if (isset($_POST['create_post'])) {
+    $title = sanitize($_POST['title'] ?? '');
+    $description = sanitize($_POST['description'] ?? '');
+    $status = $_POST['status'] ?? 'live';
+    $expires_at = $_POST['expires_at'] ?? null;
+
+    $allowed_statuses = ['draft', 'live', 'closed', 'expired'];
+    if (!in_array($status, $allowed_statuses, true)) {
+        $status = 'live';
+    }
+
+    if ($title === '') {
+        $errors[] = 'Please provide a job title.';
+    }
+
+    if (empty($errors)) {
+        $stmt = $pdo->prepare("
+            INSERT INTO hiring_posts (shop_id, created_by, title, description, status, expires_at)
+            VALUES (?, ?, ?, ?, ?, ?)
+        ");
+        $stmt->execute([
+            $shop_id,
+            $hr_id,
+            $title,
+            $description ?: null,
+            $status,
+            $expires_at ?: null,
+        ]);
+        $success = 'Hiring post created successfully.';
+    }
+}
+
+if (isset($_POST['update_post'])) {
+    $post_id = (int) ($_POST['post_id'] ?? 0);
+    $title = sanitize($_POST['title'] ?? '');
+    $description = sanitize($_POST['description'] ?? '');
+    $status = $_POST['status'] ?? 'live';
+    $expires_at = $_POST['expires_at'] ?? null;
+
+    $allowed_statuses = ['draft', 'live', 'closed', 'expired'];
+    if (!in_array($status, $allowed_statuses, true)) {
+        $status = 'live';
+    }
+
+    if ($title === '') {
+        $errors[] = 'Please provide a job title.';
+    }
+
+    if (empty($errors)) {
+        $check_stmt = $pdo->prepare("SELECT id FROM hiring_posts WHERE id = ? AND shop_id = ?");
+        $check_stmt->execute([$post_id, $shop_id]);
+        if ($check_stmt->fetch()) {
+            $stmt = $pdo->prepare("
+                UPDATE hiring_posts
+                SET title = ?, description = ?, status = ?, expires_at = ?
+                WHERE id = ? AND shop_id = ?
+            ");
+            $stmt->execute([
+                $title,
+                $description ?: null,
+                $status,
+                $expires_at ?: null,
+                $post_id,
+                $shop_id,
+            ]);
+            $success = 'Hiring post updated successfully.';
+        } else {
+            $errors[] = 'Unable to update that hiring post.';
+        }
+    }
+}
+
+if (isset($_POST['delete_post'])) {
+    $post_id = (int) ($_POST['post_id'] ?? 0);
+    $check_stmt = $pdo->prepare("SELECT id FROM hiring_posts WHERE id = ? AND shop_id = ?");
+    $check_stmt->execute([$post_id, $shop_id]);
+    if ($check_stmt->fetch()) {
+        $delete_stmt = $pdo->prepare("DELETE FROM hiring_posts WHERE id = ? AND shop_id = ?");
+        $delete_stmt->execute([$post_id, $shop_id]);
+        $success = 'Hiring post deleted successfully.';
+    } else {
+        $errors[] = 'Unable to delete that hiring post.';
+    }
+}
+
+$posts_stmt = $pdo->prepare("
+    SELECT hp.*, u.fullname AS creator_name
+    FROM hiring_posts hp
+    LEFT JOIN users u ON hp.created_by = u.id
+    WHERE hp.shop_id = ?
+    ORDER BY hp.created_at DESC
+");
+$posts_stmt->execute([$shop_id]);
+$hiring_posts = $posts_stmt->fetchAll();
+
+$open_stmt = $pdo->prepare("
+    SELECT COUNT(*)
+    FROM hiring_posts
+    WHERE shop_id = ?
+      AND status = 'live'
+      AND (expires_at IS NULL OR expires_at >= NOW())
+");
+$open_stmt->execute([$shop_id]);
+$open_roles = (int) $open_stmt->fetchColumn();
+
+$draft_stmt = $pdo->prepare("SELECT COUNT(*) FROM hiring_posts WHERE shop_id = ? AND status = 'draft'");
+$draft_stmt->execute([$shop_id]);
+$draft_roles = (int) $draft_stmt->fetchColumn();
+
+$expired_stmt = $pdo->prepare("SELECT COUNT(*) FROM hiring_posts WHERE shop_id = ? AND status = 'expired'");
+$expired_stmt->execute([$shop_id]);
+$expired_roles = (int) $expired_stmt->fetchColumn();
+
+$closed_stmt = $pdo->prepare("SELECT COUNT(*) FROM hiring_posts WHERE shop_id = ? AND status = 'closed'");
+$closed_stmt->execute([$shop_id]);
+$closed_roles = (int) $closed_stmt->fetchColumn();
 ?>
 <!DOCTYPE html>
 <html lang="en">
@@ -195,23 +197,34 @@ $workflow_steps = [
             grid-column: span 4;
         }
 
-        .automation-card {
+        .form-grid {
+            display: grid;
+            grid-template-columns: repeat(12, 1fr);
+            gap: 1rem;
+        }
+
+        .form-grid .span-6 {
             grid-column: span 6;
         }
 
-        .alerts-card .alert-item,
-        .automation-card .automation-item,
-        .workflow-step {
-            border: 1px solid var(--gray-200);
-            border-radius: var(--radius);
-            padding: 1rem;
-            background: white;
+        .form-grid .span-12 {
+            grid-column: span 12;
         }
 
-        .alert-item + .alert-item,
-        .automation-item + .automation-item,
-        .workflow-step + .workflow-step {
-            margin-top: 1rem;
+        .table-actions {
+            display: flex;
+            gap: 0.5rem;
+            flex-wrap: wrap;
+        }
+
+        .status-pill {
+            display: inline-flex;
+            align-items: center;
+            gap: 0.35rem;
+            padding: 0.2rem 0.6rem;
+            border-radius: 999px;
+            font-size: 0.8rem;
+            background: var(--gray-100);
         }
     </style>
 </head>
@@ -235,121 +248,194 @@ $workflow_steps = [
     <main class="container">
         <section class="page-header">
             <div>
-                <h1>HR Hiring Management</h1>
-                <p class="text-muted">Manage hiring posts, visibility, and automated follow-ups.</p>
+                <h1>Hiring Management</h1>
+                <p class="text-muted">Track hiring posts for <?php echo htmlspecialchars($shop_name); ?> and keep listings up to date.</p>
             </div>
-            <span class="badge badge-primary"><i class="fas fa-user-tie"></i> Module 27</span>
+            <span class="badge">Logged in as <?php echo $hr_name; ?></span>
         </section>
 
-        <section class="hiring-grid">
-            <?php foreach ($hiring_kpis as $kpi): ?>
-                <div class="card hiring-kpi">
-                    <div class="metric">
-                        <div>
-                            <p class="text-muted mb-1"><?php echo $kpi['label']; ?></p>
-                            <h3 class="mb-1"><?php echo $kpi['value']; ?></h3>
-                            <small class="text-muted"><?php echo $kpi['note']; ?></small>
-                        </div>
-                        <div class="icon-circle bg-<?php echo $kpi['tone']; ?> text-white">
-                            <i class="<?php echo $kpi['icon']; ?>"></i>
-                        </div>
-                    </div>
-                </div>
-            <?php endforeach; ?>
+        <?php if (!empty($errors)): ?>
+            <div class="alert alert-danger">
+                <ul>
+                    <?php foreach ($errors as $error): ?>
+                        <li><?php echo htmlspecialchars($error); ?></li>
+                    <?php endforeach; ?>
+                </ul>
+            </div>
+        <?php elseif ($success): ?>
+            <div class="alert alert-success"><?php echo htmlspecialchars($success); ?></div>
+        <?php endif; ?>
 
-            <div class="card purpose-card">
-                <h2>Purpose</h2>
-                <p class="text-muted">Centralize hiring requests, job post visibility, and talent pipeline monitoring.</p>
+        <section class="hiring-grid">
+            <div class="card hiring-kpi">
+                <div class="metric">
+                    <div>
+                        <h3>Open roles</h3>
+                        <p class="value"><?php echo $open_roles; ?></p>
+                        <p class="text-muted">Live listings</p>
+                    </div>
+                    <i class="fas fa-briefcase text-primary"></i>
+                </div>
+            </div>
+            <div class="card hiring-kpi">
+                <div class="metric">
+                    <div>
+                        <h3>Draft roles</h3>
+                        <p class="value"><?php echo $draft_roles; ?></p>
+                        <p class="text-muted">Not yet published</p>
+                    </div>
+                    <i class="fas fa-file-circle-plus text-info"></i>
+                </div>
+            </div>
+            <div class="card hiring-kpi">
+                <div class="metric">
+                    <div>
+                        <h3>Closed roles</h3>
+                        <p class="value"><?php echo $closed_roles; ?></p>
+                        <p class="text-muted">Filled positions</p>
+                    </div>
+                    <i class="fas fa-circle-check text-success"></i>
+                </div>
+            </div>
+            <div class="card hiring-kpi">
+                <div class="metric">
+                    <div>
+                        <h3>Expired roles</h3>
+                        <p class="value"><?php echo $expired_roles; ?></p>
+                        <p class="text-muted">Auto-closed</p>
+                    </div>
+                    <i class="fas fa-hourglass-end text-warning"></i>
+                </div>
             </div>
 
             <div class="card postings-card">
+                <h2>Create hiring post</h2>
+                <form method="POST" class="form-grid">
+                    <div class="form-group span-6">
+                        <label>Job title</label>
+                        <input type="text" name="title" required>
+                    </div>
+                    <div class="form-group span-6">
+                        <label>Status</label>
+                        <select name="status">
+                            <option value="live">Live</option>
+                            <option value="draft">Draft</option>
+                            <option value="closed">Closed</option>
+                            <option value="expired">Expired</option>
+                        </select>
+                    </div>
+                    <div class="form-group span-12">
+                        <label>Description</label>
+                        <textarea name="description" rows="3"></textarea>
+                    </div>
+                    <div class="form-group span-6">
+                        <label>Expires at</label>
+                        <input type="datetime-local" name="expires_at">
+                    </div>
+                    <div class="form-group span-6" style="display:flex;align-items:end;">
+                        <button type="submit" name="create_post" class="btn btn-primary">Create post</button>
+                    </div>
+                </form>
+            </div>
+
+            <div class="card channels-card">
+                <h2>Automation rules</h2>
+                <ul class="list">
+                    <li>Posts automatically expire once the end date has passed.</li>
+                    <li>Drafts stay hidden until you publish them.</li>
+                    <li>Closed roles remain visible for reporting.</li>
+                </ul>
+            </div>
+
+            <div class="card alerts-card">
+                <h2>Hiring pipeline notes</h2>
+                <ul class="list">
+                    <li>Keep job descriptions concise and updated.</li>
+                    <li>Set expiration dates for all time-bound roles.</li>
+                    <li>Review statuses weekly to avoid stale postings.</li>
+                </ul>
+            </div>
+
+            <div class="card workflow-card">
                 <h2>Active hiring posts</h2>
                 <div class="table-responsive">
                     <table>
                         <thead>
                             <tr>
-                                <th>Role</th>
-                                <th>Team</th>
-                                <th>Location</th>
-                                <th>Posted</th>
+                                <th>Title</th>
+                                <th>Status</th>
                                 <th>Expires</th>
-                                <th>Status</th>
+                                <th>Created</th>
+                                <th>Owner</th>
+                                <th>Actions</th>
                             </tr>
                         </thead>
                         <tbody>
-                            <?php foreach ($active_postings as $posting): ?>
+                            <?php if (empty($hiring_posts)): ?>
                                 <tr>
-                                    <td><?php echo $posting['role']; ?></td>
-                                    <td><?php echo $posting['team']; ?></td>
-                                    <td><?php echo $posting['location']; ?></td>
-                                    <td><?php echo $posting['posted']; ?></td>
-                                    <td><?php echo $posting['expires']; ?></td>
-                                    <td><span class="badge badge-outline"><?php echo $posting['status']; ?></span></td>
+                                    <td colspan="6">No hiring posts yet.</td>
                                 </tr>
-                            <?php endforeach; ?>
+                            <?php else: ?>
+                                <?php foreach ($hiring_posts as $post): ?>
+                                    <tr>
+                                        <td>
+                                            <strong><?php echo htmlspecialchars($post['title']); ?></strong>
+                                            <div class="text-muted"><?php echo htmlspecialchars($post['description'] ?? ''); ?></div>
+                                        </td>
+                                        <td>
+                                            <span class="status-pill">
+                                                <?php echo htmlspecialchars(ucfirst($post['status'])); ?>
+                                            </span>
+                                        </td>
+                                        <td><?php echo $post['expires_at'] ? htmlspecialchars(date('M d, Y H:i', strtotime($post['expires_at']))) : '—'; ?></td>
+                                        <td><?php echo htmlspecialchars(date('M d, Y', strtotime($post['created_at']))); ?></td>
+                                        <td><?php echo htmlspecialchars($post['creator_name'] ?? 'System'); ?></td>
+                                        <td>
+                                            <div class="table-actions">
+                                                <button class="btn btn-secondary" type="button" onclick="document.getElementById('edit-<?php echo $post['id']; ?>').classList.toggle('hidden')">Edit</button>
+                                                <form method="POST" onsubmit="return confirm('Delete this hiring post?');">
+                                                    <input type="hidden" name="post_id" value="<?php echo $post['id']; ?>">
+                                                    <button type="submit" name="delete_post" class="btn btn-danger">Delete</button>
+                                                </form>
+                                            </div>
+                                        </td>
+                                    </tr>
+                                    <tr id="edit-<?php echo $post['id']; ?>" class="hidden">
+                                        <td colspan="6">
+                                            <form method="POST" class="form-grid">
+                                                <input type="hidden" name="post_id" value="<?php echo $post['id']; ?>">
+                                                <div class="form-group span-6">
+                                                    <label>Job title</label>
+                                                    <input type="text" name="title" value="<?php echo htmlspecialchars($post['title']); ?>" required>
+                                                </div>
+                                                <div class="form-group span-6">
+                                                    <label>Status</label>
+                                                    <select name="status">
+                                                        <?php foreach (['draft', 'live', 'closed', 'expired'] as $status): ?>
+                                                            <option value="<?php echo $status; ?>" <?php echo $post['status'] === $status ? 'selected' : ''; ?>><?php echo ucfirst($status); ?></option>
+                                                        <?php endforeach; ?>
+                                                    </select>
+                                                </div>
+                                                <div class="form-group span-12">
+                                                    <label>Description</label>
+                                                    <textarea name="description" rows="3"><?php echo htmlspecialchars($post['description'] ?? ''); ?></textarea>
+                                                </div>
+                                                <div class="form-group span-6">
+                                                    <label>Expires at</label>
+                                                    <input type="datetime-local" name="expires_at" value="<?php echo $post['expires_at'] ? htmlspecialchars(date('Y-m-d\TH:i', strtotime($post['expires_at']))) : ''; ?>">
+                                                </div>
+                                                <div class="form-group span-6" style="display:flex;align-items:end;gap:0.5rem;">
+                                                    <button type="submit" name="update_post" class="btn btn-primary">Save changes</button>
+                                                    <button type="button" class="btn btn-secondary" onclick="document.getElementById('edit-<?php echo $post['id']; ?>').classList.add('hidden')">Cancel</button>
+                                                </div>
+                                            </form>
+                                        </td>
+                                    </tr>
+                                <?php endforeach; ?>
+                            <?php endif; ?>
                         </tbody>
                     </table>
                 </div>
-            </div>
-
-            <div class="card channels-card">
-                <h2>Visibility channels</h2>
-                <div class="table-responsive">
-                    <table>
-                        <thead>
-                            <tr>
-                                <th>Channel</th>
-                                <th>Audience</th>
-                                <th>Reach</th>
-                                <th>Status</th>
-                            </tr>
-                        </thead>
-                        <tbody>
-                            <?php foreach ($visibility_channels as $channel): ?>
-                                <tr>
-                                    <td><?php echo $channel['channel']; ?></td>
-                                    <td><?php echo $channel['audience']; ?></td>
-                                    <td><?php echo $channel['reach']; ?></td>
-                                    <td><span class="badge badge-outline"><?php echo $channel['status']; ?></span></td>
-                                </tr>
-                            <?php endforeach; ?>
-                        </tbody>
-                    </table>
-                </div>
-            </div>
-
-            <div class="card alerts-card">
-                <h2>Hiring alerts</h2>
-                <?php foreach ($alert_queue as $alert): ?>
-                    <div class="alert-item">
-                        <span class="badge badge-<?php echo $alert['tone']; ?> mb-2"><?php echo $alert['title']; ?></span>
-                        <p class="mb-2"><?php echo $alert['detail']; ?></p>
-                        <small class="text-muted"><?php echo $alert['time']; ?></small>
-                    </div>
-                <?php endforeach; ?>
-            </div>
-
-            <div class="card automation-card">
-                <h2>Automation</h2>
-                <?php foreach ($automation_rules as $rule): ?>
-                    <div class="automation-item">
-                        <div class="d-flex align-center gap-2 mb-2">
-                            <i class="<?php echo $rule['icon']; ?> text-primary"></i>
-                            <strong><?php echo $rule['title']; ?></strong>
-                        </div>
-                        <p class="text-muted mb-0"><?php echo $rule['detail']; ?></p>
-                    </div>
-                <?php endforeach; ?>
-            </div>
-
-            <div class="card workflow-card">
-                <h2>Hiring workflow</h2>
-                <?php foreach ($workflow_steps as $step): ?>
-                    <div class="workflow-step">
-                        <strong><?php echo $step['title']; ?></strong>
-                        <p class="text-muted mb-0"><?php echo $step['detail']; ?></p>
-                    </div>
-                <?php endforeach; ?>
             </div>
         </section>
     </main>
