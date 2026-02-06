@@ -2,7 +2,9 @@
 session_start();
 require_once '../config/db.php';
 require_once '../config/constants.php';
-require_role(['staff', 'employee']);
+require_role('staff');
+require_role('employee');
+
 $staff_id = $_SESSION['user']['id'];
 
 $emp_stmt = $pdo->prepare("
