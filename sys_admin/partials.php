@@ -14,6 +14,7 @@ function sys_admin_nav(string $activePage): void {
     $systemItems = [
         ['key' => 'system_control', 'label' => 'Control', 'icon' => 'fas fa-sliders-h', 'href' => 'system_control.php'],
         ['key' => 'content_moderation', 'label' => 'Moderation', 'icon' => 'fas fa-shield-halved', 'href' => 'content_moderation.php'],
+        ['key' => 'notification_reminder', 'label' => 'Notifications', 'icon' => 'fas fa-bell', 'href' => 'notification_reminder.php'],
         ['key' => 'config_backup', 'label' => 'Config & Backup', 'icon' => 'fas fa-database', 'href' => 'backup.php'],
         ['key' => 'dss_config', 'label' => 'Security', 'icon' => 'fas fa-shield-alt', 'href' => 'dss_config.php'],
         ['key' => 'audit_logs', 'label' => 'Audit Logs', 'icon' => 'fas fa-clipboard-list', 'href' => 'audit_logs.php'],
