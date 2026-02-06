@@ -1,3 +1,3 @@
 <?php
-header('Location: manage_staff.php?add=1');
+header('Location: create_hr.php');
 exit();

@@ -4,11 +4,6 @@ require_once '../config/db.php';
 require_role('owner');
 
 $owner_id = $_SESSION['user']['id'];
-$available_permissions = [
-    'view_jobs' => 'View assigned jobs',
-    'update_status' => 'Update job status',
-    'upload_photos' => 'Upload output photos',
-];
 $availability_days = [
     1 => 'Monday',
     2 => 'Tuesday',
@@ -31,124 +26,6 @@ if(!$shop) {
 
 $shop_id = $shop['id'];
 
-// Add new staff
-if(isset($_POST['add_staff'])) {
-    $fullname = sanitize($_POST['fullname']);
-    $email = sanitize($_POST['email']);
-    $phone = sanitize($_POST['phone']);
-    $password = $_POST['password'];
-    $confirm_password = $_POST['confirm_password'];
-    $position = sanitize($_POST['position']);
-    $selected_days = array_map('intval', $_POST['availability_days'] ?? []);
-    $availability_start = $_POST['availability_start'] ?? null;
-    $availability_end = $_POST['availability_end'] ?? null;
-    $max_active_orders = isset($_POST['max_active_orders']) ? (int) $_POST['max_active_orders'] : 0;
-    $selected_permissions = $_POST['permissions'] ?? [];
-    $permissions_map = [];
-    foreach ($available_permissions as $permission_key => $permission_label) {
-        $permissions_map[$permission_key] = in_array($permission_key, $selected_permissions, true);
-    }
-    $permissions = json_encode($permissions_map);
-    $availability_days_json = !empty($selected_days) ? json_encode(array_values($selected_days)) : null;    
-
-    try {
-        if($password !== $confirm_password) {
-            $error = "Passwords do not match!";
-        } elseif(strlen($password) < 8) {
-            $error = "Password must be at least 8 characters long!";
-        } elseif($max_active_orders < 1) {
-            $error = "Please set a staff capacity of at least 1 active order.";
-        } elseif(empty($selected_days)) {
-            $error = "Please select at least one availability day.";
-        } elseif($availability_start && $availability_end && $availability_start >= $availability_end) {
-            $error = "Availability end time must be later than start time.";
-        } else {
-            // Check if user exists
-            $user_stmt = $pdo->prepare("SELECT id, role FROM users WHERE email = ?");
-            $user_stmt->execute([$email]);
-            $user = $user_stmt->fetch();
-        
-        if($user) {
-                if($user['role'] !== 'staff') {
-                    $error = "staff accounts must be created separately. Existing client or owner accounts cannot be promoted to staff.";
-                } else {
-                    // Check if already an staff for this shop
-                    $check_stmt = $pdo->prepare("SELECT id, status FROM shop_staffs WHERE user_id = ? AND shop_id = ?");
-                    $check_stmt->execute([$user['id'], $shop_id]);
-                    $existing = $check_stmt->fetch();
-                    
-                    if(!$existing) {
-                        // Add as staff
-                        $add_stmt = $pdo->prepare("
-                            INSERT INTO shop_staffs (shop_id, user_id, position, permissions, availability_days, availability_start, availability_end, max_active_orders, hired_date) 
-                            VALUES (?, ?, ?, ?, ?, ?, ?, ?, CURDATE())
-                        ");
-                        $add_stmt->execute([
-                            $shop_id,
-                            $user['id'],
-                            $position,
-                            $permissions,
-                            $availability_days_json,
-                            $availability_start ?: null,
-                            $availability_end ?: null,
-                            $max_active_orders
-                        ]);
-                        
-                        $success = "staff added successfully!";
-                    } elseif($existing['status'] === 'inactive') {
-                        $reactivate_stmt = $pdo->prepare("
-                            UPDATE shop_staffs 
-                            SET status = 'active', position = ?, permissions = ?, availability_days = ?, availability_start = ?, availability_end = ?, max_active_orders = ?, hired_date = CURDATE() 
-                            WHERE id = ? AND shop_id = ?
-                        ");
-                        $reactivate_stmt->execute([
-                            $position,
-                            $permissions,
-                            $availability_days_json,
-                            $availability_start ?: null,
-                            $availability_end ?: null,
-                            $max_active_orders,
-                            $existing['id'],
-                            $shop_id
-                        ]);
-                        
-                        $success = "staff reactivated successfully!";
-                    } else {
-                        $error = "User is already an active staff for this shop!";
-                    }
-                }
-            } else {
-                $hashed_password = password_hash($password, PASSWORD_DEFAULT);
-                $user_stmt = $pdo->prepare("
-                    INSERT INTO users (fullname, email, password, phone, role, status) 
-                    VALUES (?, ?, ?, ?, 'staff', 'active')
-                ");
-                $user_stmt->execute([$fullname, $email, $hashed_password, $phone]);
-                $user_id = $pdo->lastInsertId();
-
-                $add_stmt = $pdo->prepare("
-                    INSERT INTO shop_staffs (shop_id, user_id, position, permissions, availability_days, availability_start, availability_end, max_active_orders, hired_date) 
-                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, CURDATE())
-                ");
-                $add_stmt->execute([
-                    $shop_id,
-                    $user_id,
-                    $position,
-                    $permissions,
-                    $availability_days_json,
-                    $availability_start ?: null,
-                    $availability_end ?: null,
-                    $max_active_orders
-                ]);
-
-                $success = "staff account created and added successfully!";
-            }
-        }
-    } catch(PDOException $e) {
-        $error = "Failed to add staff: " . $e->getMessage();
-    }
-}
-
 // Deactivate staff
 if(isset($_GET['deactivate'])) {
     $emp_id = (int) $_GET['deactivate'];
@@ -167,15 +44,6 @@ if(isset($_GET['deactivate'])) {
         ");
         $unassign_stmt->execute([$shop_id, $staff['user_id']]);
 
-        $active_stmt = $pdo->prepare("SELECT COUNT(*) as count FROM shop_staffs WHERE user_id = ? AND status = 'active'");
-        $active_stmt->execute([$staff['user_id']]);
-        $active_count = $active_stmt->fetch();
-
-        if(($active_count['count'] ?? 0) == 0) {
-            $role_stmt = $pdo->prepare("UPDATE users SET role = 'client' WHERE id = ? AND role = 'staff'");
-            $role_stmt->execute([$staff['user_id']]);
-        }
-
         $success = "staff deactivated successfully!";
     } else {
         $error = "staff not found for this shop.";
@@ -192,9 +60,6 @@ if(isset($_GET['reactivate'])) {
     if($staff) {
         $reactivate_stmt = $pdo->prepare("UPDATE shop_staffs SET status = 'active' WHERE id = ? AND shop_id = ?");
         $reactivate_stmt->execute([$emp_id, $shop_id]);
-
-        $role_stmt = $pdo->prepare("UPDATE users SET role = 'staff' WHERE id = ?");
-        $role_stmt->execute([$staff['user_id']]);
 
         $success = "staff reactivated successfully!";
     } else {
@@ -265,10 +130,10 @@ $staffs = $staffs_stmt->fetchAll();
     <div class="container">
         <div class="dashboard-header">
             <h2>Manage Staff</h2>
-            <p class="text-muted">Add and manage staffs for your shop</p>
-            <button class="btn btn-primary" onclick="document.getElementById('addstaffModal').style.display='block'">
-                <i class="fas fa-user-plus"></i> Add New staff
-            </button>
+            <p class="text-muted">View staff and HR members for your shop.</p>
+            <a class="btn btn-primary" href="create_hr.php">
+                <i class="fas fa-user-plus"></i> Create HR
+            </a>
         </div>
 
         <?php if(isset($error)): ?>
@@ -279,14 +144,15 @@ $staffs = $staffs_stmt->fetchAll();
             <div class="alert alert-success"><?php echo $success; ?></div>
         <?php endif; ?>
 
-        <!-- staffs Table -->
+        <!-- Staff & HR Table -->
         <div class="card">
-            <h3>Current staffs (<?php echo count($staffs); ?>)</h3>
+            <h3>Current Team Members (<?php echo count($staffs); ?>)</h3>
             <?php if(!empty($staffs)): ?>
                 <table class="table">
                     <thead>
                         <tr>
-                            <th>staff</th>
+                            <th>Member</th>
+                            <th>Role</th>
                             <th>Position</th>
                             <th>Contact</th>
                             <th>Joined</th>
@@ -301,7 +167,9 @@ $staffs = $staffs_stmt->fetchAll();
                         <?php
                             $availability_summary = 'Not set';
                             $availability_days_list = [];
-                            if(!empty($emp['availability_days'])) {
+                            if($emp['staff_role'] === 'hr') {
+                                $availability_summary = 'Not required';
+                            } elseif(!empty($emp['availability_days'])) {
                                 $decoded_days = json_decode($emp['availability_days'], true);
                                 if(is_array($decoded_days)) {
                                     foreach ($decoded_days as $day_number) {
@@ -321,13 +189,18 @@ $staffs = $staffs_stmt->fetchAll();
                             }
                             $max_capacity = (int) ($emp['max_active_orders'] ?? 0);
                             $active_orders = (int) ($emp['active_orders'] ?? 0);
+                            $display_position = $emp['position'];
+                            if($emp['staff_role'] === 'hr' && empty($display_position)) {
+                                $display_position = 'HR';
+                            }
                         ?>
                         <tr>
                             <td>
                                 <strong><?php echo htmlspecialchars($emp['fullname']); ?></strong><br>
                                 <small class="text-muted">ID: <?php echo $emp['id']; ?></small>
                             </td>
-                            <td><?php echo htmlspecialchars($emp['position']); ?></td>
+                            <td><?php echo strtoupper(htmlspecialchars($emp['staff_role'])); ?></td>
+                            <td><?php echo htmlspecialchars($display_position); ?></td>
                             <td>
                                 <?php echo htmlspecialchars($emp['email']); ?><br>
                                 <small><?php echo $emp['phone']; ?></small>
@@ -342,7 +215,7 @@ $staffs = $staffs_stmt->fetchAll();
                             </td>
                             <td><?php echo $availability_summary; ?></td>
                             <td>
-                                <?php if($max_capacity > 0): ?>
+                                <?php if($max_capacity > 0 && $emp['staff_role'] !== 'hr'): ?>
                                     <span class="badge <?php echo $active_orders >= $max_capacity ? 'badge-danger' : 'badge-info'; ?>">
                                         <?php echo $active_orders; ?> / <?php echo $max_capacity; ?>
                                     </span>
@@ -352,8 +225,6 @@ $staffs = $staffs_stmt->fetchAll();
                                 <?php endif; ?>
                             </td>
                             <td>
-                                <a href="edit_staff.php?id=<?php echo $emp['id']; ?>" 
-                                   class="btn btn-sm btn-outline-primary">Edit</a>
                                 <?php if($emp['status'] === 'active'): ?>
                                     <a href="manage_staff.php?deactivate=<?php echo $emp['id']; ?>" 
                                        class="btn btn-sm btn-outline-danger"
@@ -371,20 +242,20 @@ $staffs = $staffs_stmt->fetchAll();
             <?php else: ?>
                 <div class="text-center p-4">
                     <i class="fas fa-users fa-3x text-muted mb-3"></i>
-                    <h4>No staffs Yet</h4>
-                    <p class="text-muted">Add your first staff to get started.</p>
+                    <h4>No Team Members Yet</h4>
+                    <p class="text-muted">Create your first HR lead to get started.</p>
                 </div>
             <?php endif; ?>
         </div>
 
-        <!-- staff Statistics -->
+        <!-- Staff Statistics -->
         <div class="stats-grid">
             <div class="stat-card">
                 <div class="stat-icon">
                     <i class="fas fa-users"></i>
                 </div>
                 <div class="stat-number"><?php echo count($staffs); ?></div>
-                <div class="stat-label">Total staffs</div>
+                <div class="stat-label">Total Members</div>
             </div>
             <div class="stat-card">
                 <div class="stat-icon">
@@ -401,136 +272,5 @@ $staffs = $staffs_stmt->fetchAll();
             </div>
         </div>
     </div>
-
-    <!-- Add staff Modal -->
-    <div id="addstaffModal" class="modal" style="display: none; position: fixed; z-index: 1000; left: 0; top: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.5);">
-        <div class="modal-content" style="background: white; margin: 5% auto; padding: 30px; width: 500px; border-radius: 10px; max-height: 90vh; overflow-y: auto;">
-            <div class="modal-header d-flex justify-between align-center mb-3">
-                <h3>Add New staff</h3>
-                <button onclick="document.getElementById('addstaffModal').style.display='none'" 
-                        style="background: none; border: none; font-size: 1.5rem;">&times;</button>
-            </div>
-            <form method="POST">
-                <div class="form-group">
-                    <label>staff Full Name *</label>
-                    <input type="text" name="fullname" class="form-control" required 
-                           placeholder="Enter staff's full name">
-                </div>
-
-                <div class="form-group">
-                    <label>staff Email *</label>
-                    <input type="email" name="email" class="form-control" required 
-                           placeholder="Enter staff's email">
-                    <small class="text-muted">staff accounts are created here and cannot reuse client or owner emails.</small>
-                </div>
-
-                <div class="form-group">
-                    <label>Phone Number *</label>
-                    <input type="tel" name="phone" class="form-control" required 
-                           placeholder="Enter staff's phone number">
-                </div>
-
-                <div class="form-group">
-                    <label>Password *</label>
-                    <input type="password" name="password" class="form-control" required minlength="8"
-                           placeholder="At least 8 characters">
-                </div>
-
-                <div class="form-group">
-                    <label>Confirm Password *</label>
-                    <input type="password" name="confirm_password" class="form-control" required minlength="8"
-                           placeholder="Confirm password">
-                </div>
-                
-                <div class="form-group">
-                    <label>Position *</label>
-                    <select name="position" class="form-control" required>
-                        <option value="">Select position</option>
-                        <option value="Designer">Designer</option>
-                        <option value="Embroidery Technician">Embroidery Technician</option>
-                        <option value="Quality Control">Quality Control</option>
-                        <option value="Production Manager">Production Manager</option>
-                    </select>
-                </div>
-
-                <div class="form-group">
-                    <label>Availability Days *</label>
-                    <div class="d-flex flex-wrap gap-2">
-                        <?php foreach ($availability_days as $day_number => $day_label): ?>
-                            <label class="form-check mr-3" style="min-width: 120px;">
-                                <input
-                                    type="checkbox"
-                                    class="form-check-input"
-                                    name="availability_days[]"
-                                    value="<?php echo $day_number; ?>"
-                                    checked
-                                >
-                                <span class="form-check-label"><?php echo htmlspecialchars($day_label); ?></span>
-                            </label>
-                        <?php endforeach; ?>
-                    </div>
-                    <small class="text-muted">Select working days for this staff member.</small>
-                </div>
-
-                <div class="form-group d-flex justify-between align-center" style="gap: 16px;">
-                    <div style="flex: 1;">
-                        <label>Availability Start Time</label>
-                        <input type="time" name="availability_start" class="form-control" value="09:00">
-                    </div>
-                    <div style="flex: 1;">
-                        <label>Availability End Time</label>
-                        <input type="time" name="availability_end" class="form-control" value="18:00">
-                    </div>
-                </div>
-
-                <div class="form-group">
-                    <label>Max Active Orders *</label>
-                    <input type="number" name="max_active_orders" class="form-control" min="1" value="3" required>
-                    <small class="text-muted">Orders above this limit cannot be assigned automatically.</small>
-                </div>
-                <div class="form-group">
-                    <label>Permissions</label>
-                    <p class="text-muted mb-2">Select the permissions this staff member should have.</p>
-                    <?php foreach ($available_permissions as $permission_key => $permission_label): ?>
-                        <div class="form-check">
-                            <input
-                                type="checkbox"
-                                class="form-check-input"
-                                id="permission_<?php echo $permission_key; ?>"
-                                name="permissions[]"
-                                value="<?php echo $permission_key; ?>"
-                                checked
-                            >
-                            <label class="form-check-label" for="permission_<?php echo $permission_key; ?>">
-                                <?php echo htmlspecialchars($permission_label); ?>
-                            </label>
-                        </div>
-                    <?php endforeach; ?>
-                </div>
-                
-                <div class="modal-footer mt-4">
-                    <button type="button" class="btn btn-secondary" 
-                            onclick="document.getElementById('addstaffModal').style.display='none'">Cancel</button>
-                    <button type="submit" name="add_staff" class="btn btn-primary">Add staff</button>
-                </div>
-            </form>
-        </div>
-    </div>
-
-    <script>
-        const addstaffModal = document.getElementById('addstaffModal');
-        const params = new URLSearchParams(window.location.search);
-
-        if (params.get('add') === '1') {
-            addstaffModal.style.display = 'block';
-        }
-
-        // Close modal when clicking outside
-        window.onclick = function(event) {
-            if (event.target == addstaffModal) {
-                addstaffModal.style.display = "none";
-            }
-        }
-    </script>
 </body>
 </html>

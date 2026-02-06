@@ -216,8 +216,8 @@ $recent_staffs = $staffs_stmt->fetchAll();
                 <a href="earnings.php" class="btn btn-outline-warning">
                     <i class="fas fa-chart-line"></i> View Earnings
                 </a>
-                <a href="manage_staff.php?add=1" class="btn btn-outline-info">
-                    <i class="fas fa-user-plus"></i> Add New Staff
+                <a href="create_hr.php" class="btn btn-outline-info">
+                    <i class="fas fa-user-plus"></i> Create HR
                 </a>
             </div>
         </div>
@@ -299,7 +299,7 @@ $recent_staffs = $staffs_stmt->fetchAll();
                         <div class="text-center p-3">
                             <i class="fas fa-users fa-2x text-muted mb-2"></i>
                             <p class="text-muted">No staff members yet</p>
-                            <a href="manage_staff.php?add=1" class="btn btn-sm btn-primary">Add Staff</a>
+                            <a href="create_hr.php" class="btn btn-sm btn-primary">Create HR</a>
                         </div>
                     <?php endif; ?>
                 </div>
