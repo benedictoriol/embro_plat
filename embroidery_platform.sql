@@ -1062,7 +1062,8 @@ ALTER TABLE `financial_transactions`
 ALTER TABLE `hiring_posts`
   ADD PRIMARY KEY (`id`),
   ADD KEY `shop_id` (`shop_id`),
-  ADD KEY `created_by` (`created_by`);
+  ADD KEY `created_by` (`created_by`),
+  ADD KEY `idx_hiring_posts_shop_status_expires` (`shop_id`,`status`,`expires_at`);
 
 --
 -- Indexes for table `orders`
@@ -1072,7 +1073,9 @@ ALTER TABLE `orders`
   ADD KEY `client_id` (`client_id`),
   ADD KEY `shop_id` (`shop_id`),
   ADD KEY `assigned_to` (`assigned_to`),
-  ADD KEY `design_version_id` (`design_version_id`);
+  ADD KEY `design_version_id` (`design_version_id`),
+  ADD KEY `idx_orders_shop_status_created` (`shop_id`,`status`,`created_at`),
+  ADD KEY `idx_orders_assigned_status` (`assigned_to`,`status`);
 
 --
 -- Indexes for table `order_invoices`
@@ -1104,7 +1107,8 @@ ALTER TABLE `material_orders`
 ALTER TABLE `notifications`
   ADD PRIMARY KEY (`id`),
   ADD KEY `user_id` (`user_id`),
-  ADD KEY `order_id` (`order_id`);
+  ADD KEY `order_id` (`order_id`),
+  ADD KEY `idx_notifications_user_created` (`user_id`,`created_at`);
 
 --
 -- Indexes for table `notification_preferences`
