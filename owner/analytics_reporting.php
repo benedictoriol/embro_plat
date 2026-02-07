@@ -1,39 +1,47 @@
 <?php
 session_start();
 require_once '../config/db.php';
+require_once '../includes/analytics_service.php';
 require_role('owner');
 
 $owner_id = $_SESSION['user']['id'];
-$shop_stmt = $pdo->prepare("SELECT shop_name FROM shops WHERE owner_id = ?");
+$shop_stmt = $pdo->prepare("SELECT id, shop_name FROM shops WHERE owner_id = ?");
 $shop_stmt->execute([$owner_id]);
-$shop = $shop_stmt->fetch();
+$shops = $shop_stmt->fetchAll();
+$shop = $shops[0] ?? null;
+$shop_ids = array_column($shops, 'id');
+
+$overview = fetch_order_analytics($pdo, $shop_ids);
+$staff_count = fetch_staff_count($pdo, $shop_ids);
+$total_orders = $overview['total_orders'];
+$completion_rate = $total_orders > 0 ? ($overview['completed_orders'] / $total_orders) * 100 : 0;
 
 $kpis = [
     [
-        'label' => 'Revenue tracked',
-        'value' => '₱412K',
-        'note' => 'Last 30 days gross revenue.',
+        'label' => 'Total revenue',
+        'value' => '₱' . number_format($overview['total_revenue'], 2),
+        'note' => 'Paid orders for your shop.',
         'icon' => 'fas fa-peso-sign',
         'tone' => 'success',
     ],
     [
-        'label' => 'On-time completion',
-        'value' => '91%',
-        'note' => 'Jobs delivered within SLA.',
+        'label' => 'Completion rate',
+        'value' => number_format($completion_rate, 1) . '%',
+        'note' => 'Orders completed successfully.',
         'icon' => 'fas fa-clock',
         'tone' => 'primary',
     ],
     [
-        'label' => 'Top repeat clients',
-        'value' => '14',
-        'note' => 'Ordering again this quarter.',
-        'icon' => 'fas fa-rotate',
+        'label' => 'Active orders',
+        'value' => number_format($overview['active_orders']),
+        'note' => 'Accepted or in-progress jobs.',
+        'icon' => 'fas fa-clipboard-list',
         'tone' => 'info',
     ],
     [
-        'label' => 'Performance alerts',
-        'value' => '5',
-        'note' => 'Jobs needing owner attention.',
+        'label' => 'Active staff',
+        'value' => number_format($staff_count),
+        'note' => 'Currently assigned to your shop.',
         'icon' => 'fas fa-bell',
         'tone' => 'warning',
     ],

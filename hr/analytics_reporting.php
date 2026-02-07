@@ -1,36 +1,42 @@
 <?php
 session_start();
 require_once '../config/db.php';
+require_once '../includes/analytics_service.php';
 require_role('hr');
 
 $hr_name = htmlspecialchars($_SESSION['user']['fullname'] ?? 'HR Lead');
 
+$overview = fetch_order_analytics($pdo);
+$staff_count = fetch_staff_count($pdo);
+$total_orders = $overview['total_orders'];
+$completion_rate = $total_orders > 0 ? ($overview['completed_orders'] / $total_orders) * 100 : 0;
+
 $kpis = [
     [
-        'label' => 'Headcount tracked',
-        'value' => '214',
-        'note' => 'Active staffs across departments.',
+        'label' => 'Active headcount',
+        'value' => number_format($staff_count),
+        'note' => 'Active staff across all shops.',
         'icon' => 'fas fa-users',
         'tone' => 'primary',
     ],
     [
-        'label' => 'Attrition risk',
-        'value' => '6%',
-        'note' => 'Early warning from pulse surveys.',
-        'icon' => 'fas fa-heart-crack',
+        'label' => 'Completion rate',
+        'value' => number_format($completion_rate, 1) . '%',
+        'note' => 'Orders completed successfully.',
+        'icon' => 'fas fa-clipboard-check',
         'tone' => 'warning',
     ],
     [
-        'label' => 'Training coverage',
-        'value' => '88%',
-        'note' => 'Mandatory training completed.',
+        'label' => 'Active orders',
+        'value' => number_format($overview['active_orders']),
+        'note' => 'Accepted or in-progress jobs.',
         'icon' => 'fas fa-graduation-cap',
         'tone' => 'success',
     ],
     [
-        'label' => 'Performance alerts',
-        'value' => '4',
-        'note' => 'Coaching plans due this week.',
+        'label' => 'Pending orders',
+        'value' => number_format($overview['pending_orders']),
+        'note' => 'Waiting to be accepted.',
         'icon' => 'fas fa-bell',
         'tone' => 'danger',
     ],
