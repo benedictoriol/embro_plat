@@ -604,6 +604,109 @@ CREATE TABLE `raw_materials` (
 
 -- --------------------------------------------------------
 --
+-- Table structure for table `suppliers`
+--
+
+CREATE TABLE `suppliers` (
+  `id` int(11) NOT NULL,
+  `shop_id` int(11) NOT NULL,
+  `name` varchar(150) NOT NULL,
+  `contact` varchar(255) DEFAULT NULL,
+  `rating` decimal(3,1) DEFAULT NULL,
+  `status` enum('active','inactive','preferred','watchlist') DEFAULT 'active',
+  `created_at` timestamp NOT NULL DEFAULT current_timestamp()
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
+
+-- --------------------------------------------------------
+--
+-- Table structure for table `purchase_requests`
+--
+
+CREATE TABLE `purchase_requests` (
+  `id` int(11) NOT NULL,
+  `shop_id` int(11) NOT NULL,
+  `supplier_id` int(11) DEFAULT NULL,
+  `status` enum('draft','pending','approved','closed','cancelled') DEFAULT 'draft',
+  `created_by` int(11) DEFAULT NULL,
+  `approved_by` int(11) DEFAULT NULL,
+  `approved_at` datetime DEFAULT NULL,
+  `closed_at` datetime DEFAULT NULL,
+  `created_at` timestamp NOT NULL DEFAULT current_timestamp()
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
+
+-- --------------------------------------------------------
+--
+-- Table structure for table `purchase_request_items`
+--
+
+CREATE TABLE `purchase_request_items` (
+  `id` int(11) NOT NULL,
+  `request_id` int(11) NOT NULL,
+  `material_id` int(11) NOT NULL,
+  `qty` decimal(10,2) NOT NULL DEFAULT 0.00,
+  `unit_cost` decimal(10,2) DEFAULT NULL
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
+
+-- --------------------------------------------------------
+--
+-- Table structure for table `storage_locations`
+--
+
+CREATE TABLE `storage_locations` (
+  `id` int(11) NOT NULL,
+  `shop_id` int(11) NOT NULL,
+  `code` varchar(50) NOT NULL,
+  `description` varchar(255) DEFAULT NULL,
+  `created_at` timestamp NOT NULL DEFAULT current_timestamp()
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
+
+-- --------------------------------------------------------
+--
+-- Table structure for table `stock_placements`
+--
+
+CREATE TABLE `stock_placements` (
+  `id` int(11) NOT NULL,
+  `location_id` int(11) NOT NULL,
+  `material_id` int(11) NOT NULL,
+  `qty` decimal(10,2) NOT NULL DEFAULT 0.00,
+  `created_at` timestamp NOT NULL DEFAULT current_timestamp()
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
+
+-- --------------------------------------------------------
+--
+-- Table structure for table `finished_goods`
+--
+
+CREATE TABLE `finished_goods` (
+  `id` int(11) NOT NULL,
+  `order_id` int(11) NOT NULL,
+  `shop_id` int(11) NOT NULL,
+  `storage_location_id` int(11) DEFAULT NULL,
+  `status` enum('stored','ready','released') DEFAULT 'stored',
+  `stored_at` datetime DEFAULT NULL,
+  `released_at` datetime DEFAULT NULL,
+  `created_at` timestamp NOT NULL DEFAULT current_timestamp()
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
+
+-- --------------------------------------------------------
+--
+-- Table structure for table `inventory_transactions`
+--
+
+CREATE TABLE `inventory_transactions` (
+  `id` int(11) NOT NULL,
+  `shop_id` int(11) NOT NULL,
+  `material_id` int(11) NOT NULL,
+  `type` enum('issue','return','adjust','move','in','out') NOT NULL,
+  `qty` decimal(10,2) NOT NULL,
+  `ref_type` varchar(50) DEFAULT NULL,
+  `ref_id` int(11) DEFAULT NULL,
+  `created_at` timestamp NOT NULL DEFAULT current_timestamp()
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
+
+-- --------------------------------------------------------
+--
 -- Audit immutability and sensitive change tracking
 --
 
@@ -1107,6 +1210,62 @@ ALTER TABLE `raw_materials`
   ADD KEY `idx_raw_materials_shop` (`shop_id`);
 
 --
+-- Indexes for table `suppliers`
+--
+ALTER TABLE `suppliers`
+  ADD PRIMARY KEY (`id`),
+  ADD KEY `idx_suppliers_shop` (`shop_id`);
+
+--
+-- Indexes for table `purchase_requests`
+--
+ALTER TABLE `purchase_requests`
+  ADD PRIMARY KEY (`id`),
+  ADD KEY `idx_purchase_requests_shop` (`shop_id`),
+  ADD KEY `idx_purchase_requests_supplier` (`supplier_id`);
+
+--
+-- Indexes for table `purchase_request_items`
+--
+ALTER TABLE `purchase_request_items`
+  ADD PRIMARY KEY (`id`),
+  ADD KEY `idx_request_items_request` (`request_id`),
+  ADD KEY `idx_request_items_material` (`material_id`);
+
+--
+-- Indexes for table `storage_locations`
+--
+ALTER TABLE `storage_locations`
+  ADD PRIMARY KEY (`id`),
+  ADD UNIQUE KEY `uniq_storage_location_code` (`shop_id`,`code`);
+
+--
+-- Indexes for table `stock_placements`
+--
+ALTER TABLE `stock_placements`
+  ADD PRIMARY KEY (`id`),
+  ADD UNIQUE KEY `uniq_location_material` (`location_id`,`material_id`),
+  ADD KEY `idx_stock_material` (`material_id`);
+
+--
+-- Indexes for table `finished_goods`
+--
+ALTER TABLE `finished_goods`
+  ADD PRIMARY KEY (`id`),
+  ADD UNIQUE KEY `uniq_finished_goods_order` (`order_id`),
+  ADD KEY `idx_finished_goods_shop` (`shop_id`),
+  ADD KEY `idx_finished_goods_location` (`storage_location_id`);
+
+--
+-- Indexes for table `inventory_transactions`
+--
+ALTER TABLE `inventory_transactions`
+  ADD PRIMARY KEY (`id`),
+  ADD KEY `idx_inventory_shop` (`shop_id`),
+  ADD KEY `idx_inventory_material` (`material_id`),
+  ADD KEY `idx_inventory_type` (`type`);
+
+--
 -- Indexes for table `services`
 --
 ALTER TABLE `services`
@@ -1356,6 +1515,48 @@ ALTER TABLE `raw_materials`
   MODIFY `id` int(11) NOT NULL AUTO_INCREMENT;
 
 --
+-- AUTO_INCREMENT for table `suppliers`
+--
+ALTER TABLE `suppliers`
+  MODIFY `id` int(11) NOT NULL AUTO_INCREMENT;
+
+--
+-- AUTO_INCREMENT for table `purchase_requests`
+--
+ALTER TABLE `purchase_requests`
+  MODIFY `id` int(11) NOT NULL AUTO_INCREMENT;
+
+--
+-- AUTO_INCREMENT for table `purchase_request_items`
+--
+ALTER TABLE `purchase_request_items`
+  MODIFY `id` int(11) NOT NULL AUTO_INCREMENT;
+
+--
+-- AUTO_INCREMENT for table `storage_locations`
+--
+ALTER TABLE `storage_locations`
+  MODIFY `id` int(11) NOT NULL AUTO_INCREMENT;
+
+--
+-- AUTO_INCREMENT for table `stock_placements`
+--
+ALTER TABLE `stock_placements`
+  MODIFY `id` int(11) NOT NULL AUTO_INCREMENT;
+
+--
+-- AUTO_INCREMENT for table `finished_goods`
+--
+ALTER TABLE `finished_goods`
+  MODIFY `id` int(11) NOT NULL AUTO_INCREMENT;
+
+--
+-- AUTO_INCREMENT for table `inventory_transactions`
+--
+ALTER TABLE `inventory_transactions`
+  MODIFY `id` int(11) NOT NULL AUTO_INCREMENT;
+
+--
 -- AUTO_INCREMENT for table `services`
 --
 ALTER TABLE `services`
@@ -1542,6 +1743,57 @@ ALTER TABLE `shifts`
 ALTER TABLE `attendance_logs`
   ADD CONSTRAINT `attendance_logs_ibfk_1` FOREIGN KEY (`shop_id`) REFERENCES `shops` (`id`),
   ADD CONSTRAINT `attendance_logs_ibfk_2` FOREIGN KEY (`staff_user_id`) REFERENCES `users` (`id`);
+
+--
+-- Constraints for table `suppliers`
+--
+ALTER TABLE `suppliers`
+  ADD CONSTRAINT `suppliers_ibfk_1` FOREIGN KEY (`shop_id`) REFERENCES `shops` (`id`);
+
+--
+-- Constraints for table `purchase_requests`
+--
+ALTER TABLE `purchase_requests`
+  ADD CONSTRAINT `purchase_requests_ibfk_1` FOREIGN KEY (`shop_id`) REFERENCES `shops` (`id`),
+  ADD CONSTRAINT `purchase_requests_ibfk_2` FOREIGN KEY (`supplier_id`) REFERENCES `suppliers` (`id`),
+  ADD CONSTRAINT `purchase_requests_ibfk_3` FOREIGN KEY (`created_by`) REFERENCES `users` (`id`),
+  ADD CONSTRAINT `purchase_requests_ibfk_4` FOREIGN KEY (`approved_by`) REFERENCES `users` (`id`);
+
+--
+-- Constraints for table `purchase_request_items`
+--
+ALTER TABLE `purchase_request_items`
+  ADD CONSTRAINT `purchase_request_items_ibfk_1` FOREIGN KEY (`request_id`) REFERENCES `purchase_requests` (`id`),
+  ADD CONSTRAINT `purchase_request_items_ibfk_2` FOREIGN KEY (`material_id`) REFERENCES `raw_materials` (`id`);
+
+--
+-- Constraints for table `storage_locations`
+--
+ALTER TABLE `storage_locations`
+  ADD CONSTRAINT `storage_locations_ibfk_1` FOREIGN KEY (`shop_id`) REFERENCES `shops` (`id`);
+
+--
+-- Constraints for table `stock_placements`
+--
+ALTER TABLE `stock_placements`
+  ADD CONSTRAINT `stock_placements_ibfk_1` FOREIGN KEY (`location_id`) REFERENCES `storage_locations` (`id`),
+  ADD CONSTRAINT `stock_placements_ibfk_2` FOREIGN KEY (`material_id`) REFERENCES `raw_materials` (`id`);
+
+--
+-- Constraints for table `finished_goods`
+--
+ALTER TABLE `finished_goods`
+  ADD CONSTRAINT `finished_goods_ibfk_1` FOREIGN KEY (`order_id`) REFERENCES `orders` (`id`),
+  ADD CONSTRAINT `finished_goods_ibfk_2` FOREIGN KEY (`shop_id`) REFERENCES `shops` (`id`),
+  ADD CONSTRAINT `finished_goods_ibfk_3` FOREIGN KEY (`storage_location_id`) REFERENCES `storage_locations` (`id`);
+
+--
+-- Constraints for table `inventory_transactions`
+--
+ALTER TABLE `inventory_transactions`
+  ADD CONSTRAINT `inventory_transactions_ibfk_1` FOREIGN KEY (`shop_id`) REFERENCES `shops` (`id`),
+  ADD CONSTRAINT `inventory_transactions_ibfk_2` FOREIGN KEY (`material_id`) REFERENCES `raw_materials` (`id`);
+
 --
 -- Constraints for table `service_providers`
 --

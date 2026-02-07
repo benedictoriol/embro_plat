@@ -4,125 +4,193 @@ require_once '../config/db.php';
 require_role('owner');
 
 $owner_id = $_SESSION['user']['id'];
-$shop_stmt = $pdo->prepare("SELECT shop_name FROM shops WHERE owner_id = ?");
+$shop_stmt = $pdo->prepare("SELECT id, shop_name FROM shops WHERE owner_id = ?");
 $shop_stmt->execute([$owner_id]);
 $shop = $shop_stmt->fetch();
+
+if (!$shop) {
+    die('No shop assigned to this owner. Please contact support.');
+}
+
+$shop_id = (int) $shop['id'];
+$success = '';
+$error = '';
+
+if ($_SERVER['REQUEST_METHOD'] === 'POST') {
+    $action = $_POST['action'] ?? '';
+
+    if ($action === 'log_finished_good') {
+        $order_id = (int) ($_POST['order_id'] ?? 0);
+        $location_id = (int) ($_POST['storage_location_id'] ?? 0);
+        $status = $_POST['status'] ?? 'stored';
+
+        if ($order_id <= 0 || $location_id <= 0) {
+            $error = 'Please select a completed order and storage location.';
+        } else {
+            $order_stmt = $pdo->prepare("
+                SELECT id, status
+                FROM orders
+                WHERE id = ? AND shop_id = ?
+                LIMIT 1
+            ");
+            $order_stmt->execute([$order_id, $shop_id]);
+            $order = $order_stmt->fetch();
+
+            if (!$order || $order['status'] !== 'completed') {
+                $error = 'Only completed orders can be logged in finished goods.';
+            } else {
+                $existing_stmt = $pdo->prepare("SELECT id FROM finished_goods WHERE order_id = ?");
+                $existing_stmt->execute([$order_id]);
+                $existing = $existing_stmt->fetchColumn();
+
+                if ($existing) {
+                    $error = 'This order is already logged in finished goods.';
+                } else {
+                    $insert_stmt = $pdo->prepare("
+                        INSERT INTO finished_goods (order_id, shop_id, storage_location_id, status, stored_at)
+                        VALUES (?, ?, ?, ?, NOW())
+                    ");
+                    $insert_stmt->execute([$order_id, $shop_id, $location_id, $status]);
+                    $success = 'Finished goods record created successfully.';
+                }
+            }
+        }
+    }
+
+    if ($action === 'update_finished_status') {
+        $finished_id = (int) ($_POST['finished_id'] ?? 0);
+        $status = $_POST['status'] ?? '';
+
+        if ($finished_id <= 0 || $status === '') {
+            $error = 'Please select a valid finished goods record.';
+        } else {
+            $update_stmt = $pdo->prepare("
+                UPDATE finished_goods
+                SET status = ?, released_at = CASE WHEN ? = 'released' THEN NOW() ELSE released_at END
+                WHERE id = ? AND shop_id = ?
+            ");
+            $update_stmt->execute([$status, $status, $finished_id, $shop_id]);
+            $success = 'Finished goods status updated.';
+        }
+    }
+}
+
+$auto_release_stmt = $pdo->prepare("
+    UPDATE finished_goods fg
+    JOIN orders o ON o.id = fg.order_id
+    JOIN order_fulfillments ofl ON ofl.order_id = o.id
+    SET fg.status = 'released', fg.released_at = NOW()
+    WHERE fg.shop_id = ? AND fg.status <> 'released'
+      AND ofl.status IN ('delivered','claimed')
+");
+$auto_release_stmt->execute([$shop_id]);
+
+$locations_stmt = $pdo->prepare("SELECT id, code FROM storage_locations WHERE shop_id = ? ORDER BY code");
+$locations_stmt->execute([$shop_id]);
+$storage_locations = $locations_stmt->fetchAll();
+
+$available_orders_stmt = $pdo->prepare("
+    SELECT o.id, o.order_number
+    FROM orders o
+    LEFT JOIN finished_goods fg ON fg.order_id = o.id
+    WHERE o.shop_id = ? AND o.status = 'completed' AND fg.id IS NULL
+    ORDER BY o.completed_at DESC
+");
+$available_orders_stmt->execute([$shop_id]);
+$available_orders = $available_orders_stmt->fetchAll();
+
+$finished_stmt = $pdo->prepare("
+    SELECT fg.*, o.order_number, o.quantity, u.fullname as client_name,
+           sl.code as location_code, ofl.fulfillment_type, ofl.status as fulfillment_status
+    FROM finished_goods fg
+    JOIN orders o ON o.id = fg.order_id
+    JOIN users u ON u.id = o.client_id
+    LEFT JOIN storage_locations sl ON sl.id = fg.storage_location_id
+    LEFT JOIN order_fulfillments ofl ON ofl.order_id = o.id
+    WHERE fg.shop_id = ?
+    ORDER BY fg.stored_at DESC
+");
+$finished_stmt->execute([$shop_id]);
+$finished_orders = $finished_stmt->fetchAll();
+
+$zones_stmt = $pdo->prepare("
+    SELECT sl.code,
+           COUNT(fg.id) as stored_count
+    FROM storage_locations sl
+    LEFT JOIN finished_goods fg ON fg.storage_location_id = sl.id AND fg.status <> 'released'
+    WHERE sl.shop_id = ?
+    GROUP BY sl.id
+    ORDER BY sl.code
+");
+$zones_stmt->execute([$shop_id]);
+$storage_zones = $zones_stmt->fetchAll();
+
+$release_stmt = $pdo->prepare("
+    SELECT fg.id, o.order_number, ofl.fulfillment_type, ofl.status, fg.stored_at
+    FROM finished_goods fg
+    JOIN orders o ON o.id = fg.order_id
+    LEFT JOIN order_fulfillments ofl ON ofl.order_id = o.id
+    WHERE fg.shop_id = ? AND fg.status IN ('stored','ready')
+    ORDER BY fg.stored_at ASC
+    LIMIT 5
+");
+$release_stmt->execute([$shop_id]);
+$release_schedule = $release_stmt->fetchAll();
+
+$staging_count = 0;
+$ready_count = 0;
+$pickup_count = 0;
+$aging_count = 0;
+foreach ($finished_orders as $order) {
+    if (in_array($order['status'], ['stored', 'ready'], true)) {
+        $staging_count++;
+    }
+    if ($order['status'] === 'ready') {
+        $ready_count++;
+    }
+    if (($order['fulfillment_type'] ?? '') === 'pickup' && $order['status'] !== 'released') {
+        $pickup_count++;
+    }
+    if ($order['status'] !== 'released' && $order['stored_at'] && strtotime($order['stored_at']) <= strtotime('-48 hours')) {
+        $aging_count++;
+    }
+}
 
 $storage_kpis = [
     [
         'label' => 'Orders in staging',
-        'value' => 14,
+        'value' => $staging_count,
         'note' => 'Awaiting pickup or delivery.',
         'icon' => 'fas fa-box-open',
         'tone' => 'primary',
     ],
     [
         'label' => 'Ready for dispatch',
-        'value' => 6,
+        'value' => $ready_count,
         'note' => 'Packed and labeled.',
         'icon' => 'fas fa-truck-fast',
         'tone' => 'success',
     ],
     [
         'label' => 'Pending client pickup',
-        'value' => 5,
+        'value' => $pickup_count,
         'note' => 'Scheduled for pickup.',
         'icon' => 'fas fa-hand-holding',
         'tone' => 'info',
     ],
     [
         'label' => 'Aging over 48 hrs',
-        'value' => 3,
+        'value' => $aging_count,
         'note' => 'Needs follow-up.',
         'icon' => 'fas fa-clock',
         'tone' => 'warning',
     ],
 ];
 
-$finished_orders = [
-    [
-        'order' => 'Order #4621',
-        'client' => 'Horizon Athletics',
-        'channel' => 'Delivery',
-        'items' => '18 polos',
-        'location' => 'FG-A1',
-        'status' => 'Ready',
-    ],
-    [
-        'order' => 'Order #4624',
-        'client' => 'Luna Cafe',
-        'channel' => 'Pickup',
-        'items' => '12 aprons',
-        'location' => 'FG-B2',
-        'status' => 'Awaiting pickup',
-    ],
-    [
-        'order' => 'Order #4628',
-        'client' => 'Bridgeway Realty',
-        'channel' => 'Delivery',
-        'items' => '30 caps',
-        'location' => 'FG-C1',
-        'status' => 'Packed',
-    ],
-    [
-        'order' => 'Order #4630',
-        'client' => 'Riverline School',
-        'channel' => 'Pickup',
-        'items' => '40 patches',
-        'location' => 'FG-B4',
-        'status' => 'Awaiting pickup',
-    ],
-];
-
-$storage_zones = [
-    [
-        'zone' => 'FG-A1',
-        'type' => 'Shelf row',
-        'capacity' => '12 orders',
-        'utilization' => '75%',
-        'status' => 'Available',
-    ],
-    [
-        'zone' => 'FG-B2',
-        'type' => 'Pickup rack',
-        'capacity' => '8 orders',
-        'utilization' => '62%',
-        'status' => 'Active',
-    ],
-    [
-        'zone' => 'FG-C1',
-        'type' => 'Delivery dock',
-        'capacity' => '10 orders',
-        'utilization' => '80%',
-        'status' => 'Busy',
-    ],
-];
-
-$release_schedule = [
-    [
-        'slot' => 'Today, 2:00 PM',
-        'orders' => '3 orders',
-        'channel' => 'Delivery',
-        'note' => 'Route: East Metro',
-    ],
-    [
-        'slot' => 'Today, 4:30 PM',
-        'orders' => '2 orders',
-        'channel' => 'Pickup',
-        'note' => 'Clients notified',
-    ],
-    [
-        'slot' => 'Tomorrow, 9:00 AM',
-        'orders' => '4 orders',
-        'channel' => 'Delivery',
-        'note' => 'Courier booked',
-    ],
-];
-
 $automation_rules = [
     [
         'title' => 'QC pass registration',
-        'detail' => 'Auto-register completed orders into Finished Goods storage after QC approval.',
+        'detail' => 'Register completed orders into Finished Goods storage after QC approval.',
         'icon' => 'fas fa-clipboard-check',
     ],
     [
@@ -164,6 +232,10 @@ $automation_rules = [
 
         .orders-card {
             grid-column: span 8;
+        }
+
+        .form-card {
+            grid-column: span 4;
         }
 
         .zones-card,
@@ -243,6 +315,13 @@ $automation_rules = [
             </div>
         </div>
 
+        <?php if ($success): ?>
+            <div class="alert alert-success"><?php echo htmlspecialchars($success); ?></div>
+        <?php endif; ?>
+        <?php if ($error): ?>
+            <div class="alert alert-danger"><?php echo htmlspecialchars($error); ?></div>
+        <?php endif; ?>
+
         <div class="storage-grid">
             <div class="card purpose-card">
                 <div class="card-header">
@@ -269,6 +348,42 @@ $automation_rules = [
                 </div>
             <?php endforeach; ?>
 
+            <div class="card form-card">
+                <div class="card-header">
+                    <h3><i class="fas fa-clipboard-check text-primary"></i> Log Finished Goods</h3>
+                    <p class="text-muted">Register QC-approved orders into storage.</p>
+                </div>
+                <form method="POST">
+                    <input type="hidden" name="action" value="log_finished_good">
+                    <div class="form-group">
+                        <label>Completed order</label>
+                        <select name="order_id" required>
+                            <option value="">Select order</option>
+                            <?php foreach ($available_orders as $order): ?>
+                                <option value="<?php echo (int) $order['id']; ?>">#<?php echo htmlspecialchars($order['order_number']); ?></option>
+                            <?php endforeach; ?>
+                        </select>
+                    </div>
+                    <div class="form-group">
+                        <label>Storage location</label>
+                        <select name="storage_location_id" required>
+                            <option value="">Select location</option>
+                            <?php foreach ($storage_locations as $location): ?>
+                                <option value="<?php echo (int) $location['id']; ?>"><?php echo htmlspecialchars($location['code']); ?></option>
+                            <?php endforeach; ?>
+                        </select>
+                    </div>
+                    <div class="form-group">
+                        <label>Status</label>
+                        <select name="status">
+                            <option value="stored">Stored</option>
+                            <option value="ready">Ready</option>
+                        </select>
+                    </div>
+                    <button type="submit" class="btn btn-primary">Log Finished Goods</button>
+                </form>
+            </div>
+
             <div class="card orders-card">
                 <div class="card-header">
                     <h3><i class="fas fa-boxes-packing text-primary"></i> Finished Goods Queue</h3>
@@ -283,19 +398,42 @@ $automation_rules = [
                             <th>Items</th>
                             <th>Location</th>
                             <th>Status</th>
+                            <th>Actions</th>
                         </tr>
                     </thead>
                     <tbody>
-                        <?php foreach ($finished_orders as $order): ?>
+                        <?php if (empty($finished_orders)): ?>
                             <tr>
-                                <td><?php echo htmlspecialchars($order['order']); ?></td>
-                                <td><?php echo htmlspecialchars($order['client']); ?></td>
-                                <td><?php echo htmlspecialchars($order['channel']); ?></td>
-                                <td><?php echo htmlspecialchars($order['items']); ?></td>
-                                <td><?php echo htmlspecialchars($order['location']); ?></td>
-                                <td><?php echo htmlspecialchars($order['status']); ?></td>
+                                <td colspan="7" class="text-muted">No finished goods logged yet.</td>
                             </tr>
-                        <?php endforeach; ?>
+                        <?php else: ?>
+                            <?php foreach ($finished_orders as $order): ?>
+                                <tr>
+                                    <td>#<?php echo htmlspecialchars($order['order_number']); ?></td>
+                                    <td><?php echo htmlspecialchars($order['client_name']); ?></td>
+                                    <td><?php echo htmlspecialchars(ucfirst($order['fulfillment_type'] ?? 'pickup')); ?></td>
+                                    <td><?php echo htmlspecialchars($order['quantity']); ?></td>
+                                    <td><?php echo htmlspecialchars($order['location_code'] ?? 'Unassigned'); ?></td>
+                                    <td><?php echo htmlspecialchars(ucfirst($order['status'])); ?></td>
+                                    <td>
+                                        <form method="POST">
+                                            <input type="hidden" name="action" value="update_finished_status">
+                                            <input type="hidden" name="finished_id" value="<?php echo (int) $order['id']; ?>">
+                                            <select name="status" onchange="this.form.submit()">
+                                                <?php
+                                                $status_options = ['stored' => 'Stored', 'ready' => 'Ready', 'released' => 'Released'];
+                                                ?>
+                                                <?php foreach ($status_options as $value => $label): ?>
+                                                    <option value="<?php echo $value; ?>" <?php echo $order['status'] === $value ? 'selected' : ''; ?>>
+                                                        <?php echo $label; ?>
+                                                    </option>
+                                                <?php endforeach; ?>
+                                            </select>
+                                        </form>
+                                    </td>
+                                </tr>
+                            <?php endforeach; ?>
+                        <?php endif; ?>
                     </tbody>
                 </table>
             </div>
@@ -309,22 +447,22 @@ $automation_rules = [
                     <thead>
                         <tr>
                             <th>Zone</th>
-                            <th>Type</th>
-                            <th>Capacity</th>
-                            <th>Utilization</th>
-                            <th>Status</th>
+                            <th>Orders stored</th>
                         </tr>
                     </thead>
                     <tbody>
-                        <?php foreach ($storage_zones as $zone): ?>
+                        <?php if (empty($storage_zones)): ?>
                             <tr>
-                                <td><?php echo htmlspecialchars($zone['zone']); ?></td>
-                                <td><?php echo htmlspecialchars($zone['type']); ?></td>
-                                <td><?php echo htmlspecialchars($zone['capacity']); ?></td>
-                                <td><?php echo htmlspecialchars($zone['utilization']); ?></td>
-                                <td><?php echo htmlspecialchars($zone['status']); ?></td>
+                                <td colspan="2" class="text-muted">No storage locations configured.</td>
                             </tr>
-                        <?php endforeach; ?>
+                        <?php else: ?>
+                            <?php foreach ($storage_zones as $zone): ?>
+                                <tr>
+                                    <td><?php echo htmlspecialchars($zone['code']); ?></td>
+                                    <td><?php echo (int) $zone['stored_count']; ?></td>
+                                </tr>
+                            <?php endforeach; ?>
+                        <?php endif; ?>
                     </tbody>
                 </table>
             </div>
@@ -350,16 +488,20 @@ $automation_rules = [
                     <h3><i class="fas fa-calendar-check text-primary"></i> Release Schedule</h3>
                     <p class="text-muted">Upcoming pickup and delivery windows.</p>
                 </div>
-                <?php foreach ($release_schedule as $slot): ?>
-                    <div class="schedule-item">
-                        <div class="d-flex justify-between align-center mb-2">
-                            <strong><?php echo htmlspecialchars($slot['slot']); ?></strong>
-                            <span class="badge badge-secondary"><?php echo htmlspecialchars($slot['channel']); ?></span>
+                <?php if (empty($release_schedule)): ?>
+                    <p class="text-muted">No orders queued for release.</p>
+                <?php else: ?>
+                    <?php foreach ($release_schedule as $slot): ?>
+                        <div class="schedule-item">
+                            <div class="d-flex justify-between align-center mb-2">
+                                <strong>Order #<?php echo htmlspecialchars($slot['order_number']); ?></strong>
+                                <span class="badge badge-secondary"><?php echo htmlspecialchars(ucfirst($slot['fulfillment_type'] ?? 'pickup')); ?></span>
+                            </div>
+                            <p class="text-muted mb-1">Status: <?php echo htmlspecialchars(ucfirst($slot['status'] ?? 'pending')); ?></p>
+                            <small class="text-muted">Stored: <?php echo date('M d, Y', strtotime($slot['stored_at'])); ?></small>
                         </div>
-                        <p class="text-muted mb-1"><?php echo htmlspecialchars($slot['orders']); ?></p>
-                        <small class="text-muted"><?php echo htmlspecialchars($slot['note']); ?></small>
-                    </div>
-                <?php endforeach; ?>
+                        <?php endforeach; ?>
+                <?php endif; ?>
             </div>
         </div>
     </div>
