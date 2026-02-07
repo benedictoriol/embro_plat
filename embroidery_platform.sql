@@ -282,6 +282,7 @@ CREATE TABLE `job_schedule` (
 
 CREATE TABLE `material_orders` (
   `id` int(11) NOT NULL,
+  `shop_id` int(11) NOT NULL,
   `material_id` int(11) NOT NULL,
   `quantity` decimal(10,2) NOT NULL,
   `order_date` date NOT NULL,
@@ -588,6 +589,7 @@ CREATE TABLE `attendance_logs` (
 
 CREATE TABLE `raw_materials` (
   `id` int(11) NOT NULL,
+  `shop_id` int(11) NOT NULL,
   `name` varchar(100) NOT NULL,
   `category` varchar(50) DEFAULT NULL,
   `unit` varchar(20) DEFAULT NULL,
@@ -990,7 +992,8 @@ ALTER TABLE `job_schedule`
 --
 ALTER TABLE `material_orders`
   ADD PRIMARY KEY (`id`),
-  ADD KEY `material_id` (`material_id`);
+  ADD KEY `material_id` (`material_id`),
+  ADD KEY `idx_material_orders_shop` (`shop_id`);
 
 --
 -- Indexes for table `notifications`
@@ -1100,7 +1103,8 @@ ALTER TABLE `attendance_logs`
 -- Indexes for table `raw_materials`
 --
 ALTER TABLE `raw_materials`
-  ADD PRIMARY KEY (`id`);
+  ADD PRIMARY KEY (`id`),
+  ADD KEY `idx_raw_materials_shop` (`shop_id`);
 
 --
 -- Indexes for table `services`

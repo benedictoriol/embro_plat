@@ -4,9 +4,15 @@ require_once '../config/db.php';
 require_role('owner');
 
 $owner_id = $_SESSION['user']['id'];
-$shop_stmt = $pdo->prepare("SELECT shop_name FROM shops WHERE owner_id = ?");
+$shop_stmt = $pdo->prepare("SELECT id, shop_name FROM shops WHERE owner_id = ?");
 $shop_stmt->execute([$owner_id]);
 $shop = $shop_stmt->fetch();
+
+if (!$shop) {
+    die('No shop assigned to this owner. Please contact support.');
+}
+
+$shop_id = (int) $shop['id'];
 
 $success = '';
 $error = '';
@@ -32,10 +38,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $error = 'Current stock must be a valid number.';
         } else {
             $stmt = $pdo->prepare(
-                "INSERT INTO raw_materials (name, category, unit, current_stock, min_stock_level, max_stock_level, unit_cost, supplier, status)
-                 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)"
+                "INSERT INTO raw_materials (shop_id, name, category, unit, current_stock, min_stock_level, max_stock_level, unit_cost, supplier, status)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)"
             );
             $stmt->execute([
+                $shop_id,
                 $name,
                 $category !== '' ? $category : null,
                 $unit,
@@ -70,7 +77,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $stmt = $pdo->prepare(
                 "UPDATE raw_materials
                  SET name = ?, category = ?, unit = ?, current_stock = ?, min_stock_level = ?, max_stock_level = ?, unit_cost = ?, supplier = ?, status = ?
-                 WHERE id = ?"
+                 WHERE id = ? AND shop_id = ?"
             );
             $stmt->execute([
                 $name,
@@ -83,6 +90,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 $supplier !== '' ? $supplier : null,
                 $status,
                 $material_id,
+                $shop_id,
             ]);
             $success = 'Raw material updated successfully.';
         }
@@ -91,8 +99,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     if ($action === 'delete_material') {
         $material_id = (int) ($_POST['material_id'] ?? 0);
         if ($material_id > 0) {
-            $stmt = $pdo->prepare("DELETE FROM raw_materials WHERE id = ?");
-            $stmt->execute([$material_id]);
+            $stmt = $pdo->prepare("DELETE FROM raw_materials WHERE id = ? AND shop_id = ?");
+            $stmt->execute([$material_id, $shop_id]);
             $success = 'Raw material removed successfully.';
         } else {
             $error = 'Unable to delete the selected material.';
@@ -103,13 +111,14 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 if (isset($_GET['edit_id'])) {
     $edit_id = (int) $_GET['edit_id'];
     if ($edit_id > 0) {
-        $edit_stmt = $pdo->prepare("SELECT * FROM raw_materials WHERE id = ?");
-        $edit_stmt->execute([$edit_id]);
+        $edit_stmt = $pdo->prepare("SELECT * FROM raw_materials WHERE id = ? AND shop_id = ?");
+        $edit_stmt->execute([$edit_id, $shop_id]);
         $editing_material = $edit_stmt->fetch();
     }
 }
 
-$materials_stmt = $pdo->query("SELECT * FROM raw_materials ORDER BY created_at DESC");
+$materials_stmt = $pdo->prepare("SELECT * FROM raw_materials WHERE shop_id = ? ORDER BY created_at DESC");
+$materials_stmt->execute([$shop_id]);
 $materials = $materials_stmt->fetchAll();
 
 $inventory_value = 0.0;

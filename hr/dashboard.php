@@ -58,11 +58,12 @@ $payroll_pending = (int) $payroll_pending_stmt->fetchColumn();
 $low_stock_stmt = $pdo->prepare("
     SELECT COUNT(*)
     FROM raw_materials
-    WHERE status = 'active'
+    WHERE shop_id = ?
+      AND status = 'active'
       AND min_stock_level IS NOT NULL
       AND current_stock <= min_stock_level
 ");
-$low_stock_stmt->execute();
+$low_stock_stmt->execute([$shop_id]);
 $low_stock_alerts = (int) $low_stock_stmt->fetchColumn();
 
 $staff_snapshot_stmt = $pdo->prepare("
