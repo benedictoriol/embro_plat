@@ -1,23 +1,13 @@
 <?php
 require_once __DIR__ . '/constants.php';
+require_once __DIR__ . '/order_workflow.php';
 
 function order_status_transitions(): array {
-    return [
-        STATUS_PENDING => [STATUS_ACCEPTED, STATUS_CANCELLED],
-        STATUS_ACCEPTED => [STATUS_IN_PROGRESS, STATUS_CANCELLED],
-        STATUS_IN_PROGRESS => [STATUS_COMPLETED, STATUS_CANCELLED],
-        STATUS_COMPLETED => [],
-        STATUS_CANCELLED => [],
-    ];
+    return order_workflow_status_transitions();
 }
 
 function can_transition_order_status(string $current, string $next): bool {
-    if ($current === $next) {
-        return true;
-    }
-
-    $transitions = order_status_transitions();
-    return in_array($next, $transitions[$current] ?? [], true);
+    return order_workflow_can_transition_order_status($current, $next);
 }
 
 function is_terminal_order_status(string $status): bool {

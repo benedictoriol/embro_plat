@@ -14,24 +14,6 @@ $service_provider_stmt = $pdo->prepare("SELECT id FROM service_providers WHERE u
 $service_provider_stmt->execute([$owner_id]);
 $service_provider_id = $service_provider_stmt->fetchColumn();
 
-function is_design_approved(PDO $pdo, int $order_id): bool {
-    $approval_stmt = $pdo->prepare("
-        SELECT o.design_approved, da.status
-        FROM orders o
-        LEFT JOIN design_approvals da ON da.order_id = o.id
-        WHERE o.id = ?
-        LIMIT 1
-    ");
-    $approval_stmt->execute([$order_id]);
-    $approval = $approval_stmt->fetch();
-
-    if(!$approval) {
-        return false;
-    }
-
-    return (int) $approval['design_approved'] === 1 || ($approval['status'] ?? '') === 'approved';
-}
-
 if(isset($_POST['upload_proof'])) {
     $order_id = (int) ($_POST['order_id'] ?? 0);
     $design_file = sanitize($_POST['design_file'] ?? '');
@@ -109,9 +91,18 @@ if(isset($_POST['start_production'])) {
         $error = "Unable to locate the order to start production.";
     } elseif($order['status'] !== STATUS_ACCEPTED) {
         $error = "Only accepted orders can be moved to production.";
-    } elseif(!is_design_approved($pdo, $order_id)) {
-        $error = "Design proof approval is required before production can begin.";
     } else {
+        $order_state = [
+            'id' => $order_id,
+            'status' => $order['status'],
+        ];
+        [$can_transition, $transition_error] = order_workflow_validate_order_status($pdo, $order_state, STATUS_IN_PROGRESS);
+        if(!$can_transition) {
+            $error = $transition_error ?: "Status transition not allowed from the current state.";
+        }
+    }
+
+    if(!isset($error)) {
         $update_stmt = $pdo->prepare("
             UPDATE orders
             SET status = 'in_progress', updated_at = NOW()

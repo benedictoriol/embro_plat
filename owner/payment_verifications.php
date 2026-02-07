@@ -41,6 +41,11 @@ if(isset($_POST['action'], $_POST['payment_id'])) {
                 $error = 'Payment cannot be verified from the current status.';
             } elseif($action === 'refund' && !in_array($payment['payment_status'], ['paid', 'refund_pending'], true)) {
                 $error = 'Refunds are only available for paid orders.';
+            } elseif($action === 'verify') {
+                [$can_release, $release_error] = order_workflow_validate_payment_release($pdo, (int) $payment['order_id']);
+                if(!$can_release) {
+                    $error = $release_error ?: 'Delivery confirmation is required before payment release.';
+                }
             } else {
                 if($action === 'refund') {
                     $refund_status = 'refunded';

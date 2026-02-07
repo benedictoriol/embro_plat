@@ -11,24 +11,6 @@ if (!is_active_user()) {
     exit();
 }
 
-function is_design_approved(PDO $pdo, int $order_id): bool {
-    $approval_stmt = $pdo->prepare("
-        SELECT o.design_approved, da.status
-        FROM orders o
-        LEFT JOIN design_approvals da ON da.order_id = o.id
-        WHERE o.id = ?
-        LIMIT 1
-    ");
-    $approval_stmt->execute([$order_id]);
-    $approval = $approval_stmt->fetch();
-
-    if(!$approval) {
-        return false;
-    }
-
-    return (int) $approval['design_approved'] === 1 || ($approval['status'] ?? '') === 'approved';
-}
-
 $user = $_SESSION['user'];
 
 try {
@@ -89,15 +71,12 @@ try {
             exit();
         }
 
-        if (!can_transition_order_status($order['status'], $status)) {
+        $order_state = $order;
+        $order_state['id'] = $order_id;
+        [$can_transition, $transition_error] = order_workflow_validate_order_status($pdo, $order_state, $status);
+        if(!$can_transition) {
             http_response_code(422);
-            echo json_encode(['error' => 'Status transition not allowed']);
-            exit();
-        }
-
-        if ($status === STATUS_IN_PROGRESS && !is_design_approved($pdo, $order_id)) {
-            http_response_code(403);
-            echo json_encode(['error' => 'Design proof approval required before production can begin']);
+            echo json_encode(['error' => $transition_error ?: 'Status transition not allowed']);
             exit();
         }
 

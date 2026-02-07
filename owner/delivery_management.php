@@ -32,15 +32,6 @@ $fulfillment_statuses = [
     FULFILLMENT_FAILED => 'Failed',
 ];
 
-$status_transitions = [
-    FULFILLMENT_PENDING => [FULFILLMENT_READY_FOR_PICKUP, FULFILLMENT_OUT_FOR_DELIVERY, FULFILLMENT_FAILED],
-    FULFILLMENT_READY_FOR_PICKUP => [FULFILLMENT_CLAIMED, FULFILLMENT_FAILED],
-    FULFILLMENT_OUT_FOR_DELIVERY => [FULFILLMENT_DELIVERED, FULFILLMENT_FAILED],
-    FULFILLMENT_DELIVERED => [FULFILLMENT_CLAIMED],
-    FULFILLMENT_CLAIMED => [],
-    FULFILLMENT_FAILED => [],
-];
-
 if(isset($_POST['save_fulfillment'])) {
     $order_id = (int) ($_POST['order_id'] ?? 0);
     $fulfillment_type = $_POST['fulfillment_type'] ?? '';
@@ -71,10 +62,15 @@ if(isset($_POST['save_fulfillment'])) {
         $existing = $existing_stmt->fetch();
 
         $current_status = $existing['status'] ?? FULFILLMENT_PENDING;
-        if($existing && $status !== $current_status) {
-            $allowed = $status_transitions[$current_status] ?? [];
-            if(!in_array($status, $allowed, true)) {
-                $error = 'Status transition is not allowed from the current state.';
+        if($status !== $current_status) {
+            [$can_transition, $transition_error] = order_workflow_validate_fulfillment_status(
+                $pdo,
+                $order_id,
+                $current_status,
+                $status
+            );
+            if(!$can_transition) {
+                $error = $transition_error ?: 'Status transition is not allowed from the current state.';
             }
         }
 

@@ -65,24 +65,6 @@ function fetch_order_info(PDO $pdo, int $staff_id, int $order_id): ?array {
     return $order_info ?: null;
 }
 
-function is_design_approved(PDO $pdo, int $order_id): bool {
-    $approval_stmt = $pdo->prepare("
-        SELECT o.design_approved, da.status
-        FROM orders o
-        LEFT JOIN design_approvals da ON da.order_id = o.id
-        WHERE o.id = ?
-        LIMIT 1
-    ");
-    $approval_stmt->execute([$order_id]);
-    $approval = $approval_stmt->fetch();
-
-    if(!$approval) {
-        return false;
-    }
-
-    return (int) $approval['design_approved'] === 1 || ($approval['status'] ?? '') === 'approved';
-}
-
 if(!empty($jobs)) {
     $job_ids = array_column($jobs, 'id');
     $placeholders = implode(',', array_fill(0, count($job_ids), '?'));
@@ -228,13 +210,18 @@ if(isset($_POST['update_status'])) {
         $error = "Unable to update this order.";
     } elseif($photo_count === 0) {
         $error = "Please upload a progress photo before updating the status.";
-    } elseif($status === STATUS_IN_PROGRESS && !is_design_approved($pdo, $order_id)) {
-        $error = "Design proof approval is required before production can begin.";
     } elseif(!in_array($status, $allowed_statuses, true)) {
         $error = "Invalid status selection.";
-    } elseif(!can_transition_order_status($order_info['status'], $status)) {
-        $error = "Status transition not allowed from the current state.";
     } else {
+        $order_state = $order_info;
+        $order_state['id'] = $order_id;
+        [$can_transition, $transition_error] = order_workflow_validate_order_status($pdo, $order_state, $status);
+        if(!$can_transition) {
+            $error = $transition_error ?: "Status transition not allowed from the current state.";
+        }
+    }
+
+    if(!isset($error)) {
         try {
             $update_stmt = $pdo->prepare("
                 UPDATE orders 
