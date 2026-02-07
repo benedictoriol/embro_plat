@@ -78,7 +78,7 @@ if (isset($_POST['generate_payroll']) && $role === 'hr') {
 
         $insert_stmt = $pdo->prepare("
             INSERT INTO payroll (staff_id, pay_period_start, pay_period_end, basic_salary, allowances, deductions, net_salary, status)
-            VALUES (?, ?, ?, ?, ?, ?, ?, 'pending')
+            VALUES (?, ?, ?, ?, ?, ?, ?, 'draft')
         ");
 
         foreach ($staff_members as $staff) {
@@ -103,7 +103,68 @@ if (isset($_POST['generate_payroll']) && $role === 'hr') {
             $created++;
         }
 
-        $success = "Generated payroll for {$created} staff. Skipped {$skipped} existing entries.";
+        $success = "Generated payroll drafts for {$created} staff. Skipped {$skipped} existing entries.";
+    }
+}
+
+if (isset($_POST['update_payroll']) && $role === 'hr') {
+    $payroll_id = (int) ($_POST['payroll_id'] ?? 0);
+    $allowances = isset($_POST['allowances']) ? (float) $_POST['allowances'] : 0.0;
+    $deductions = isset($_POST['deductions']) ? (float) $_POST['deductions'] : 0.0;
+
+    $check_stmt = $pdo->prepare("
+        SELECT p.id, p.basic_salary
+        FROM payroll p
+        JOIN staffs s ON p.staff_id = s.id
+        JOIN users u ON s.user_id = u.id
+        JOIN shop_staffs ss ON ss.user_id = u.id
+        WHERE p.id = ?
+          AND p.status = 'draft'
+          AND ss.shop_id = ?
+          AND ss.status = 'active'
+    ");
+    $check_stmt->execute([$payroll_id, $shop_id]);
+    $payroll_row = $check_stmt->fetch();
+    if ($payroll_row) {
+        $basic_salary = (float) ($payroll_row['basic_salary'] ?? 0);
+        $net_salary = $basic_salary + $allowances - $deductions;
+        $update_stmt = $pdo->prepare("
+            UPDATE payroll
+            SET allowances = ?, deductions = ?, net_salary = ?
+            WHERE id = ?
+        ");
+        $update_stmt->execute([$allowances, $deductions, $net_salary, $payroll_id]);
+        $success = 'Payroll draft updated.';
+    } else {
+        $errors[] = 'Unable to update that payroll draft.';
+    }
+}
+
+if (isset($_POST['submit_payroll']) && $role === 'hr') {
+    $payroll_id = (int) ($_POST['payroll_id'] ?? 0);
+
+    $check_stmt = $pdo->prepare("
+        SELECT p.id
+        FROM payroll p
+        JOIN staffs s ON p.staff_id = s.id
+        JOIN users u ON s.user_id = u.id
+        JOIN shop_staffs ss ON ss.user_id = u.id
+        WHERE p.id = ?
+          AND p.status = 'draft'
+          AND ss.shop_id = ?
+          AND ss.status = 'active'
+    ");
+    $check_stmt->execute([$payroll_id, $shop_id]);
+    if ($check_stmt->fetch()) {
+        $update_stmt = $pdo->prepare("
+            UPDATE payroll
+            SET status = 'pending_owner'
+            WHERE id = ?
+        ");
+        $update_stmt->execute([$payroll_id]);
+        $success = 'Payroll submitted for owner approval.';
+    } else {
+        $errors[] = 'Unable to submit that payroll entry.';
     }
 }
 
@@ -117,6 +178,63 @@ if (isset($_POST['approve_payroll']) && $role === 'owner') {
         JOIN users u ON s.user_id = u.id
         JOIN shop_staffs ss ON ss.user_id = u.id
         WHERE p.id = ?
+          AND p.status = 'pending_owner'
+          AND ss.shop_id = ?
+          AND ss.status = 'active'
+    ");
+    $check_stmt->execute([$payroll_id, $shop_id]);
+    if ($check_stmt->fetch()) {
+        $update_stmt = $pdo->prepare("
+            UPDATE payroll
+            SET status = 'approved'
+            WHERE id = ?
+        ");
+        $update_stmt->execute([$payroll_id]);
+        $success = 'Payroll entry approved.';
+    } else {
+        $errors[] = 'Unable to approve that payroll entry.';
+    }
+}
+
+if (isset($_POST['reject_payroll']) && $role === 'owner') {
+    $payroll_id = (int) ($_POST['payroll_id'] ?? 0);
+
+    $check_stmt = $pdo->prepare("
+        SELECT p.id
+        FROM payroll p
+        JOIN staffs s ON p.staff_id = s.id
+        JOIN users u ON s.user_id = u.id
+        JOIN shop_staffs ss ON ss.user_id = u.id
+        WHERE p.id = ?
+          AND p.status = 'pending_owner'
+          AND ss.shop_id = ?
+          AND ss.status = 'active'
+    ");
+    $check_stmt->execute([$payroll_id, $shop_id]);
+    if ($check_stmt->fetch()) {
+        $update_stmt = $pdo->prepare("
+            UPDATE payroll
+            SET status = 'draft'
+            WHERE id = ?
+        ");
+        $update_stmt->execute([$payroll_id]);
+        $success = 'Payroll entry sent back to draft.';
+    } else {
+        $errors[] = 'Unable to reject that payroll entry.';
+    }
+}
+
+if (isset($_POST['mark_paid']) && $role === 'owner') {
+    $payroll_id = (int) ($_POST['payroll_id'] ?? 0);
+
+    $check_stmt = $pdo->prepare("
+        SELECT p.id
+        FROM payroll p
+        JOIN staffs s ON p.staff_id = s.id
+        JOIN users u ON s.user_id = u.id
+        JOIN shop_staffs ss ON ss.user_id = u.id
+        WHERE p.id = ?
+          AND p.status = 'approved'
           AND ss.shop_id = ?
           AND ss.status = 'active'
     ");
@@ -128,9 +246,9 @@ if (isset($_POST['approve_payroll']) && $role === 'owner') {
             WHERE id = ?
         ");
         $update_stmt->execute([$payroll_id]);
-        $success = 'Payroll entry approved and marked as paid.';
+        $success = 'Payroll entry marked as paid.';
     } else {
-        $errors[] = 'Unable to approve that payroll entry.';
+        $errors[] = 'Unable to mark that payroll entry as paid.';
     }
 }
 
@@ -170,7 +288,7 @@ $total_pending = 0.0;
 $total_paid = 0.0;
 
 foreach ($payroll_entries as $entry) {
-    if ($entry['status'] === 'pending') {
+    if ($entry['status'] === 'pending_owner') {
         $pending_count++;
         $total_pending += (float) ($entry['net_salary'] ?? 0);
     }
@@ -178,6 +296,13 @@ foreach ($payroll_entries as $entry) {
         $total_paid += (float) ($entry['net_salary'] ?? 0);
     }
 }
+
+$status_labels = [
+    'draft' => 'Draft',
+    'pending_owner' => 'Pending Owner',
+    'approved' => 'Approved',
+    'paid' => 'Paid',
+];
 
 $dashboard_link = $role === 'owner' ? '../owner/dashboard.php' : 'dashboard.php';
 ?>
@@ -429,16 +554,42 @@ $dashboard_link = $role === 'owner' ? '../owner/dashboard.php' : 'dashboard.php'
                                         </td>
                                         <td><?php echo htmlspecialchars($entry['pay_period_start']); ?> - <?php echo htmlspecialchars($entry['pay_period_end']); ?></td>
                                         <td>₱<?php echo number_format((float) ($entry['net_salary'] ?? 0), 2); ?></td>
-                                        <td><?php echo htmlspecialchars(ucfirst($entry['status'])); ?></td>
+                                        <td><?php echo htmlspecialchars($status_labels[$entry['status']] ?? ucfirst($entry['status'])); ?></td>
                                         <td><?php echo $entry['paid_at'] ? htmlspecialchars(date('M d, Y', strtotime($entry['paid_at']))) : '—'; ?></td>
                                         <td>
                                             <div class="table-actions">
                                                 <a class="btn btn-secondary" href="payroll_compensation.php?payslip_id=<?php echo $entry['id']; ?>">View payslip</a>
-                                                <?php if ($role === 'owner' && $entry['status'] === 'pending'): ?>
+                                                <?php if ($role === 'hr' && $entry['status'] === 'draft'): ?>
+                                                    <form method="POST" class="form-grid" style="margin-top: 0.75rem;">
+                                                        <input type="hidden" name="payroll_id" value="<?php echo $entry['id']; ?>">
+                                                        <div class="form-group span-6">
+                                                            <label>Allowances</label>
+                                                            <input type="number" step="0.01" name="allowances" value="<?php echo htmlspecialchars($entry['allowances'] ?? 0); ?>">
+                                                        </div>
+                                                        <div class="form-group span-6">
+                                                            <label>Deductions</label>
+                                                            <input type="number" step="0.01" name="deductions" value="<?php echo htmlspecialchars($entry['deductions'] ?? 0); ?>">
+                                                        </div>
+                                                        <div class="form-group span-12">
+                                                            <button type="submit" name="update_payroll" class="btn btn-secondary">Update draft</button>
+                                                            <button type="submit" name="submit_payroll" class="btn btn-primary">Submit for approval</button>
+                                                        </div>
+                                                    </form>
+                                                <?php elseif ($role === 'owner' && $entry['status'] === 'pending_owner'): ?>
                                                     <form method="POST" onsubmit="return confirm('Approve this payroll entry?');">
                                                         <input type="hidden" name="payroll_id" value="<?php echo $entry['id']; ?>">
                                                         <button type="submit" name="approve_payroll" class="btn btn-primary">Approve</button>
                                                     </form>
+                                                    <form method="POST" onsubmit="return confirm('Reject this payroll entry?');">
+                                                        <input type="hidden" name="payroll_id" value="<?php echo $entry['id']; ?>">
+                                                        <button type="submit" name="reject_payroll" class="btn btn-secondary">Reject</button>
+                                                    </form>
+                                                <?php elseif ($role === 'owner' && $entry['status'] === 'approved'): ?>
+                                                    <form method="POST" onsubmit="return confirm('Mark this payroll entry as paid?');">
+                                                        <input type="hidden" name="payroll_id" value="<?php echo $entry['id']; ?>">
+                                                        <button type="submit" name="mark_paid" class="btn btn-primary">Mark paid</button>
+                                                    </form>
+                                                    <a class="btn btn-secondary" href="payroll_compensation.php?payslip_id=<?php echo $entry['id']; ?>">Release payslip</a>
                                                 <?php endif; ?>
                                             </div>
                                         </td>
