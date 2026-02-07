@@ -404,6 +404,7 @@ $automation_rules = [
                     <p class="text-muted">Deduct or return materials when production starts or completes.</p>
                 </div>
                 <form method="POST">
+                    <?php echo csrf_field(); ?>
                     <input type="hidden" name="action" value="log_transaction">
                     <div class="form-group">
                         <label>Material</label>
@@ -439,6 +440,7 @@ $automation_rules = [
                     <button type="submit" class="btn btn-primary">Log Transaction</button>
                 </form>
                 <form method="POST" class="mt-3">
+                    <?php echo csrf_field(); ?>
                     <input type="hidden" name="action" value="generate_purchase_requests">
                     <button type="submit" class="btn btn-light">Generate Draft Purchase Requests</button>
                 </form>

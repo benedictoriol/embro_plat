@@ -219,6 +219,7 @@ if(isset($_POST['update_design'])) {
                     </div>
 
                     <form method="POST" enctype="multipart/form-data" class="mt-3">
+                        <?php echo csrf_field(); ?>
                         <input type="hidden" name="order_id" value="<?php echo $order['id']; ?>">
 
                         <div class="form-group">

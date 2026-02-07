@@ -182,6 +182,7 @@ create_notification(
 
 <div class="card">
             <form method="POST">
+                <?php echo csrf_field(); ?>
                 <input type="hidden" name="order_id" value="<?php echo $order_id; ?>">
                 <div class="form-group">
                     <label for="cancellation_reason">Rejection reason</label>

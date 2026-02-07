@@ -100,7 +100,7 @@ $available_orders_stmt->execute([$shop_id]);
 $available_orders = $available_orders_stmt->fetchAll();
 
 $finished_stmt = $pdo->prepare("
-    SELECT fg.*, o.order_number, o.quantity, u.fullname as client_name,
+    SELECT fg.*, o.order_number, o.quantity, o.payment_status, u.fullname as client_name,
            sl.code as location_code, ofl.fulfillment_type, ofl.status as fulfillment_status
     FROM finished_goods fg
     JOIN orders o ON o.id = fg.order_id
@@ -354,6 +354,7 @@ $automation_rules = [
                     <p class="text-muted">Register QC-approved orders into storage.</p>
                 </div>
                 <form method="POST">
+                    <?php echo csrf_field(); ?>
                     <input type="hidden" name="action" value="log_finished_good">
                     <div class="form-group">
                         <label>Completed order</label>
@@ -398,16 +399,18 @@ $automation_rules = [
                             <th>Items</th>
                             <th>Location</th>
                             <th>Status</th>
+                            <th>Hold</th>
                             <th>Actions</th>
                         </tr>
                     </thead>
                     <tbody>
                         <?php if (empty($finished_orders)): ?>
                             <tr>
-                                <td colspan="7" class="text-muted">No finished goods logged yet.</td>
+                                <td colspan="8" class="text-muted">No finished goods logged yet.</td>
                             </tr>
                         <?php else: ?>
                             <?php foreach ($finished_orders as $order): ?>
+                                <?php $payment_hold = payment_hold_status(STATUS_COMPLETED, $order['payment_status'] ?? 'unpaid'); ?>
                                 <tr>
                                     <td>#<?php echo htmlspecialchars($order['order_number']); ?></td>
                                     <td><?php echo htmlspecialchars($order['client_name']); ?></td>
@@ -416,7 +419,13 @@ $automation_rules = [
                                     <td><?php echo htmlspecialchars($order['location_code'] ?? 'Unassigned'); ?></td>
                                     <td><?php echo htmlspecialchars(ucfirst($order['status'])); ?></td>
                                     <td>
+                                        <span class="hold-pill <?php echo htmlspecialchars($payment_hold['class']); ?>">
+                                            <?php echo htmlspecialchars($payment_hold['label']); ?>
+                                        </span>
+                                    </td>
+                                    <td>
                                         <form method="POST">
+                                            <?php echo csrf_field(); ?>
                                             <input type="hidden" name="action" value="update_finished_status">
                                             <input type="hidden" name="finished_id" value="<?php echo (int) $order['id']; ?>">
                                             <select name="status" onchange="this.form.submit()">

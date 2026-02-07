@@ -142,6 +142,7 @@ if (isset($_POST['create_hr'])) {
         <div class="card" style="max-width: 520px;">
             <h3>HR Details</h3>
             <form method="POST">
+                <?php echo csrf_field(); ?>
                 <div class="form-group">
                     <label>Full Name *</label>
                     <input type="text" name="fullname" class="form-control" required

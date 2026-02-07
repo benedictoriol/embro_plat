@@ -94,4 +94,31 @@ function ensure_payment_receipt(PDO $pdo, int $payment_id, int $issued_by, strin
 
     return $receipt;
 }
+
+function payment_hold_status(string $order_status, string $payment_status): array {
+    $normalized_order_status = strtolower($order_status);
+    $normalized_payment_status = strtolower($payment_status);
+
+    if ($normalized_payment_status === 'unpaid') {
+        return ['label' => 'Not funded', 'class' => 'hold-unfunded'];
+    }
+
+    if (in_array($normalized_payment_status, ['rejected', 'refunded'], true)) {
+        return ['label' => 'Hold released', 'class' => 'hold-released'];
+    }
+
+    if ($normalized_order_status === STATUS_COMPLETED && $normalized_payment_status === 'paid') {
+        return ['label' => 'Release ready', 'class' => 'hold-ready'];
+    }
+
+    if ($normalized_order_status === STATUS_CANCELLED) {
+        return ['label' => 'Hold cleared', 'class' => 'hold-cleared'];
+    }
+
+    if (in_array($normalized_payment_status, ['pending', 'paid', 'refund_pending'], true)) {
+        return ['label' => 'On hold', 'class' => 'hold-active'];
+    }
+
+    return ['label' => 'Pending review', 'class' => 'hold-pending'];
+}
 ?>

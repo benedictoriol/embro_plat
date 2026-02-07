@@ -115,6 +115,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                     <p class="text-muted">These settings apply to your admin workspace.</p>
                 </div>
                 <form method="POST">
+                    <?php echo csrf_field(); ?>
                     <div class="form-group">
                         <label>Timezone</label>
                         <select name="timezone" class="form-control">

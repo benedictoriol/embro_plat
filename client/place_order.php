@@ -707,6 +707,7 @@ $upload = save_uploaded_media(
             </div>
         </form>
         <form method="POST" enctype="multipart/form-data" id="orderForm">
+            <?php echo csrf_field(); ?>
             <!-- Step 1: Select Shop -->
             <div class="card mb-4">
                 <h3>Step 1: Select Service Provider</h3>

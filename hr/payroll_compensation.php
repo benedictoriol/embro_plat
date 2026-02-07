@@ -502,6 +502,7 @@ $dashboard_link = $role === 'owner' ? '../owner/dashboard.php' : 'dashboard.php'
                 <h2>Generate payroll</h2>
                 <?php if ($role === 'hr'): ?>
                     <form method="POST" class="form-grid">
+                        <?php echo csrf_field(); ?>
                         <div class="form-group span-6">
                             <label>Pay period start</label>
                             <input type="date" name="pay_period_start" required>
@@ -561,6 +562,7 @@ $dashboard_link = $role === 'owner' ? '../owner/dashboard.php' : 'dashboard.php'
                                                 <a class="btn btn-secondary" href="payroll_compensation.php?payslip_id=<?php echo $entry['id']; ?>">View payslip</a>
                                                 <?php if ($role === 'hr' && $entry['status'] === 'draft'): ?>
                                                     <form method="POST" class="form-grid" style="margin-top: 0.75rem;">
+                                                        <?php echo csrf_field(); ?>
                                                         <input type="hidden" name="payroll_id" value="<?php echo $entry['id']; ?>">
                                                         <div class="form-group span-6">
                                                             <label>Allowances</label>
@@ -577,15 +579,18 @@ $dashboard_link = $role === 'owner' ? '../owner/dashboard.php' : 'dashboard.php'
                                                     </form>
                                                 <?php elseif ($role === 'owner' && $entry['status'] === 'pending_owner'): ?>
                                                     <form method="POST" onsubmit="return confirm('Approve this payroll entry?');">
+                                                        <?php echo csrf_field(); ?>
                                                         <input type="hidden" name="payroll_id" value="<?php echo $entry['id']; ?>">
                                                         <button type="submit" name="approve_payroll" class="btn btn-primary">Approve</button>
                                                     </form>
                                                     <form method="POST" onsubmit="return confirm('Reject this payroll entry?');">
+                                                        <?php echo csrf_field(); ?>
                                                         <input type="hidden" name="payroll_id" value="<?php echo $entry['id']; ?>">
                                                         <button type="submit" name="reject_payroll" class="btn btn-secondary">Reject</button>
                                                     </form>
                                                 <?php elseif ($role === 'owner' && $entry['status'] === 'approved'): ?>
                                                     <form method="POST" onsubmit="return confirm('Mark this payroll entry as paid?');">
+                                                        <?php echo csrf_field(); ?>
                                                         <input type="hidden" name="payroll_id" value="<?php echo $entry['id']; ?>">
                                                         <button type="submit" name="mark_paid" class="btn btn-primary">Mark paid</button>
                                                     </form>

@@ -213,12 +213,14 @@ $recent_logs = $recent_logs_stmt->fetchAll();
                 <p class="text-muted">Record your shift time with a single tap.</p>
                 <div class="attendance-actions">
                     <form method="post">
+                        <?php echo csrf_field(); ?>
                         <input type="hidden" name="action" value="clock_in">
                         <button type="submit" class="btn btn-primary" <?php echo $open_log ? 'disabled' : ''; ?>>
                             <i class="fas fa-play"></i> Clock In
                         </button>
                     </form>
                     <form method="post">
+                        <?php echo csrf_field(); ?>
                         <input type="hidden" name="action" value="clock_out">
                         <button type="submit" class="btn btn-danger" <?php echo $open_log ? '' : 'disabled'; ?>>
                             <i class="fas fa-stop"></i> Clock Out

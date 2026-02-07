@@ -183,6 +183,7 @@ $recent_photos = $photos_stmt->fetchAll();
 
         <div class="upload-card">
             <form method="POST" enctype="multipart/form-data">
+                <?php echo csrf_field(); ?>
                 <div class="form-group">
                     <label>Select Job</label>
                     <select name="order_id" class="form-control" required>

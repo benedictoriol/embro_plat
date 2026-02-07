@@ -807,6 +807,7 @@ function fulfillment_status_pill(?string $status): string {
                                 </div>
                                 <div class="mt-2">
                                     <form method="POST" class="d-inline">
+                                        <?php echo csrf_field(); ?>
                                         <input type="hidden" name="action" value="accept_price">
                                         <input type="hidden" name="order_id" value="<?php echo $order['id']; ?>">
                                         <button type="submit" class="btn btn-success btn-sm">
@@ -814,6 +815,7 @@ function fulfillment_status_pill(?string $status): string {
                                         </button>
                                     </form>
                                     <form method="POST" class="d-inline">
+                                        <?php echo csrf_field(); ?>
                                         <input type="hidden" name="action" value="reject_price">
                                         <input type="hidden" name="order_id" value="<?php echo $order['id']; ?>">
                                         <button type="submit" class="btn btn-outline-danger btn-sm">
@@ -832,6 +834,7 @@ function fulfillment_status_pill(?string $status): string {
                         $invoice = $invoice_by_order[$order['id']] ?? null;
                         $refund = $refund_by_order[$order['id']] ?? null;
                         $receipt = $payment ? ($receipt_by_payment[$payment['id']] ?? null) : null;
+                        $payment_hold = payment_hold_status($order['status'] ?? STATUS_PENDING, $payment_status);
                         $can_submit_payment = in_array($order['status'], ['accepted', 'in_progress', 'completed'], true)
                             && $payment_status !== 'paid'
                             && $payment_status !== 'refund_pending'
@@ -841,6 +844,9 @@ function fulfillment_status_pill(?string $status): string {
                     <div class="mt-3">
                         <strong>Payment:</strong>
                         <?php echo payment_status_pill($payment_status); ?>
+                        <span class="hold-pill <?php echo htmlspecialchars($payment_hold['class']); ?>">
+                            Hold: <?php echo htmlspecialchars($payment_hold['label']); ?>
+                        </span>
                         <?php if($latest_payment_status === 'pending'): ?>
                             <div class="text-muted small mt-2">Payment proof is pending verification.</div>
                         <?php elseif($latest_payment_status === 'rejected'): ?>
@@ -903,6 +909,7 @@ function fulfillment_status_pill(?string $status): string {
 
                     <?php if($can_submit_payment): ?>
                         <form method="POST" enctype="multipart/form-data" class="payment-form">
+                            <?php echo csrf_field(); ?>
                             <input type="hidden" name="order_id" value="<?php echo $order['id']; ?>">
                             <div class="form-group">
                                 <label>Upload Payment Proof (JPG, PNG, PDF)</label>
@@ -944,6 +951,7 @@ function fulfillment_status_pill(?string $status): string {
                             <?php if(!$order['design_approved']): ?>
                                 <div class="mt-3">
                                     <form method="POST" class="d-inline">
+                                        <?php echo csrf_field(); ?>
                                         <input type="hidden" name="action" value="approve_design">
                                         <input type="hidden" name="order_id" value="<?php echo $order['id']; ?>">
                                         <button type="submit" class="btn btn-success btn-sm">
@@ -951,6 +959,7 @@ function fulfillment_status_pill(?string $status): string {
                                         </button>
                                     </form>
                                     <form method="POST" class="mt-2">
+                                        <?php echo csrf_field(); ?>
                                         <input type="hidden" name="action" value="request_revision">
                                         <input type="hidden" name="order_id" value="<?php echo $order['id']; ?>">
                                         <div class="form-group">
@@ -973,6 +982,7 @@ function fulfillment_status_pill(?string $status): string {
                                 <span class="text-muted small">Allowed before work exceeds <?php echo $max_cancel_progress; ?>%.</span>
                             </div>
                             <form method="POST" class="mt-2">
+                                <?php echo csrf_field(); ?>
                                 <input type="hidden" name="action" value="cancel_order">
                                 <input type="hidden" name="order_id" value="<?php echo $order['id']; ?>">
                                 <div class="form-group">

@@ -532,6 +532,7 @@ $review_checkpoints = [
                     <h3><i class="fas fa-user-plus text-primary"></i> <?php echo $editing_supplier ? 'Update Supplier' : 'Add Supplier'; ?></h3>
                 </div>
                 <form method="POST">
+                    <?php echo csrf_field(); ?>
                     <input type="hidden" name="action" value="<?php echo $editing_supplier ? 'update_supplier' : 'create_supplier'; ?>">
                     <?php if ($editing_supplier): ?>
                         <input type="hidden" name="supplier_id" value="<?php echo (int) $editing_supplier['id']; ?>">
@@ -616,6 +617,7 @@ $review_checkpoints = [
                                 <td>
                                     <a href="supplier_management.php?edit_supplier=<?php echo (int) $supplier['id']; ?>" class="btn btn-sm btn-light">Edit</a>
                                     <form method="POST" class="d-inline" onsubmit="return confirm('Remove this supplier?');">
+                                        <?php echo csrf_field(); ?>
                                         <input type="hidden" name="action" value="delete_supplier">
                                         <input type="hidden" name="supplier_id" value="<?php echo (int) $supplier['id']; ?>">
                                         <button type="submit" class="btn btn-sm btn-danger">Delete</button>
@@ -634,6 +636,7 @@ $review_checkpoints = [
                     <p class="text-muted">Draft PRs and capture initial line items.</p>
                 </div>
                 <form method="POST">
+                    <?php echo csrf_field(); ?>
                     <input type="hidden" name="action" value="create_request">
                     <div class="form-group">
                         <label>Supplier</label>
@@ -710,6 +713,7 @@ $review_checkpoints = [
                                     </td>
                                     <td>
                                         <form method="POST" class="d-inline">
+                                            <?php echo csrf_field(); ?>
                                             <input type="hidden" name="action" value="update_request_status">
                                             <input type="hidden" name="request_id" value="<?php echo (int) $request['id']; ?>">
                                             <select name="status" onchange="this.form.submit()">
@@ -749,6 +753,7 @@ $review_checkpoints = [
                     <h4><i class="fas fa-plus text-primary"></i> Add Request Item</h4>
                 </div>
                 <form method="POST">
+                    <?php echo csrf_field(); ?>
                     <input type="hidden" name="action" value="add_request_item">
                     <div class="form-group">
                         <label>Request</label>

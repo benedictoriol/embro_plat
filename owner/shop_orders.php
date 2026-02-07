@@ -352,6 +352,7 @@ function format_quote_details(?array $quote_details): array {
                                 <td>
                                     <?php if($order['status'] === 'pending'): ?>
                                         <form method="POST" class="price-form">
+                                            <?php echo csrf_field(); ?>
                                             <input type="hidden" name="order_id" value="<?php echo $order['id']; ?>">
                                             <input type="number" name="price" class="form-control" step="0.01" min="0" placeholder="Price"
                                                 value="<?php echo $order['price'] !== null ? htmlspecialchars($order['price']) : ''; ?>" required>
@@ -375,10 +376,16 @@ function format_quote_details(?array $quote_details): array {
                                     <?php
                                         $payment_status = $order['payment_status'] ?? 'unpaid';
                                         $payment_class = 'payment-' . $payment_status;
+                                        $payment_hold = payment_hold_status($order['status'] ?? STATUS_PENDING, $payment_status);
                                     ?>
                                     <span class="status-pill <?php echo htmlspecialchars($payment_class); ?>">
                                         <?php echo ucfirst(str_replace('_', ' ', $payment_status)); ?>
                                     </span>
+                                    <div class="mt-1">
+                                        <span class="hold-pill <?php echo htmlspecialchars($payment_hold['class']); ?>">
+                                            Hold: <?php echo htmlspecialchars($payment_hold['label']); ?>
+                                        </span>
+                                    </div>
                                 </td>
                                 <td>
                                     <?php if($order['assigned_name']): ?>
@@ -394,6 +401,7 @@ function format_quote_details(?array $quote_details): array {
                                     </a>
                                     <?php if(!in_array($order['status'], ['completed', 'cancelled'], true)): ?>
                                         <form method="POST" class="assignment-form">
+                                            <?php echo csrf_field(); ?>
                                             <input type="hidden" name="order_id" value="<?php echo $order['id']; ?>">
                                             <select name="staff_id" class="form-control" <?php echo empty($active_staff) ? 'disabled' : ''; ?>>
                                                 <option value="">Unassigned</option>

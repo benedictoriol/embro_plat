@@ -77,6 +77,7 @@ if($_SERVER['REQUEST_METHOD'] == 'POST') {
             <?php endif; ?>
             
             <form method="POST">
+                <?php echo csrf_field(); ?>
                 <div class="form-group">
                     <label>Shop Name *</label>
                     <input type="text" name="shop_name" class="form-control" required 

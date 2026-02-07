@@ -164,6 +164,7 @@ function is_design_image(?string $filename): bool {
 
         <?php if(!empty($assigned_jobs)): ?>
             <?php foreach($assigned_jobs as $job): ?>
+                <?php $payment_hold = payment_hold_status($job['status'] ?? STATUS_PENDING, $job['payment_status'] ?? 'unpaid'); ?>
                 <div class="job-card">
                     <div class="d-flex justify-between align-center">
                         <div>
@@ -198,6 +199,12 @@ function is_design_image(?string $filename): bool {
 
                     <div class="job-meta">
                         <div><i class="fas fa-store"></i> <?php echo htmlspecialchars($job['shop_name']); ?></div>
+                        <div>
+                            <i class="fas fa-hand-holding-dollar"></i>
+                            <span class="hold-pill <?php echo htmlspecialchars($payment_hold['class']); ?>">
+                                Hold: <?php echo htmlspecialchars($payment_hold['label']); ?>
+                            </span>
+                        </div>
                         <?php if(!empty($job['schedule_date'])): ?>
                             <div>
                                 <i class="fas fa-calendar"></i> Scheduled: <?php echo date('M d, Y', strtotime($job['schedule_date'])); ?>

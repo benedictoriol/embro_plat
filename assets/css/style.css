@@ -773,6 +773,55 @@ h6 {
     border: 1px solid var(--info-200);
 }
 
+/* ========== Payment Hold Pills ========== */
+.hold-pill {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.25rem;
+    padding: 0.25rem 0.65rem;
+    font-size: 0.7rem;
+    font-weight: 600;
+    border-radius: var(--radius-full);
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+}
+
+.hold-active {
+    background: var(--warning-50);
+    color: var(--warning-700);
+    border: 1px solid var(--warning-200);
+}
+
+.hold-ready {
+    background: var(--success-50);
+    color: var(--success-700);
+    border: 1px solid var(--success-200);
+}
+
+.hold-released {
+    background: var(--gray-100);
+    color: var(--gray-700);
+    border: 1px solid var(--gray-200);
+}
+
+.hold-cleared {
+    background: var(--gray-50);
+    color: var(--gray-600);
+    border: 1px solid var(--gray-200);
+}
+
+.hold-unfunded {
+    background: var(--info-50);
+    color: var(--info-700);
+    border: 1px solid var(--info-200);
+}
+
+.hold-pending {
+    background: var(--primary-50);
+    color: var(--primary-700);
+    border: 1px solid var(--primary-200);
+}
+
 /* ========== Modern Stats Grid ========== */
 .stats-grid {
     display: grid;

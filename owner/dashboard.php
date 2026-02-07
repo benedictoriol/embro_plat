@@ -55,6 +55,25 @@ $staffs_stmt = $pdo->prepare("
 ");
 $staffs_stmt->execute([$shop_id]);
 $recent_staffs = $staffs_stmt->fetchAll();
+
+$staff_workload_stmt = $pdo->prepare("
+    SELECT u.fullname,
+           se.position,
+           se.max_active_orders,
+           COUNT(o.id) AS active_orders
+    FROM shop_staffs se
+    JOIN users u ON se.user_id = u.id
+    LEFT JOIN orders o
+        ON o.assigned_to = se.user_id
+        AND o.shop_id = se.shop_id
+        AND o.status IN ('pending', 'accepted', 'in_progress')
+    WHERE se.shop_id = ? AND se.status = 'active'
+    GROUP BY se.user_id
+    ORDER BY active_orders DESC, u.fullname ASC
+    LIMIT 6
+");
+$staff_workload_stmt->execute([$shop_id]);
+$staff_workloads = $staff_workload_stmt->fetchAll();
 ?>
 <!DOCTYPE html>
 <html lang="en">
@@ -236,6 +255,7 @@ $recent_staffs = $staffs_stmt->fetchAll();
                                     <th>Service</th>
                                     <th>Amount</th>
                                     <th>Status</th>
+                                    <th>Hold</th>
                                     <th>Date</th>
                                     <th>Action</th>
                                 </tr>
@@ -250,6 +270,12 @@ $recent_staffs = $staffs_stmt->fetchAll();
                                     <td>
                                         <span class="order-status <?php echo htmlspecialchars($order['status']); ?>"></span>
                                         <?php echo ucfirst(str_replace('_', ' ', $order['status'])); ?>
+                                    </td>
+                                    <td>
+                                        <?php $payment_hold = payment_hold_status($order['status'] ?? STATUS_PENDING, $order['payment_status'] ?? 'unpaid'); ?>
+                                        <span class="hold-pill <?php echo htmlspecialchars($payment_hold['class']); ?>">
+                                            <?php echo htmlspecialchars($payment_hold['label']); ?>
+                                        </span>
                                     </td>
                                     <td><?php echo date('M d', strtotime($order['created_at'])); ?></td>
                                     <td>
@@ -280,6 +306,30 @@ $recent_staffs = $staffs_stmt->fetchAll();
             </div>
 
             <div style="flex: 1; display: flex; flex-direction: column; gap: 20px;">
+                <div class="card">
+                    <h3>Staff Workload</h3>
+                    <?php if(!empty($staff_workloads)): ?>
+                        <?php foreach($staff_workloads as $staff): ?>
+                            <?php
+                                $max_orders = (int) ($staff['max_active_orders'] ?? 0);
+                                $active_orders = (int) ($staff['active_orders'] ?? 0);
+                                $capacity_label = $max_orders > 0 ? $active_orders . '/' . $max_orders . ' active' : $active_orders . ' active';
+                            ?>
+                            <div class="d-flex justify-between align-center mb-3" style="border-bottom: 1px solid #eee; padding-bottom: 10px;">
+                                <div>
+                                    <strong><?php echo htmlspecialchars($staff['fullname']); ?></strong>
+                                    <?php if(!empty($staff['position'])): ?>
+                                        <br><small class="text-muted"><?php echo htmlspecialchars($staff['position']); ?></small>
+                                    <?php endif; ?>
+                                </div>
+                                <span class="badge badge-info"><?php echo htmlspecialchars($capacity_label); ?></span>
+                            </div>
+                        <?php endforeach; ?>
+                    <?php else: ?>
+                        <p class="text-muted mb-0">No active staff workload to display.</p>
+                    <?php endif; ?>
+                </div>
+
                 <div class="card">
                     <h3>Recent Staff</h3>
                     <?php if(!empty($recent_staffs)): ?>

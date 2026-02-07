@@ -273,6 +273,7 @@ $activeAlerts = [
                     <p class="text-muted">Manage access, notifications, and automation.</p>
                 </div>
                 <form method="POST">
+                    <?php echo csrf_field(); ?>
                     <input type="hidden" name="action" value="update_settings">
                     <div class="toggle-group">
                         <div class="toggle-item">
@@ -428,6 +429,7 @@ $activeAlerts = [
             </div>
             <div class="system-tasks">
                 <form method="POST" class="system-task">
+                    <?php echo csrf_field(); ?>
                     <input type="hidden" name="action" value="clear_cache">
                     <i class="fas fa-broom text-primary"></i>
                     <div>
@@ -437,6 +439,7 @@ $activeAlerts = [
                     <button class="btn btn-outline-primary btn-sm" type="submit">Run</button>
                 </form>
                 <form method="POST" class="system-task">
+                    <?php echo csrf_field(); ?>
                     <input type="hidden" name="action" value="restart_queue">
                     <i class="fas fa-redo text-info"></i>
                     <div>
@@ -446,6 +449,7 @@ $activeAlerts = [
                     <button class="btn btn-outline-info btn-sm" type="submit">Run</button>
                 </form>
                 <form method="POST" class="system-task">
+                    <?php echo csrf_field(); ?>
                     <input type="hidden" name="action" value="sync_search">
                     <i class="fas fa-sync-alt text-success"></i>
                     <div>
@@ -455,6 +459,7 @@ $activeAlerts = [
                     <button class="btn btn-outline-success btn-sm" type="submit">Run</button>
                 </form>
                 <form method="POST" class="system-task">
+                    <?php echo csrf_field(); ?>
                     <input type="hidden" name="action" value="generate_backup">
                     <i class="fas fa-database text-warning"></i>
                     <div>

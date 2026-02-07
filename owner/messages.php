@@ -242,6 +242,7 @@ if ($active_client) {
                         <?php endif; ?>
                     </div>
                     <form class="message-form" method="POST">
+                        <?php echo csrf_field(); ?> 
                         <input type="hidden" name="receiver_id" value="<?php echo (int) $active_client['client_id']; ?>">
                         <textarea name="message" class="form-control" placeholder="Write a message to the client..."></textarea>
                         <button type="submit" name="send_message" class="btn btn-primary mt-2"><i class="fas fa-paper-plane"></i> Send</button>

@@ -159,6 +159,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                     <p class="text-muted">Manage data security and compliance controls.</p>
                 </div>
                 <form method="POST">
+                    <?php echo csrf_field(); ?>
                     <div class="row" style="display: flex; gap: 1rem;">
                         <div class="form-group" style="flex: 1;">
                             <label>Data Retention (days)</label>

@@ -133,6 +133,7 @@ function notification_badge($type) {
             <div class="d-flex justify-between align-center">
                 <strong><?php echo $unread_notifications; ?> unread notifications</strong>
                 <form method="POST">
+                    <?php echo csrf_field(); ?>
                     <button type="submit" name="mark_all_read" class="btn btn-outline-primary btn-sm">
                         <i class="fas fa-check-double"></i> Mark all as read
                     </button>

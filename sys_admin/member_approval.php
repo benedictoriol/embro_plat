@@ -267,11 +267,13 @@ $pendingShops = $pdo->query("
                                     <td>
                                         <div class="approval-actions">
                                             <form method="POST">
+                                                <?php echo csrf_field(); ?>
                                                 <input type="hidden" name="action" value="approve_shop">
                                                 <input type="hidden" name="id" value="<?php echo (int) $shop['id']; ?>">
                                                 <button class="btn btn-sm btn-success" type="submit">Approve</button>
                                             </form>
                                             <form method="POST">
+                                                <?php echo csrf_field(); ?>
                                                 <input type="hidden" name="action" value="reject_shop">
                                                 <input type="hidden" name="id" value="<?php echo (int) $shop['id']; ?>">
                                                 <div class="form-group mb-2">

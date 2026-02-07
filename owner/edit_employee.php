@@ -196,6 +196,7 @@ $max_active_orders_value = $staff['max_active_orders'] ?? 3;
         <div class="card">
             <?php if($staff): ?>
                 <form method="POST">
+                    <?php echo csrf_field(); ?>
                     <div class="form-group">
                         <label>staff Full Name *</label>
                         <input type="text" name="fullname" class="form-control" required

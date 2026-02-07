@@ -135,7 +135,7 @@ if(isset($_POST['start_production'])) {
 }
 
 $orders_stmt = $pdo->prepare("
-    SELECT o.id, o.order_number, o.status, o.design_approved, o.client_id,
+    SELECT o.id, o.order_number, o.status, o.design_approved, o.client_id, o.payment_status,
            u.fullname as client_name,
            da.status as approval_status,
            da.design_file as approval_file,
@@ -392,6 +392,7 @@ $automation = [
                             $approval_status = $order['approval_status'] ?? 'pending';
                             $approval_file = $order['approval_file'] ?? '';
                             $approved = (int) $order['design_approved'] === 1 || $approval_status === 'approved';
+                            $payment_hold = payment_hold_status($order['status'] ?? STATUS_PENDING, $order['payment_status'] ?? 'unpaid');
                         ?>
                         <div class="proof-card">
                             <h4>Order #<?php echo htmlspecialchars($order['order_number']); ?></h4>
@@ -403,6 +404,9 @@ $automation = [
                                 <span class="badge <?php echo $approved ? 'badge-success' : 'badge-warning'; ?>">
                                     Proof: <?php echo htmlspecialchars($approval_status ?: 'pending'); ?>
                                 </span>
+                                <span class="hold-pill <?php echo htmlspecialchars($payment_hold['class']); ?>">
+                                    Hold: <?php echo htmlspecialchars($payment_hold['label']); ?>
+                                </span>
                             </div>
 
                             <?php if($approval_file): ?>
@@ -410,6 +414,7 @@ $automation = [
                             <?php endif; ?>
 
                             <form method="POST" class="proof-upload-form mt-3" enctype="multipart/form-data">
+                                <?php echo csrf_field(); ?>
                                 <input type="hidden" name="order_id" value="<?php echo $order['id']; ?>">
                                 <input type="hidden" name="design_file" value="">
                                 <div class="form-group">
@@ -426,6 +431,7 @@ $automation = [
                             </form>
 
                             <form method="POST" class="mt-3">
+                                <?php echo csrf_field(); ?>
                                 <input type="hidden" name="order_id" value="<?php echo $order['id']; ?>">
                                 <button type="submit" name="start_production" class="btn btn-primary btn-sm" <?php echo $approved ? '' : 'disabled'; ?>>
                                     <i class="fas fa-play"></i> Start Production
@@ -522,8 +528,8 @@ $automation = [
                         alert('Please select a proof file to upload.');
                         return;
                     }
-                    const formData = new FormData();
-                    formData.append('file', fileInput.files[0]);
+                    const formData = new FormData(form);
+                    formData.set('file', fileInput.files[0]);
                     try {
                         const response = await fetch('../api/upload_api.php', {
                             method: 'POST',

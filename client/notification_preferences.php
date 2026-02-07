@@ -136,6 +136,7 @@ foreach ($pref_stmt->fetchAll() as $row) {
         <?php endif; ?>
 
         <form method="POST">
+            <?php echo csrf_field(); ?>
             <?php foreach ($notification_options as $event_key => $label): ?>
                 <div class="preference-card d-flex justify-between align-center">
                     <div>

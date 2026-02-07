@@ -446,7 +446,10 @@ if(isset($_POST['update_status'])) {
 
         <?php if(!empty($jobs)): ?>
             <?php foreach($jobs as $job): ?>
-                <?php $has_photo = !empty($photo_counts[$job['id']]); ?>
+                <?php
+                    $has_photo = !empty($photo_counts[$job['id']]);
+                    $payment_hold = payment_hold_status($job['status'] ?? STATUS_PENDING, $job['payment_status'] ?? 'unpaid');
+                ?>
             <div class="card mb-4">
                 <div class="job-details">
                     <div class="d-flex justify-between align-center">
@@ -484,11 +487,17 @@ if(isset($_POST['update_status'])) {
                         <div class="text-right">
                             <div class="stat-number"><?php echo $job['progress']; ?>%</div>
                             <div class="stat-label">Current Progress</div>
+                            <div class="mt-2">
+                                <span class="hold-pill <?php echo htmlspecialchars($payment_hold['class']); ?>">
+                                    Hold: <?php echo htmlspecialchars($payment_hold['label']); ?>
+                                </span>
+                            </div>
                         </div>
                     </div>
                 </div>
 
                 <form method="POST">
+                    <?php echo csrf_field(); ?>
                     <input type="hidden" name="order_id" value="<?php echo $job['id']; ?>">
                     
                     <div class="section-header">Job Steps</div>
@@ -562,6 +571,7 @@ if(isset($_POST['update_status'])) {
                 </form>
                 
                 <form method="POST" class="proof-upload-form mt-3" enctype="multipart/form-data">
+                    <?php echo csrf_field(); ?>
                     <input type="hidden" name="order_id" value="<?php echo $job['id']; ?>">
                     <input type="hidden" name="design_file" value="">
                     <div class="section-header">Upload Design Proof</div>
@@ -661,8 +671,8 @@ if(isset($_POST['update_status'])) {
                         alert('Please choose a proof file to upload.');
                         return;
                     }
-                    const formData = new FormData();
-                    formData.append('file', fileInput.files[0]);
+                    const formData = new FormData(form);
+                    formData.set('file', fileInput.files[0]);
                     try {
                         const response = await fetch('../api/upload_api.php', {
                             method: 'POST',

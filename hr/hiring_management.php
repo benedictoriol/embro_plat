@@ -311,6 +311,7 @@ $closed_roles = (int) $closed_stmt->fetchColumn();
             <div class="card postings-card">
                 <h2>Create hiring post</h2>
                 <form method="POST" class="form-grid">
+                    <?php echo csrf_field(); ?>
                     <div class="form-group span-6">
                         <label>Job title</label>
                         <input type="text" name="title" required>
@@ -394,6 +395,7 @@ $closed_roles = (int) $closed_stmt->fetchColumn();
                                             <div class="table-actions">
                                                 <button class="btn btn-secondary" type="button" onclick="document.getElementById('edit-<?php echo $post['id']; ?>').classList.toggle('hidden')">Edit</button>
                                                 <form method="POST" onsubmit="return confirm('Delete this hiring post?');">
+                                                    <?php echo csrf_field(); ?>
                                                     <input type="hidden" name="post_id" value="<?php echo $post['id']; ?>">
                                                     <button type="submit" name="delete_post" class="btn btn-danger">Delete</button>
                                                 </form>
@@ -403,6 +405,7 @@ $closed_roles = (int) $closed_stmt->fetchColumn();
                                     <tr id="edit-<?php echo $post['id']; ?>" class="hidden">
                                         <td colspan="6">
                                             <form method="POST" class="form-grid">
+                                                <?php echo csrf_field(); ?>
                                                 <input type="hidden" name="post_id" value="<?php echo $post['id']; ?>">
                                                 <div class="form-group span-6">
                                                     <label>Job title</label>

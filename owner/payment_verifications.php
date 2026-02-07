@@ -340,6 +340,7 @@ function payment_badge($status) {
                                 <td>
                                     <?php if($payment['status'] === 'pending'): ?>
                                         <form method="POST">
+                                            <?php echo csrf_field(); ?>
                                             <input type="hidden" name="payment_id" value="<?php echo $payment['id']; ?>">
                                             <input type="hidden" name="action" value="verify">
                                             <button type="submit" class="btn btn-success btn-sm">
@@ -347,6 +348,7 @@ function payment_badge($status) {
                                             </button>
                                         </form>
                                         <form method="POST">
+                                            <?php echo csrf_field(); ?>
                                             <input type="hidden" name="payment_id" value="<?php echo $payment['id']; ?>">
                                             <input type="hidden" name="action" value="reject">
                                             <button type="submit" class="btn btn-danger btn-sm">
@@ -355,6 +357,7 @@ function payment_badge($status) {
                                         </form>
                                     <?php elseif($payment['order_status'] === 'cancelled' && in_array($payment['payment_status'], ['paid', 'refund_pending'], true)): ?>
                                         <form method="POST">
+                                            <?php echo csrf_field(); ?>
                                             <input type="hidden" name="payment_id" value="<?php echo $payment['id']; ?>">
                                             <input type="hidden" name="action" value="refund">
                                             <button type="submit" class="btn btn-outline-warning btn-sm">

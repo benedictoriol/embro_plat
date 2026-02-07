@@ -351,6 +351,7 @@ if($_SERVER['REQUEST_METHOD'] == 'POST') {
         <?php endif; ?>
         
         <form method="POST">
+            <?php echo csrf_field(); ?>
             <div class="input-group">
                 <i class="fas fa-envelope input-icon"></i>
                 <input type="email" name="email" class="form-control" required 

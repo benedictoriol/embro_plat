@@ -164,6 +164,7 @@ $orders_stmt = $pdo->prepare("
     SELECT o.id,
            o.order_number,
            o.completed_at,
+           o.payment_status,
            u.fullname AS client_name,
            f.id AS fulfillment_id,
            f.fulfillment_type,
@@ -361,13 +362,21 @@ function fulfillment_pill(?string $status): string {
             </div>
         <?php else: ?>
             <?php foreach($orders as $order): ?>
+                <?php $payment_hold = payment_hold_status(STATUS_COMPLETED, $order['payment_status'] ?? 'unpaid'); ?>
                 <div class="delivery-card">
                     <div class="delivery-header">
                         <div>
                             <h4 class="mb-1">Order #<?php echo htmlspecialchars($order['order_number']); ?></h4>
                             <div class="text-muted">Client: <?php echo htmlspecialchars($order['client_name']); ?></div>
                         </div>
-                        <div><?php echo fulfillment_pill($order['status'] ?? null); ?></div>
+                        <div>
+                            <?php echo fulfillment_pill($order['status'] ?? null); ?>
+                            <div class="mt-1">
+                                <span class="hold-pill <?php echo htmlspecialchars($payment_hold['class']); ?>">
+                                    Hold: <?php echo htmlspecialchars($payment_hold['label']); ?>
+                                </span>
+                            </div>
+                        </div>
                     </div>
                     <div class="delivery-meta">
                         <div><strong>Type:</strong> <?php echo htmlspecialchars($fulfillment_types[$order['fulfillment_type'] ?? 'pickup'] ?? 'Not set'); ?></div>
@@ -381,6 +390,7 @@ function fulfillment_pill(?string $status): string {
                     </div>
 
                     <form method="POST" class="form-grid">
+                        <?php echo csrf_field(); ?>
                         <input type="hidden" name="order_id" value="<?php echo (int) $order['id']; ?>">
                         <div>
                             <label>Fulfillment type</label>

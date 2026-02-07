@@ -231,6 +231,7 @@ function rating_status_badge_class(string $status): string {
 
                     <div class="review-actions mt-3">
                         <form method="POST" class="d-flex align-center" style="gap: 8px;">
+                            <?php echo csrf_field(); ?>
                             <input type="hidden" name="order_id" value="<?php echo $rating['id']; ?>">
                             <select name="rating_status" class="form-control" style="max-width: 200px;" required>
                                 <?php foreach($allowed_statuses as $status): ?>
@@ -254,6 +255,7 @@ function rating_status_badge_class(string $status): string {
                             <?php endif; ?>
                         <?php else: ?>
                             <form method="POST">
+                                <?php echo csrf_field(); ?>
                                 <input type="hidden" name="order_id" value="<?php echo $rating['id']; ?>">
                                 <div class="form-group">
                                     <label>Add a response</label>

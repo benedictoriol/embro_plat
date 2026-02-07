@@ -25,6 +25,8 @@ require_once __DIR__ . '/notification_functions.php';
 require_once __DIR__ . '/order_helpers.php';
 require_once __DIR__ . '/payment_helpers.php';
 
+enforce_csrf_protection();
+
 // Sanitize input
 function sanitize($input) {
     return htmlspecialchars(strip_tags(trim($input)));

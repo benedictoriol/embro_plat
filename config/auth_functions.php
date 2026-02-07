@@ -146,6 +146,43 @@ function refresh_session_user_status(): bool {
 
     return $user['status'] === 'active';
 }
+
+function csrf_token(): string {
+    if (empty($_SESSION['csrf_token'])) {
+        $_SESSION['csrf_token'] = bin2hex(random_bytes(32));
+    }
+
+    return $_SESSION['csrf_token'];
+}
+
+function csrf_field(): string {
+    return '<input type="hidden" name="csrf_token" value="' . htmlspecialchars(csrf_token(), ENT_QUOTES, 'UTF-8') . '">';
+}
+
+function csrf_token_from_request(): ?string {
+    return $_POST['csrf_token'] ?? $_SERVER['HTTP_X_CSRF_TOKEN'] ?? null;
+}
+
+function verify_csrf_token(?string $token): bool {
+    if (!$token || empty($_SESSION['csrf_token'])) {
+        return false;
+    }
+
+    return hash_equals($_SESSION['csrf_token'], $token);
+}
+
+function enforce_csrf_protection(): void {
+    if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
+        return;
+    }
+
+    if (!verify_csrf_token(csrf_token_from_request())) {
+        http_response_code(403);
+        echo 'Invalid CSRF token.';
+        exit();
+    }
+}
+
 function staff_permission_defaults(): array {
     return [
         'view_jobs' => true,

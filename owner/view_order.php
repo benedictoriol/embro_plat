@@ -58,6 +58,15 @@ $proof_stmt = $pdo->prepare("
 $proof_stmt->execute([$order_id]);
 $latest_proof = $proof_stmt->fetch();
 
+$proof_history_stmt = $pdo->prepare("
+    SELECT design_file, status, updated_at
+    FROM design_approvals
+    WHERE order_id = ?
+    ORDER BY updated_at DESC
+");
+$proof_history_stmt->execute([$order_id]);
+$proof_history = $proof_history_stmt->fetchAll();
+
 $invoice_stmt = $pdo->prepare("SELECT * FROM order_invoices WHERE order_id = ?");
 $invoice_stmt->execute([$order_id]);
 $invoice = $invoice_stmt->fetch();
@@ -331,6 +340,7 @@ $latest_proof_file = $latest_proof['design_file'] ?? null;
 $latest_proof_url = $latest_proof_file ? '../' . $latest_proof_file : null;
 $latest_proof_extension = $latest_proof_file ? strtolower(pathinfo($latest_proof_file, PATHINFO_EXTENSION)) : '';
 $is_latest_proof_image = $latest_proof_file && in_array($latest_proof_extension, ALLOWED_IMAGE_TYPES, true);
+$payment_hold = payment_hold_status($order['status'] ?? STATUS_PENDING, $payment_status);
 ?>
 <!DOCTYPE html>
 <html lang="en">
@@ -499,6 +509,11 @@ $is_latest_proof_image = $latest_proof_file && in_array($latest_proof_extension,
                         <?php echo ucfirst(str_replace('_', ' ', $payment_status)); ?> payment
                     </span>
                 </p>
+                <p>
+                    <span class="hold-pill <?php echo htmlspecialchars($payment_hold['class']); ?>">
+                        Hold: <?php echo htmlspecialchars($payment_hold['label']); ?>
+                    </span>
+                </p>
                 <?php if($invoice): ?>
                     <p>
                         <strong>Invoice:</strong> #<?php echo htmlspecialchars($invoice['invoice_number']); ?> (<?php echo htmlspecialchars($invoice['status']); ?>)
@@ -602,6 +617,43 @@ $is_latest_proof_image = $latest_proof_file && in_array($latest_proof_extension,
                     <?php endif; ?>
                 </div>
             <?php endif; ?>
+            <?php if(!empty($proof_history)): ?>
+                <div class="mt-3">
+                    <p class="mb-1"><strong>Proof history</strong></p>
+                    <div class="mt-2">
+                        <?php foreach($proof_history as $proof_item): ?>
+                            <?php
+                                $proof_file = $proof_item['design_file'] ?? '';
+                                $proof_url = $proof_file ? '../' . $proof_file : null;
+                                $proof_extension = $proof_file ? strtolower(pathinfo($proof_file, PATHINFO_EXTENSION)) : '';
+                                $proof_is_image = $proof_file && in_array($proof_extension, ALLOWED_IMAGE_TYPES, true);
+                            ?>
+                            <div class="mb-3">
+                                <div class="d-flex align-center gap-2">
+                                    <span class="badge badge-secondary">
+                                        <?php echo htmlspecialchars($proof_item['status'] ?? 'pending'); ?>
+                                    </span>
+                                    <?php if(!empty($proof_item['updated_at'])): ?>
+                                        <small class="text-muted">Updated <?php echo date('M d, Y', strtotime($proof_item['updated_at'])); ?></small>
+                                    <?php endif; ?>
+                                </div>
+                                <?php if($proof_url): ?>
+                                    <div class="mt-1">
+                                        <a class="file-link" href="<?php echo htmlspecialchars($proof_url); ?>" target="_blank" rel="noopener noreferrer">
+                                            <i class="fas fa-file-download"></i> View proof file
+                                        </a>
+                                    </div>
+                                <?php endif; ?>
+                                <?php if($proof_is_image): ?>
+                                    <div class="design-preview">
+                                        <img src="<?php echo htmlspecialchars($proof_url); ?>" alt="Proof history file">
+                                    </div>
+                                <?php endif; ?>
+                            </div>
+                        <?php endforeach; ?>
+                    </div>
+                </div>
+            <?php endif; ?>
             <?php if($design_file): ?>
                 <p class="mt-3">
                     <a class="file-link" href="<?php echo htmlspecialchars($design_file); ?>" target="_blank" rel="noopener noreferrer">
@@ -640,6 +692,7 @@ $is_latest_proof_image = $latest_proof_file && in_array($latest_proof_extension,
             <?php endif; ?>
 
             <form method="POST" class="schedule-form">
+                <?php echo csrf_field(); ?>
                 <input type="hidden" name="order_id" value="<?php echo (int) $order['id']; ?>">
                 <div class="schedule-grid">
                     <div class="form-group">

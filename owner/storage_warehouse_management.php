@@ -410,6 +410,7 @@ $automation_rules = [
                     <h3><i class="fas fa-location-plus text-primary"></i> <?php echo $editing_location ? 'Update Location' : 'Add Location'; ?></h3>
                 </div>
                 <form method="POST">
+                    <?php echo csrf_field(); ?>
                     <input type="hidden" name="action" value="<?php echo $editing_location ? 'update_location' : 'create_location'; ?>">
                     <?php if ($editing_location): ?>
                         <input type="hidden" name="location_id" value="<?php echo (int) $editing_location['id']; ?>">
@@ -461,6 +462,7 @@ $automation_rules = [
                                     <td>
                                         <a href="storage_warehouse_management.php?edit_location=<?php echo (int) $location['id']; ?>" class="btn btn-sm btn-light">Edit</a>
                                         <form method="POST" class="d-inline" onsubmit="return confirm('Remove this location?');">
+                                            <?php echo csrf_field(); ?>
                                             <input type="hidden" name="action" value="delete_location">
                                             <input type="hidden" name="location_id" value="<?php echo (int) $location['id']; ?>">
                                             <button type="submit" class="btn btn-sm btn-danger">Delete</button>
@@ -479,6 +481,7 @@ $automation_rules = [
                     <p class="text-muted">Transfer materials between storage locations.</p>
                 </div>
                 <form method="POST">
+                    <?php echo csrf_field(); ?>
                     <input type="hidden" name="action" value="move_stock">
                     <div class="form-group">
                         <label>Material</label>

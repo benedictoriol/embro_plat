@@ -314,6 +314,7 @@ if($_SERVER['REQUEST_METHOD'] === 'POST') {
 
         <div class="card">
             <form method="POST">
+                <?php echo csrf_field(); ?>
                 <input type="hidden" name="action" value="update_profile">
                 <div class="form-group">
                     <label>Shop Name *</label>
@@ -468,6 +469,7 @@ if($_SERVER['REQUEST_METHOD'] === 'POST') {
             <h3>Portfolio Samples</h3>
             <p class="text-muted">Showcase completed work to help clients evaluate your shop.</p>
             <form method="POST" enctype="multipart/form-data" class="mb-4">
+                <?php echo csrf_field(); ?>
                 <input type="hidden" name="action" value="add_portfolio">
                 <div class="row" style="display: flex; gap: 15px; flex-wrap: wrap;">
                     <div class="form-group" style="flex: 1; min-width: 220px;">
@@ -500,6 +502,7 @@ if($_SERVER['REQUEST_METHOD'] === 'POST') {
                                 <p class="text-muted small mb-2"><?php echo htmlspecialchars($item['description']); ?></p>
                             <?php endif; ?>
                             <form method="POST">
+                                <?php echo csrf_field(); ?>
                                 <input type="hidden" name="action" value="delete_portfolio">
                                 <input type="hidden" name="portfolio_id" value="<?php echo (int) $item['id']; ?>">
                                 <button type="submit" class="btn btn-sm btn-outline-danger">

@@ -193,6 +193,7 @@ if($_SERVER['REQUEST_METHOD'] == 'POST') {
                         </div>
                     <?php else: ?>
                 <form method="POST" enctype="multipart/form-data">
+                    <?php echo csrf_field(); ?>
                     <input type="hidden" name="type" value="<?php echo $type; ?>">
                     
                     <div class="form-group">

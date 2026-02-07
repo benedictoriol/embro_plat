@@ -358,6 +358,7 @@ $inventory_kpis = [
                     <p class="text-muted">Capture material details, current stock, and reorder thresholds.</p>
                 </div>
                 <form method="post">
+                    <?php echo csrf_field(); ?>
                     <input type="hidden" name="action" value="<?php echo $editing_material ? 'update_material' : 'create_material'; ?>">
                     <?php if ($editing_material): ?>
                         <input type="hidden" name="material_id" value="<?php echo (int) $editing_material['id']; ?>">
@@ -460,6 +461,7 @@ $inventory_kpis = [
                                 <td>
                                     <a class="btn btn-sm btn-outline-primary" href="raw_material_inventory.php?edit_id=<?php echo (int) $material['id']; ?>">Edit</a>
                                     <form method="post" style="display:inline-block" onsubmit="return confirm('Remove this material from inventory?');">
+                                        <?php echo csrf_field(); ?>
                                         <input type="hidden" name="action" value="delete_material">
                                         <input type="hidden" name="material_id" value="<?php echo (int) $material['id']; ?>">
                                         <button type="submit" class="btn btn-sm btn-outline-danger">Delete</button>

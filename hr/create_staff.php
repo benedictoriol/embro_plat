@@ -194,6 +194,7 @@ if (isset($_POST['add_staff'])) {
         <div class="card" style="max-width: 720px;">
             <h3>Staff Details</h3>
             <form method="POST">
+                <?php echo csrf_field(); ?>
                 <div class="form-group">
                     <label>Staff Full Name *</label>
                     <input type="text" name="fullname" class="form-control" required

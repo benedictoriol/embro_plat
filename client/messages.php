@@ -265,6 +265,7 @@ if ($active_shop) {
                         <?php endif; ?>
                     </div>
                     <form class="message-form" method="POST">
+                        <?php echo csrf_field(); ?>
                         <input type="hidden" name="receiver_id" value="<?php echo (int) $active_shop['owner_id']; ?>">
                         <textarea name="message" class="form-control" placeholder="Write a message to the shop owner..."></textarea>
                         <button type="submit" name="send_message" class="btn btn-primary mt-2"><i class="fas fa-paper-plane"></i> Send</button>

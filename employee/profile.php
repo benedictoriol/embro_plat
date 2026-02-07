@@ -142,6 +142,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                     <p class="text-muted">Keep your contact information up to date.</p>
                 </div>
                 <form method="POST">
+                    <?php echo csrf_field(); ?>
                     <div class="form-group">
                         <label>Full Name</label>
                         <input type="text" name="fullname" class="form-control" value="<?php echo htmlspecialchars($profile['fullname'] ?? ''); ?>" required>

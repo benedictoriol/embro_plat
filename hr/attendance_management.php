@@ -140,6 +140,18 @@ if (empty($errors)) {
             <span class="badge">Logged in as <?php echo $hr_name; ?></span>
         </section>
 
+        <div class="card mb-3">
+            <div class="d-flex justify-between align-center">
+                <div>
+                    <h3 class="mb-1">Attendance → Productivity Link</h3>
+                    <p class="text-muted mb-0">Jump to performance to see how attendance impacts output and delivery cadence.</p>
+                </div>
+                <a class="btn btn-outline-primary" href="staff_productivity_performance.php?start_date=<?php echo htmlspecialchars($start_date); ?>&end_date=<?php echo htmlspecialchars($end_date); ?>">
+                    View Productivity
+                </a>
+            </div>
+        </div>
+
         <?php if (!empty($errors)): ?>
             <div class="alert alert-danger">
                 <ul>

@@ -283,6 +283,7 @@ $automationChecklist = [
                     <p class="text-muted">Set limits that keep the platform stable and compliant.</p>
                 </div>
                 <form method="POST">
+                    <?php echo csrf_field(); ?>
                     <input type="hidden" name="action" value="save_configuration">
                     <div class="section-grid">
                         <div class="form-group">
@@ -413,12 +414,14 @@ $automationChecklist = [
                 </div>
                 <div class="d-flex gap-2" style="margin-top: 1.5rem; flex-wrap: wrap;">
                     <form method="POST">
+                        <?php echo csrf_field(); ?>
                         <input type="hidden" name="action" value="run_backup">
                         <button type="submit" class="btn btn-outline-primary">
                             <i class="fas fa-cloud-upload-alt"></i> Run Backup Now
                         </button>
                     </form>
                     <form method="POST" class="d-flex gap-2 align-center">
+                        <?php echo csrf_field(); ?>
                         <input type="hidden" name="action" value="restore_backup">
                         <select name="restore_point" class="form-control">
                             <?php foreach ($backupSnapshots as $snapshot): ?>
@@ -460,6 +463,7 @@ $automationChecklist = [
             </div>
             <div class="section-grid" style="margin-bottom: 1.5rem;">
                 <form method="POST" class="section-tile" style="grid-column: span 2;">
+                    <?php echo csrf_field(); ?>
                     <input type="hidden" name="action" value="save_version">
                     <div class="form-group">
                         <label>Version Label</label>

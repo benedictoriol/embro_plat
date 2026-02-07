@@ -303,12 +303,14 @@ $approvals = $approvals_stmt->fetchAll();
 
                             <div class="proof-actions">
                                 <form method="POST">
+                                    <?php echo csrf_field(); ?>
                                     <input type="hidden" name="order_id" value="<?php echo $approval['order_id']; ?>">
                                     <button type="submit" name="approve_proof" class="btn btn-success btn-block">
                                         <i class="fas fa-check-circle"></i> Approve Proof
                                     </button>
                                 </form>
                                 <form method="POST">
+                                    <?php echo csrf_field(); ?>
                                     <input type="hidden" name="order_id" value="<?php echo $approval['order_id']; ?>">
                                     <div class="form-group">
                                         <textarea name="revision_notes" class="form-control" rows="2" placeholder="Share revision notes" required></textarea>

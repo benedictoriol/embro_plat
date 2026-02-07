@@ -95,6 +95,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             </div>
         <?php else: ?>
             <form method="POST">
+                <?php echo csrf_field(); ?>
                 <div class="form-group">
                     <label>New Password *</label>
                     <input type="password" name="password" class="form-control" required

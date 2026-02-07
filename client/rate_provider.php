@@ -235,6 +235,7 @@ $rated_orders = $rated_stmt->fetchAll();
                         </div>
 
                         <form method="POST" class="mt-3">
+                            <?php echo csrf_field(); ?>
                             <input type="hidden" name="order_id" value="<?php echo $order['id']; ?>">
                             <div class="rating-stars">
                                 <?php for($i = 5; $i >= 1; $i--): ?>
