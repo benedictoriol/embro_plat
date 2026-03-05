@@ -51,42 +51,21 @@ $is_active = static function (string $key) use ($active_groups, $current_page): 
             <li><a href="reviews.php" class="nav-link <?php echo $is_active('reviews') ? 'active' : ''; ?>">Reviews</a></li>
             <li><a href="messages.php" class="nav-link <?php echo $is_active('messages') ? 'active' : ''; ?>">Messages</a></li>
             <li><a href="delivery_management.php" class="nav-link <?php echo $is_active('delivery') ? 'active' : ''; ?>">Delivery & Pickup</a></li>
-            <li class="dropdown">
-                <a href="#" class="nav-link dropdown-toggle <?php echo $is_active('finance') ? 'active' : ''; ?>">
-                    <i class="fas fa-coins"></i> Finance
-                </a>
-                <div class="dropdown-menu">
-                    <a href="payment_verifications.php" class="dropdown-item"><i class="fas fa-receipt"></i> Payments</a>
-                    <a href="earnings.php" class="dropdown-item"><i class="fas fa-wallet"></i> Earnings</a>
-                </div>
-            </li>
-            <li class="dropdown">
-                <a href="#" class="nav-link dropdown-toggle <?php echo $is_active('operations') ? 'active' : ''; ?>">
-                    <i class="fas fa-cogs"></i> Operations
-                </a>
-                <div class="dropdown-menu">
-                    <a href="supplier_management.php" class="dropdown-item"><i class="fas fa-truck-loading"></i> Supplier Management</a>
-                    <a href="raw_material_inventory.php" class="dropdown-item"><i class="fas fa-boxes"></i> Raw Materials</a>
-                    <a href="inventory_production_supply_chain_automation.php" class="dropdown-item"><i class="fas fa-project-diagram"></i> Supply Chain</a>
-                    <a href="production_tracking.php" class="dropdown-item"><i class="fas fa-industry"></i> Production Tracking</a>
-                    <a href="quality_control.php" class="dropdown-item"><i class="fas fa-check-circle"></i> Quality Control</a>
-                    <a href="storage_warehouse_management.php" class="dropdown-item"><i class="fas fa-warehouse"></i> Warehouse</a>
-                    <a href="finished_goods_order_storage.php" class="dropdown-item"><i class="fas fa-dolly-flatbed"></i> Finished Goods</a>
-                    <a href="workforce_scheduling.php" class="dropdown-item"><i class="fas fa-calendar-alt"></i> Workforce Scheduling</a>
-                    <a href="dispute_resolution.php" class="dropdown-item"><i class="fas fa-balance-scale"></i> Dispute Resolution</a>
-                </div>
-            </li>
+            <li><a href="payment_verifications.php" class="nav-link <?php echo $current_page === 'payment_verifications.php' ? 'active' : ''; ?>">Payments</a></li>
+            <li><a href="earnings.php" class="nav-link <?php echo $current_page === 'earnings.php' ? 'active' : ''; ?>">Earnings</a></li>
+            <li><a href="supplier_management.php" class="nav-link <?php echo $current_page === 'supplier_management.php' ? 'active' : ''; ?>">Supplier Management</a></li>
+            <li><a href="raw_material_inventory.php" class="nav-link <?php echo $current_page === 'raw_material_inventory.php' ? 'active' : ''; ?>">Raw Materials</a></li>
+            <li><a href="inventory_production_supply_chain_automation.php" class="nav-link <?php echo $current_page === 'inventory_production_supply_chain_automation.php' ? 'active' : ''; ?>">Supply Chain</a></li>
+            <li><a href="production_tracking.php" class="nav-link <?php echo $current_page === 'production_tracking.php' ? 'active' : ''; ?>">Production Tracking</a></li>
+            <li><a href="quality_control.php" class="nav-link <?php echo $current_page === 'quality_control.php' ? 'active' : ''; ?>">Quality Control</a></li>
+            <li><a href="storage_warehouse_management.php" class="nav-link <?php echo $current_page === 'storage_warehouse_management.php' ? 'active' : ''; ?>">Warehouse</a></li>
+            <li><a href="finished_goods_order_storage.php" class="nav-link <?php echo $current_page === 'finished_goods_order_storage.php' ? 'active' : ''; ?>">Finished Goods</a></li>
+            <li><a href="workforce_scheduling.php" class="nav-link <?php echo $current_page === 'workforce_scheduling.php' ? 'active' : ''; ?>">Workforce Scheduling</a></li>
+            <li><a href="dispute_resolution.php" class="nav-link <?php echo $current_page === 'dispute_resolution.php' ? 'active' : ''; ?>">Dispute Resolution</a></li>
             <li><a href="analytics_reporting.php" class="nav-link <?php echo $is_active('analytics') ? 'active' : ''; ?>">Analytics</a></li>
             <li><a href="notification_preferences.php" class="nav-link <?php echo $is_active('preferences') ? 'active' : ''; ?>">Preferences</a></li>
-            <li class="dropdown">
-                <a href="#" class="nav-link dropdown-toggle <?php echo $is_active('profile') ? 'active' : ''; ?>">
-                    <i class="fas fa-user"></i> <?php echo htmlspecialchars($_SESSION['user']['fullname']); ?>
-                </a>
-                <div class="dropdown-menu">
-                    <a href="profile.php" class="dropdown-item"><i class="fas fa-user-cog"></i> Profile</a>
-                    <a href="../auth/logout.php" class="dropdown-item"><i class="fas fa-sign-out-alt"></i> Logout</a>
-                </div>
-            </li>
+            <li><a href="profile.php" class="nav-link <?php echo $is_active('profile') ? 'active' : ''; ?>"><?php echo htmlspecialchars($_SESSION['user']['fullname']); ?></a></li>
+            <li><a href="../auth/logout.php" class="nav-link">Logout</a></li>
         </ul>
     </div>
 </nav>

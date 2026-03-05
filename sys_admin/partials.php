@@ -19,8 +19,10 @@ function sys_admin_nav(string $activePage): void {
         ['key' => 'dss_config', 'label' => 'Security', 'icon' => 'fas fa-shield-alt', 'href' => 'dss_config.php'],
         ['key' => 'audit_logs', 'label' => 'Audit Logs', 'icon' => 'fas fa-clipboard-list', 'href' => 'audit_logs.php'],
     ];
-    $userActive = in_array($activePage, array_column($userItems, 'key'), true);
-    $systemActive = in_array($activePage, array_column($systemItems, 'key'), true);
+    $accountItems = [
+        ['key' => 'profile', 'label' => 'Profile Settings', 'icon' => 'fas fa-user-cog', 'href' => 'profile.php'],
+        ['key' => 'settings', 'label' => 'System Settings', 'icon' => 'fas fa-cog', 'href' => 'settings.php'],
+    ];
     ?>
     <nav class="navbar navbar--compact">
         <div class="container d-flex justify-between align-center">
@@ -43,40 +45,34 @@ function sys_admin_nav(string $activePage): void {
                         </a>
                     </li>
                 <?php endforeach; ?>
-                <li class="dropdown">
-                    <a href="#" class="nav-link dropdown-toggle <?php echo $userActive ? 'active' : ''; ?>">
-                        <i class="fas fa-users-cog"></i> Users
+                <?php foreach ($userItems as $item): ?>
+                    <li>
+                        <a href="<?php echo $item['href']; ?>" class="nav-link <?php echo $activePage === $item['key'] ? 'active' : ''; ?>">
+                            <i class="<?php echo $item['icon']; ?>"></i> <?php echo $item['label']; ?>
+                        </a>
+                    </li>
+                <?php endforeach; ?>
+                <?php foreach ($systemItems as $item): ?>
+                    <li>
+                        <a href="<?php echo $item['href']; ?>" class="nav-link <?php echo $activePage === $item['key'] ? 'active' : ''; ?>">
+                            <i class="<?php echo $item['icon']; ?>"></i> <?php echo $item['label']; ?>
+                        </a>
+                    </li>
+                <?php endforeach; ?>
+                <?php foreach ($accountItems as $item): ?>
+                    <li>
+                        <a href="<?php echo $item['href']; ?>" class="nav-link <?php echo $activePage === $item['key'] ? 'active' : ''; ?>">
+                            <i class="<?php echo $item['icon']; ?>"></i> <?php echo $item['label']; ?>
+                        </a>
+                    </li>
+                <?php endforeach; ?>
+                <li>
+                    <a href="../auth/logout.php" class="nav-link">
+                        <i class="fas fa-sign-out-alt"></i> Logout
                     </a>
-                    <div class="dropdown-menu">
-                        <?php foreach ($userItems as $item): ?>
-                            <a href="<?php echo $item['href']; ?>" class="dropdown-item <?php echo $activePage === $item['key'] ? 'active' : ''; ?>">
-                                <i class="<?php echo $item['icon']; ?>"></i> <?php echo $item['label']; ?>
-                            </a>
-                        <?php endforeach; ?>
-                    </div>
                 </li>
-                <li class="dropdown">
-                    <a href="#" class="nav-link dropdown-toggle <?php echo $systemActive ? 'active' : ''; ?>">
-                        <i class="fas fa-sliders-h"></i> System
-                    </a>
-                    <div class="dropdown-menu">
-                        <?php foreach ($systemItems as $item): ?>
-                            <a href="<?php echo $item['href']; ?>" class="dropdown-item <?php echo $activePage === $item['key'] ? 'active' : ''; ?>">
-                                <i class="<?php echo $item['icon']; ?>"></i> <?php echo $item['label']; ?>
-                            </a>
-                        <?php endforeach; ?>
-                    </div>
-                </li>
-                <li class="dropdown">
-                    <a href="#" class="nav-link dropdown-toggle">
-                        <i class="fas fa-user-circle"></i> <?php echo $userName; ?>
-                    </a>
-                    <div class="dropdown-menu">
-                        <a href="profile.php" class="dropdown-item"><i class="fas fa-user-cog"></i> Profile Settings</a>
-                        <a href="settings.php" class="dropdown-item"><i class="fas fa-cog"></i> System Settings</a>
-                        <div class="dropdown-divider"></div>
-                        <a href="../auth/logout.php" class="dropdown-item text-danger"><i class="fas fa-sign-out-alt"></i> Logout</a>
-                    </div>
+                <li>
+                    <span class="nav-link"><i class="fas fa-user-circle"></i> <?php echo $userName; ?></span>
                 </li>
             </ul>
         </div>
