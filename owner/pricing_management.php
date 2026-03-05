@@ -45,7 +45,71 @@ $default_pricing_settings = [
         'Extra Color' => 25,
         'Applique' => 60,
     ],
+    'canvas_prices' => [
+        ['canvas' => 'Cotton Twill', 'price' => 30],
+        ['canvas' => 'Polyester', 'price' => 25],
+    ],
+    'size_pricing' => [
+        ['label' => 'Small', 'width' => 4, 'length' => 4, 'price' => 120],
+        ['label' => 'Medium', 'width' => 6, 'length' => 6, 'price' => 180],
+        ['label' => 'Large', 'width' => 8, 'length' => 8, 'price' => 260],
+    ],
+    'bulk_pricing' => [
+        ['min_qty' => 25, 'discount_percent' => 5],
+        ['min_qty' => 50, 'discount_percent' => 10],
+    ],
 ];
+
+function sanitize_pricing_rows(array $rows, string $type): array
+{
+    $clean = [];
+    foreach ($rows as $row) {
+        if (!is_array($row)) {
+            continue;
+        }
+
+        if ($type === 'canvas') {
+            $canvas = sanitize($row['canvas'] ?? '');
+            $price = max(0, (float) ($row['price'] ?? 0));
+            if ($canvas === '') {
+                continue;
+            }
+            $clean[] = ['canvas' => $canvas, 'price' => $price];
+            continue;
+        }
+
+        if ($type === 'size') {
+            $label = sanitize($row['label'] ?? '');
+            $width = max(0, (float) ($row['width'] ?? 0));
+            $length = max(0, (float) ($row['length'] ?? 0));
+            $price = max(0, (float) ($row['price'] ?? 0));
+            if ($label === '' || $width <= 0 || $length <= 0) {
+                continue;
+            }
+            $clean[] = [
+                'label' => $label,
+                'width' => $width,
+                'length' => $length,
+                'price' => $price,
+            ];
+            continue;
+        }
+
+        if ($type === 'bulk') {
+            $min_qty = max(1, (int) ($row['min_qty'] ?? 0));
+            $discount_percent = min(100, max(0, (float) ($row['discount_percent'] ?? 0)));
+            if ($min_qty <= 0 || $discount_percent <= 0) {
+                continue;
+            }
+            $clean[] = [
+                'min_qty' => $min_qty,
+                'discount_percent' => $discount_percent,
+            ];
+        }
+    }
+
+    return $clean;
+}
 
 function build_work_post_description(string $embroidery_size, string $canvas_used, string $description): string
 {
@@ -174,8 +238,24 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             throw new RuntimeException('Please enable at least one service.');
         }
 
-        $update_stmt = $pdo->prepare('UPDATE shops SET service_settings = ? WHERE id = ?');
-        $update_stmt->execute([json_encode(array_values($enabled_services)), $shop['id']]);
+        $canvas_prices = sanitize_pricing_rows($_POST['canvas_prices'] ?? [], 'canvas');
+        $size_pricing = sanitize_pricing_rows($_POST['size_pricing'] ?? [], 'size');
+        $bulk_pricing = sanitize_pricing_rows($_POST['bulk_pricing'] ?? [], 'bulk');
+
+        if (empty($size_pricing)) {
+            throw new RuntimeException('Please provide at least one valid size pricing row with width and length.');
+        }
+
+        $pricing_settings['canvas_prices'] = $canvas_prices;
+        $pricing_settings['size_pricing'] = $size_pricing;
+        $pricing_settings['bulk_pricing'] = $bulk_pricing;
+
+        $update_stmt = $pdo->prepare('UPDATE shops SET service_settings = ?, pricing_settings = ? WHERE id = ?');
+        $update_stmt->execute([
+            json_encode(array_values($enabled_services)),
+            json_encode($pricing_settings),
+            $shop['id'],
+        ]);
 
         $shop_stmt->execute([$owner_id]);
         $shop = $shop_stmt->fetch(PDO::FETCH_ASSOC);
@@ -184,7 +264,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             ? json_decode($shop['service_settings'], true)
             : $available_services;
 
-        $success = 'Pricing settings updated. New quotes are now reflected in client place order.';
+        $success = 'Pricing settings updated. Canvas, size, and bulk order prices are saved.';
     } catch (RuntimeException $e) {
         if ($e->getMessage() !== '__STOP__') {
             $error = $e->getMessage();
@@ -245,6 +325,19 @@ $shop_posts = $posts_stmt->fetchAll(PDO::FETCH_ASSOC);
             margin-bottom: 0.5rem;
             background: #f8fafc;
         }
+        .pricing-row-grid {
+            display: grid;
+            grid-template-columns: 1.3fr 1fr 1fr 1fr auto;
+            gap: 10px;
+            margin-bottom: 10px;
+            align-items: end;
+        }
+        .pricing-row-grid.canvas-grid {
+            grid-template-columns: 1.6fr 1fr auto;
+        }
+        .pricing-row-grid.bulk-grid {
+            grid-template-columns: 1fr 1fr auto;
+        }
     </style>
 </head>
 <body>
@@ -264,7 +357,7 @@ $shop_posts = $posts_stmt->fetchAll(PDO::FETCH_ASSOC);
                 <a href="shop_profile.php" class="btn btn-outline btn-sm"><i class="fas fa-arrow-left"></i> Back to Profile</a>
             </div>
             <div class="card-body">
-                <p class="pricing-helper mb-3">Manage which embroidery services your shop currently offers.</p>
+                <p class="pricing-helper mb-3">Manage your services and pricing matrix for canvas, embroidery size (width x length), and bulky orders.</p>
 
                 <form method="POST" action="">
                     <?php echo csrf_field(); ?>
@@ -285,8 +378,80 @@ $shop_posts = $posts_stmt->fetchAll(PDO::FETCH_ASSOC);
                             <?php endforeach; ?>
                         </div>
                     </div>
+    
+                    <div class="pricing-card mb-3">
+                        <h5>Canvas Pricing</h5>
+                        <p class="pricing-helper mb-2">Set additional price per material/canvas type.</p>
+                        <div id="canvasPricingRows">
+                            <?php foreach (($pricing_settings['canvas_prices'] ?? []) as $index => $row): ?>
+                                <div class="pricing-row-grid canvas-grid">
+                                    <div>
+                                        <label class="form-label">Canvas / Material</label>
+                                        <input type="text" name="canvas_prices[<?php echo (int) $index; ?>][canvas]" class="form-control" value="<?php echo htmlspecialchars((string) ($row['canvas'] ?? '')); ?>" placeholder="e.g. Cotton Twill">
+                                    </div>
+                                    <div>
+                                        <label class="form-label">Price (₱)</label>
+                                        <input type="number" name="canvas_prices[<?php echo (int) $index; ?>][price]" class="form-control" min="0" step="0.01" value="<?php echo htmlspecialchars((string) ($row['price'] ?? 0)); ?>">
+                                    </div>
+                                    <button type="button" class="btn btn-outline btn-sm remove-row"><i class="fas fa-trash"></i></button>
+                                </div>
+                            <?php endforeach; ?>
+                        </div>
+                        <button type="button" id="addCanvasRow" class="btn btn-outline btn-sm"><i class="fas fa-plus"></i> Add Canvas</button>
+                    </div>
+
+                    <div class="pricing-card mb-3">
+                        <h5>Embroidery Size Pricing (Width x Length)</h5>
+                        <p class="pricing-helper mb-2">Define price by size dimensions. At least one row is required.</p>
+                        <div id="sizePricingRows">
+                            <?php foreach (($pricing_settings['size_pricing'] ?? []) as $index => $row): ?>
+                                <div class="pricing-row-grid size-grid">
+                                    <div>
+                                        <label class="form-label">Size Label</label>
+                                        <input type="text" name="size_pricing[<?php echo (int) $index; ?>][label]" class="form-control" value="<?php echo htmlspecialchars((string) ($row['label'] ?? '')); ?>" placeholder="Small / Medium / Large">
+                                    </div>
+                                    <div>
+                                        <label class="form-label">Width (in)</label>
+                                        <input type="number" name="size_pricing[<?php echo (int) $index; ?>][width]" class="form-control" min="0.1" step="0.01" value="<?php echo htmlspecialchars((string) ($row['width'] ?? 0)); ?>">
+                                    </div>
+                                    <div>
+                                        <label class="form-label">Length (in)</label>
+                                        <input type="number" name="size_pricing[<?php echo (int) $index; ?>][length]" class="form-control" min="0.1" step="0.01" value="<?php echo htmlspecialchars((string) ($row['length'] ?? 0)); ?>">
+                                    </div>
+                                    <div>
+                                        <label class="form-label">Price (₱)</label>
+                                        <input type="number" name="size_pricing[<?php echo (int) $index; ?>][price]" class="form-control" min="0" step="0.01" value="<?php echo htmlspecialchars((string) ($row['price'] ?? 0)); ?>">
+                                    </div>
+                                    <button type="button" class="btn btn-outline btn-sm remove-row"><i class="fas fa-trash"></i></button>
+                                </div>
+                            <?php endforeach; ?>
+                        </div>
+                        <button type="button" id="addSizeRow" class="btn btn-outline btn-sm"><i class="fas fa-plus"></i> Add Size Tier</button>
+                    </div>
+
+                    <div class="pricing-card mb-3">
+                        <h5>Bulk Order Pricing</h5>
+                        <p class="pricing-helper mb-2">Set discount for large quantity orders.</p>
+                        <div id="bulkPricingRows">
+                            <?php foreach (($pricing_settings['bulk_pricing'] ?? []) as $index => $row): ?>
+                                <div class="pricing-row-grid bulk-grid">
+                                    <div>
+                                        <label class="form-label">Minimum Quantity</label>
+                                        <input type="number" name="bulk_pricing[<?php echo (int) $index; ?>][min_qty]" class="form-control" min="1" step="1" value="<?php echo htmlspecialchars((string) ($row['min_qty'] ?? 1)); ?>">
+                                    </div>
+                                    <div>
+                                        <label class="form-label">Discount (%)</label>
+                                        <input type="number" name="bulk_pricing[<?php echo (int) $index; ?>][discount_percent]" class="form-control" min="0" max="100" step="0.01" value="<?php echo htmlspecialchars((string) ($row['discount_percent'] ?? 0)); ?>">
+                                    </div>
+                                    <button type="button" class="btn btn-outline btn-sm remove-row"><i class="fas fa-trash"></i></button>
+                                </div>
+                            <?php endforeach; ?>
+                        </div>
+                        <button type="button" id="addBulkRow" class="btn btn-outline btn-sm"><i class="fas fa-plus"></i> Add Bulk Tier</button>
+                    </div>
+
                     <button type="submit" class="btn btn-primary">
-                        <i class="fas fa-save"></i> Save Service Availability
+                        <i class="fas fa-save"></i> Save Pricing & Service Availability
                     </button>
                 </form>
                 <hr style="margin: 24px 0;">
@@ -364,6 +529,73 @@ $shop_posts = $posts_stmt->fetchAll(PDO::FETCH_ASSOC);
             </div>
         </div>
     </div>
+
+    <script>
+        (function () {
+            function setupRows(config) {
+                const container = document.getElementById(config.containerId);
+                const addButton = document.getElementById(config.addButtonId);
+                if (!container || !addButton) return;
+
+                function bindRemove(button) {
+                    button.addEventListener('click', function () {
+                        const rows = container.querySelectorAll('.pricing-row-grid');
+                        if (config.keepOne && rows.length <= 1) {
+                            return;
+                        }
+                        button.closest('.pricing-row-grid')?.remove();
+                    });
+                }
+
+                container.querySelectorAll('.remove-row').forEach(bindRemove);
+
+                addButton.addEventListener('click', function () {
+                    const index = container.querySelectorAll('.pricing-row-grid').length;
+                    const row = document.createElement('div');
+                    row.className = `pricing-row-grid ${config.gridClass}`;
+                    row.innerHTML = config.template(index);
+                    container.appendChild(row);
+                    const removeBtn = row.querySelector('.remove-row');
+                    if (removeBtn) bindRemove(removeBtn);
+                });
+            }
+
+            setupRows({
+                containerId: 'canvasPricingRows',
+                addButtonId: 'addCanvasRow',
+                gridClass: 'canvas-grid',
+                keepOne: false,
+                template: (index) => `
+                    <div><label class="form-label">Canvas / Material</label><input type="text" name="canvas_prices[${index}][canvas]" class="form-control" placeholder="e.g. Denim"></div>
+                    <div><label class="form-label">Price (₱)</label><input type="number" name="canvas_prices[${index}][price]" class="form-control" min="0" step="0.01" value="0"></div>
+                    <button type="button" class="btn btn-outline btn-sm remove-row"><i class="fas fa-trash"></i></button>`
+            });
+
+            setupRows({
+                containerId: 'sizePricingRows',
+                addButtonId: 'addSizeRow',
+                gridClass: 'size-grid',
+                keepOne: true,
+                template: (index) => `
+                    <div><label class="form-label">Size Label</label><input type="text" name="size_pricing[${index}][label]" class="form-control" placeholder="XL"></div>
+                    <div><label class="form-label">Width (in)</label><input type="number" name="size_pricing[${index}][width]" class="form-control" min="0.1" step="0.01" value="0"></div>
+                    <div><label class="form-label">Length (in)</label><input type="number" name="size_pricing[${index}][length]" class="form-control" min="0.1" step="0.01" value="0"></div>
+                    <div><label class="form-label">Price (₱)</label><input type="number" name="size_pricing[${index}][price]" class="form-control" min="0" step="0.01" value="0"></div>
+                    <button type="button" class="btn btn-outline btn-sm remove-row"><i class="fas fa-trash"></i></button>`
+            });
+
+            setupRows({
+                containerId: 'bulkPricingRows',
+                addButtonId: 'addBulkRow',
+                gridClass: 'bulk-grid',
+                keepOne: false,
+                template: (index) => `
+                    <div><label class="form-label">Minimum Quantity</label><input type="number" name="bulk_pricing[${index}][min_qty]" class="form-control" min="1" step="1" value="10"></div>
+                    <div><label class="form-label">Discount (%)</label><input type="number" name="bulk_pricing[${index}][discount_percent]" class="form-control" min="0" max="100" step="0.01" value="0"></div>
+                    <button type="button" class="btn btn-outline btn-sm remove-row"><i class="fas fa-trash"></i></button>`
+            });
+        })();
+    </script>
 
 </body>
 </html>
