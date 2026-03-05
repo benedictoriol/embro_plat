@@ -10,6 +10,7 @@ function sys_admin_nav(string $activePage): void {
         ['key' => 'member_approval', 'label' => 'Approvals', 'icon' => 'fas fa-user-check', 'href' => 'member_approval.php'],
         ['key' => 'membership_lifecycle', 'label' => 'Lifecycle', 'icon' => 'fas fa-user-clock', 'href' => 'membership_lifecycle.php'],
         ['key' => 'accounts', 'label' => 'Accounts', 'icon' => 'fas fa-users', 'href' => 'accounts.php'],
+        ['key' => 'user_access_control', 'label' => 'Access Control', 'icon' => 'fas fa-user-shield', 'href' => 'user_access_control.php'],
     ];
     $systemItems = [
         ['key' => 'system_control', 'label' => 'Control', 'icon' => 'fas fa-sliders-h', 'href' => 'system_control.php'],
