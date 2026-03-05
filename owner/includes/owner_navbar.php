@@ -5,7 +5,6 @@ $brand_name = $shop['shop_name'] ?? ($_SESSION['user']['fullname'] ?? 'Owner Por
 
 $active_groups = [
     'dashboard' => ['dashboard.php'],
-    'shop_profile' => ['shop_profile.php', 'create_shop.php'],
     'pricing' => ['pricing_management.php'],
     'staff' => ['manage_staff.php', 'add_staff.php', 'edit_employee.php', 'create_hr.php'],
     'orders' => ['shop_orders.php', 'quotation_requests.php', 'view_order.php', 'accept_order.php', 'reject_order.php', 'view_invoice.php', 'view_receipt.php'],
@@ -42,7 +41,7 @@ $is_active = static function (string $key) use ($active_groups, $current_page): 
         </a>
         <ul class="navbar-nav">
             <li><a href="dashboard.php" class="nav-link <?php echo $is_active('dashboard') ? 'active' : ''; ?>">Dashboard</a></li>
-            <li><a href="profile.php" class="nav-link <?php echo $is_active('shop_profile') ? 'active' : ''; ?>">Shop Profile</a></li>            <li><a href="pricing_management.php" class="nav-link <?php echo $is_active('pricing') ? 'active' : ''; ?>">Pricing</a></li>
+            <li><a href="pricing_management.php" class="nav-link <?php echo $is_active('pricing') ? 'active' : ''; ?>">Pricing</a></li>            <li><a href="pricing_management.php" class="nav-link <?php echo $is_active('pricing') ? 'active' : ''; ?>">Pricing</a></li>
             <li><a href="manage_staff.php" class="nav-link <?php echo $is_active('staff') ? 'active' : ''; ?>">Staff</a></li>
             <li><a href="shop_orders.php" class="nav-link <?php echo $is_active('orders') ? 'active' : ''; ?>">Orders</a></li>
             <li><a href="quotation_requests.php" class="nav-link <?php echo $current_page === 'quotation_requests.php' ? 'active' : ''; ?>">Quote Requests</a></li>

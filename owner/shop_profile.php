@@ -17,6 +17,14 @@ if(!$shop) {
     exit();
 }
 
+$access_token = $_GET['access_token'] ?? ($_POST['access_token'] ?? '');
+$session_access_token = $_SESSION['shop_profile_access_token'] ?? '';
+if ($access_token === '' || $session_access_token === '' || !hash_equals($session_access_token, $access_token)) {
+    header('Location: profile.php');
+    exit();
+}
+unset($_SESSION['shop_profile_access_token']);
+
 $success = '';
 $error = '';
 
@@ -294,6 +302,7 @@ if($_SERVER['REQUEST_METHOD'] === 'POST') {
         <div class="card profile-card">
             <form method="POST" enctype="multipart/form-data" id="business-information-form">
                 <?php echo csrf_field(); ?>
+                <input type="hidden" name="access_token" value="<?php echo htmlspecialchars($access_token); ?>">
                 <input type="hidden" name="action" value="submit_business_information">
 
                  <h4 class="profile-section-title">Business Information</h4>

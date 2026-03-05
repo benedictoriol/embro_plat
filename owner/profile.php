@@ -21,6 +21,9 @@ $profile = $profileStmt->fetch();
 $message = '';
 $messageType = 'success';
 
+$shopProfileAccessToken = bin2hex(random_bytes(16));
+$_SESSION['shop_profile_access_token'] = $shopProfileAccessToken;
+
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $fullname = sanitize($_POST['fullname'] ?? '');
     $email = sanitize($_POST['email'] ?? '');
@@ -221,6 +224,12 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                             <strong>Security Tip</strong>
                             <p class="mb-0">Update your password regularly to keep your shop secure.</p>
                         </div>
+                    </div>
+
+                    <div class="mt-3">
+                        <a href="shop_profile.php?access_token=<?php echo urlencode($shopProfileAccessToken); ?>" class="btn btn-outline-primary">
+                            <i class="fas fa-store"></i> Open Shop Profile
+                        </a>
                     </div>
                 </div>
             </div>
