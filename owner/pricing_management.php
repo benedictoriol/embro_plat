@@ -50,9 +50,14 @@ $default_pricing_settings = [
         ['canvas' => 'Polyester', 'price' => 25],
     ],
     'size_pricing' => [
-        ['label' => 'Small', 'width' => 4, 'length' => 4, 'price' => 120],
-        ['label' => 'Medium', 'width' => 6, 'length' => 6, 'price' => 180],
-        ['label' => 'Large', 'width' => 8, 'length' => 8, 'price' => 260],
+        ['width' => 4, 'length' => 4, 'price' => 120],
+        ['width' => 6, 'length' => 6, 'price' => 180],
+        ['width' => 8, 'length' => 8, 'price' => 260],
+    ],
+    'thread_color_pricing' => [
+        ['number_of_colors' => 1, 'price' => 0],
+        ['number_of_colors' => 2, 'price' => 30],
+        ['number_of_colors' => 3, 'price' => 60],
     ],
     'bulk_pricing' => [
         ['min_qty' => 25, 'discount_percent' => 5],
@@ -79,17 +84,28 @@ function sanitize_pricing_rows(array $rows, string $type): array
         }
 
         if ($type === 'size') {
-            $label = sanitize($row['label'] ?? '');
             $width = max(0, (float) ($row['width'] ?? 0));
             $length = max(0, (float) ($row['length'] ?? 0));
             $price = max(0, (float) ($row['price'] ?? 0));
-            if ($label === '' || $width <= 0 || $length <= 0) {
+            if ($width <= 0 || $length <= 0) {
                 continue;
             }
             $clean[] = [
-                'label' => $label,
                 'width' => $width,
                 'length' => $length,
+                'price' => $price,
+            ];
+            continue;
+        }
+
+        if ($type === 'thread_color') {
+            $number_of_colors = max(1, (int) ($row['number_of_colors'] ?? 0));
+            $price = max(0, (float) ($row['price'] ?? 0));
+            if ($number_of_colors <= 0) {
+                continue;
+            }
+            $clean[] = [
+                'number_of_colors' => $number_of_colors,
                 'price' => $price,
             ];
             continue;
@@ -240,6 +256,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
         $canvas_prices = sanitize_pricing_rows($_POST['canvas_prices'] ?? [], 'canvas');
         $size_pricing = sanitize_pricing_rows($_POST['size_pricing'] ?? [], 'size');
+        $thread_color_pricing = sanitize_pricing_rows($_POST['thread_color_pricing'] ?? [], 'thread_color');
         $bulk_pricing = sanitize_pricing_rows($_POST['bulk_pricing'] ?? [], 'bulk');
 
         if (empty($size_pricing)) {
@@ -248,6 +265,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
         $pricing_settings['canvas_prices'] = $canvas_prices;
         $pricing_settings['size_pricing'] = $size_pricing;
+        $pricing_settings['thread_color_pricing'] = $thread_color_pricing;
         $pricing_settings['bulk_pricing'] = $bulk_pricing;
 
         $update_stmt = $pdo->prepare('UPDATE shops SET service_settings = ?, pricing_settings = ? WHERE id = ?');
@@ -264,7 +282,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             ? json_decode($shop['service_settings'], true)
             : $available_services;
 
-        $success = 'Pricing settings updated. Canvas, size, and bulk order prices are saved.';
+        $success = 'Pricing settings updated. Canvas, size, thread color, and bulk order prices are saved.';
     } catch (RuntimeException $e) {
         if ($e->getMessage() !== '__STOP__') {
             $error = $e->getMessage();
@@ -338,6 +356,10 @@ $shop_posts = $posts_stmt->fetchAll(PDO::FETCH_ASSOC);
         .pricing-row-grid.bulk-grid {
             grid-template-columns: 1fr 1fr auto;
         }
+        .pricing-row-grid.size-grid,
+        .pricing-row-grid.thread-grid {
+            grid-template-columns: 1fr 1fr 1fr auto;
+        }
     </style>
 </head>
 <body>
@@ -357,7 +379,7 @@ $shop_posts = $posts_stmt->fetchAll(PDO::FETCH_ASSOC);
                 <a href="shop_profile.php" class="btn btn-outline btn-sm"><i class="fas fa-arrow-left"></i> Back to Profile</a>
             </div>
             <div class="card-body">
-                <p class="pricing-helper mb-3">Manage your services and pricing matrix for canvas, embroidery size (width x length), and bulky orders.</p>
+                <p class="pricing-helper mb-3">Manage your services and pricing matrix for canvas, embroidery size (width x length), thread color, and bulky orders.</p>
 
                 <form method="POST" action="">
                     <?php echo csrf_field(); ?>
@@ -407,10 +429,6 @@ $shop_posts = $posts_stmt->fetchAll(PDO::FETCH_ASSOC);
                             <?php foreach (($pricing_settings['size_pricing'] ?? []) as $index => $row): ?>
                                 <div class="pricing-row-grid size-grid">
                                     <div>
-                                        <label class="form-label">Size Label</label>
-                                        <input type="text" name="size_pricing[<?php echo (int) $index; ?>][label]" class="form-control" value="<?php echo htmlspecialchars((string) ($row['label'] ?? '')); ?>" placeholder="Small / Medium / Large">
-                                    </div>
-                                    <div>
                                         <label class="form-label">Width (in)</label>
                                         <input type="number" name="size_pricing[<?php echo (int) $index; ?>][width]" class="form-control" min="0.1" step="0.01" value="<?php echo htmlspecialchars((string) ($row['width'] ?? 0)); ?>">
                                     </div>
@@ -427,6 +445,27 @@ $shop_posts = $posts_stmt->fetchAll(PDO::FETCH_ASSOC);
                             <?php endforeach; ?>
                         </div>
                         <button type="button" id="addSizeRow" class="btn btn-outline btn-sm"><i class="fas fa-plus"></i> Add Size Tier</button>
+                    </div>
+
+                    <div class="pricing-card mb-3">
+                        <h5>Thread Color Pricing</h5>
+                        <p class="pricing-helper mb-2">Set additional price based on number of thread colors.</p>
+                        <div id="threadColorPricingRows">
+                            <?php foreach (($pricing_settings['thread_color_pricing'] ?? []) as $index => $row): ?>
+                                <div class="pricing-row-grid thread-grid">
+                                    <div>
+                                        <label class="form-label">Number of Color</label>
+                                        <input type="number" name="thread_color_pricing[<?php echo (int) $index; ?>][number_of_colors]" class="form-control" min="1" step="1" value="<?php echo htmlspecialchars((string) ($row['number_of_colors'] ?? 1)); ?>">
+                                    </div>
+                                    <div>
+                                        <label class="form-label">Price per Number of Color (₱)</label>
+                                        <input type="number" name="thread_color_pricing[<?php echo (int) $index; ?>][price]" class="form-control" min="0" step="0.01" value="<?php echo htmlspecialchars((string) ($row['price'] ?? 0)); ?>">
+                                    </div>
+                                    <button type="button" class="btn btn-outline btn-sm remove-row"><i class="fas fa-trash"></i></button>
+                                </div>
+                            <?php endforeach; ?>
+                        </div>
+                        <button type="button" id="addThreadColorRow" class="btn btn-outline btn-sm"><i class="fas fa-plus"></i> Add Thread Color Tier</button>
                     </div>
 
                     <div class="pricing-card mb-3">
@@ -577,10 +616,20 @@ $shop_posts = $posts_stmt->fetchAll(PDO::FETCH_ASSOC);
                 gridClass: 'size-grid',
                 keepOne: true,
                 template: (index) => `
-                    <div><label class="form-label">Size Label</label><input type="text" name="size_pricing[${index}][label]" class="form-control" placeholder="XL"></div>
                     <div><label class="form-label">Width (in)</label><input type="number" name="size_pricing[${index}][width]" class="form-control" min="0.1" step="0.01" value="0"></div>
                     <div><label class="form-label">Length (in)</label><input type="number" name="size_pricing[${index}][length]" class="form-control" min="0.1" step="0.01" value="0"></div>
                     <div><label class="form-label">Price (₱)</label><input type="number" name="size_pricing[${index}][price]" class="form-control" min="0" step="0.01" value="0"></div>
+                    <button type="button" class="btn btn-outline btn-sm remove-row"><i class="fas fa-trash"></i></button>`
+            });
+
+            setupRows({
+                containerId: 'threadColorPricingRows',
+                addButtonId: 'addThreadColorRow',
+                gridClass: 'thread-grid',
+                keepOne: false,
+                template: (index) => `
+                    <div><label class="form-label">Number of Color</label><input type="number" name="thread_color_pricing[${index}][number_of_colors]" class="form-control" min="1" step="1" value="1"></div>
+                    <div><label class="form-label">Price per Number of Color (₱)</label><input type="number" name="thread_color_pricing[${index}][price]" class="form-control" min="0" step="0.01" value="0"></div>
                     <button type="button" class="btn btn-outline btn-sm remove-row"><i class="fas fa-trash"></i></button>`
             });
 
