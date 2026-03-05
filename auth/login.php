@@ -40,6 +40,18 @@ if($_SERVER['REQUEST_METHOD'] == 'POST') {
                     ['status' => $user['status']],
                     ['status' => $user['status']]
                 );
+                } elseif (!can_role_login((string) ($user['role'] ?? ''), $pdo)) {
+                $error = 'Login is currently disabled for your role. Please contact the system administrator.';
+                log_audit(
+                    $pdo,
+                    (int) $user['id'],
+                    $user['role'],
+                    'login_blocked',
+                    'users',
+                    (int) $user['id'],
+                    ['reason' => 'role_access_disabled'],
+                    ['role' => $user['role']]
+                );
             } else {
 
             unset($user['password']);

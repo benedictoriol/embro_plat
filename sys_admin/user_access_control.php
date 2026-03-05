@@ -76,6 +76,19 @@ foreach ($defaultAccessByRole as $role => $data) {
     }
 }
 
+$normalizePermission = static fn($permission): string => trim(strip_tags((string) $permission));
+$accessControlSettingKey = 'user_access_control_matrix';
+
+$settingsStmt = $pdo->prepare("SELECT setting_value FROM system_settings WHERE setting_key = ? LIMIT 1");
+$settingsStmt->execute([$accessControlSettingKey]);
+$storedMatrixRaw = $settingsStmt->fetchColumn();
+$hasStoredMatrix = is_string($storedMatrixRaw) && $storedMatrixRaw !== '';
+if ($hasStoredMatrix) {
+    $decodedMatrix = json_decode($storedMatrixRaw, true);
+    if (is_array($decodedMatrix)) {
+        $sessionMatrix = $decodedMatrix;
+    }
+}
 $sessionMatrix = $_SESSION['sys_admin_user_access_control'] ?? [];
 $sessionByRole = [];
 foreach ($sessionMatrix as $entry) {
@@ -97,7 +110,7 @@ foreach ($requiredRoleOrder as $roleName) {
 
     $normalizedPermissions = array_values(array_intersect(
         $flattenedOptionsByRole[$roleName],
-        array_map(static fn($permission) => sanitize((string) $permission), $savedPermissions)
+        array_map($normalizePermission, $savedPermissions)
     ));
 
     $accessMatrix[] = [
@@ -111,6 +124,17 @@ foreach ($requiredRoleOrder as $roleName) {
 
 $_SESSION['sys_admin_user_access_control'] = $accessMatrix;
 $message = '';
+
+$settingsUpsertStmt = $pdo->prepare("
+    INSERT INTO system_settings (setting_key, setting_value, updated_by)
+    VALUES (?, ?, ?)
+    ON DUPLICATE KEY UPDATE setting_value = VALUES(setting_value), updated_by = VALUES(updated_by)
+");
+$currentUserId = $_SESSION['user']['id'] ?? null;
+if (!$hasStoredMatrix) {
+    $settingsUpsertStmt->execute([$accessControlSettingKey, json_encode($accessMatrix), $currentUserId]);
+}
+
 $editingIndex = isset($_GET['edit']) ? (int) $_GET['edit'] : -1;
 
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
@@ -125,11 +149,12 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $submittedPermissions = [];
         }
 
-        $sanitizedPermissions = array_map(static fn($permission) => sanitize((string) $permission), $submittedPermissions);
+        $sanitizedPermissions = array_map($normalizePermission, $submittedPermissions);   
         $accessMatrix[$managedIndex]['permissions'] = array_values(array_intersect($allowed, $sanitizedPermissions));
         $accessMatrix[$managedIndex]['manage'] = (($_POST['manage_state'][$managedIndex] ?? 'enabled') === 'enabled');
 
         $_SESSION['sys_admin_user_access_control'] = $accessMatrix;
+        $settingsUpsertStmt->execute([$accessControlSettingKey, json_encode($accessMatrix), $currentUserId]);
         $message = sprintf('%s role access updated successfully.', $roleName);
         $editingIndex = $managedIndex;
 
@@ -145,6 +170,25 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $previousMatrix,
             $accessMatrix
         );
+        
+        if (isset($_POST['realtime_update'])) {
+            header('Content-Type: application/json');
+            echo json_encode([
+                'ok' => true,
+                'message' => sprintf('%s access updated.', $roleName),
+                'permission_count' => count($accessMatrix[$managedIndex]['permissions']),
+                'manage' => $accessMatrix[$managedIndex]['manage'],
+            ]);
+            exit;
+        }
+    } elseif (isset($_POST['realtime_update'])) {
+        header('Content-Type: application/json');
+        http_response_code(422);
+        echo json_encode([
+            'ok' => false,
+            'message' => 'Unable to update access for the selected role.',
+        ]);
+        exit;
     }
 }
 ?>
@@ -192,7 +236,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             <p class="text-muted">Click Manage to configure the arranged module permissions for each role.</p>
         </div>
 
-        <form method="POST">
+        <form method="POST" id="access-control-form">
             <?php echo csrf_field(); ?>
             <div class="table-responsive">
                 <table class="access-table">
@@ -214,7 +258,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                                 </small>
                             </td>
                             <td class="permission-summary">
-                                <?php echo count($access['permissions']); ?> permissions selected
+                                <span data-permission-count="<?php echo $index; ?>"><?php echo count($access['permissions']); ?></span> permissions selected
                             </td>
                             <td class="text-muted"><?php echo htmlspecialchars($access['description']); ?></td>
                             <td>
@@ -226,7 +270,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                         <?php if ($editingIndex === $index): ?>
                             <tr>
                                 <td colspan="4">
-                                    <div class="manage-panel">
+                                    <div class="manage-panel" data-manage-index="<?php echo $index; ?>">
                                         <?php foreach ($access['modules'] as $module => $items): ?>
                                             <div class="module-block">
                                                 <div class="module-title"><?php echo htmlspecialchars($module); ?></div>
@@ -249,7 +293,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
                                         <div class="form-group mt-2">
                                             <label>Role Access State</label>
-                                            <select name="manage_state[<?php echo $index; ?>]" class="form-control">
+                                            <select name="manage_state[<?php echo $index; ?>]" class="form-control" data-manage-state="<?php echo $index; ?>">
                                                 <option value="enabled" <?php echo $access['manage'] ? 'selected' : ''; ?>>Enabled</option>
                                                 <option value="disabled" <?php echo !$access['manage'] ? 'selected' : ''; ?>>Disabled</option>
                                             </select>
@@ -260,6 +304,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                                                 <i class="fas fa-save"></i> Save <?php echo htmlspecialchars($access['role_name']); ?> Access
                                             </button>
                                             <a href="user_access_control.php" class="btn btn-outline-secondary btn-sm">Close</a>
+                                            <small class="text-muted" data-realtime-status></small>
                                         </div>
                                     </div>
                                 </td>
@@ -272,6 +317,82 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         </form>
     </div>
 </div>
+
+<script>
+(() => {
+    const form = document.getElementById('access-control-form');
+    if (!form) return;
+
+    const panel = document.querySelector('.manage-panel[data-manage-index]');
+    if (!panel) return;
+
+    const index = panel.getAttribute('data-manage-index');
+    const statusNode = panel.querySelector('[data-realtime-status]');
+    const countNode = document.querySelector(`[data-permission-count="${index}"]`);
+    let pendingTimer = null;
+
+    const setStatus = (text, kind = 'muted') => {
+        if (!statusNode) return;
+        statusNode.textContent = text;
+        statusNode.className = kind === 'error' ? 'text-danger' : (kind === 'success' ? 'text-success' : 'text-muted');
+    };
+
+    const sendRealtimeUpdate = async () => {
+        const formData = new FormData();
+        const csrf = form.querySelector('input[name="csrf_token"]')?.value || '';
+        formData.append('csrf_token', csrf);
+        formData.append('manage_role', index);
+        formData.append('realtime_update', '1');
+
+        const manageState = panel.querySelector(`[data-manage-state="${index}"]`);
+        if (manageState) {
+            formData.append(`manage_state[${index}]`, manageState.value);
+        }
+
+        panel.querySelectorAll(`input[type="checkbox"][name="permissions[${index}][]"]:checked`).forEach((checkbox) => {
+            formData.append(`permissions[${index}][]`, checkbox.value);
+        });
+
+        setStatus('Saving...', 'muted');
+        try {
+            const response = await fetch('user_access_control.php', {
+                method: 'POST',
+                body: formData,
+                credentials: 'same-origin',
+                headers: { 'X-Requested-With': 'XMLHttpRequest' }
+            });
+            const payload = await response.json();
+            if (!response.ok || !payload.ok) {
+                throw new Error(payload.message || 'Save failed');
+            }
+
+            if (countNode && typeof payload.permission_count === 'number') {
+                countNode.textContent = String(payload.permission_count);
+            }
+            setStatus('Saved', 'success');
+        } catch (error) {
+            setStatus('Unable to save in real-time.', 'error');
+        }
+    };
+
+    const queueUpdate = () => {
+        if (pendingTimer) {
+            window.clearTimeout(pendingTimer);
+        }
+        pendingTimer = window.setTimeout(sendRealtimeUpdate, 250);
+    };
+
+    panel.querySelectorAll(`input[type="checkbox"][name="permissions[${index}][]"]`).forEach((checkbox) => {
+        checkbox.addEventListener('change', queueUpdate);
+    });
+
+    const manageState = panel.querySelector(`[data-manage-state="${index}"]`);
+    if (manageState) {
+        manageState.addEventListener('change', queueUpdate);
+    }
+})();
+</script>
+
 <?php sys_admin_footer(); ?>
 </body>
 </html>

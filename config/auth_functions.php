@@ -9,6 +9,72 @@ function is_logged_in() {
     return isset($_SESSION['user']);
 }
 
+function role_access_matrix_setting_key(): string {
+    return 'user_access_control_matrix';
+}
+
+function role_access_label(?string $role): ?string {
+    if ($role === null) {
+        return null;
+    }
+
+    $normalized = strtolower(trim($role));
+    return match ($normalized) {
+        'owner' => 'Owner',
+        'hr' => 'HR',
+        'staff', 'employee' => 'Staff',
+        'client' => 'Client',
+        default => null,
+    };
+}
+
+function can_role_login(?string $role, ?PDO $pdo = null): bool {
+    $roleLabel = role_access_label($role);
+    if ($roleLabel === null) {
+        return true;
+    }
+
+    $pdo = $pdo instanceof PDO ? $pdo : ($GLOBALS['pdo'] ?? null);
+    if (!$pdo instanceof PDO) {
+        return true;
+    }
+
+    try {
+        $stmt = $pdo->prepare('SELECT setting_value FROM system_settings WHERE setting_key = ? LIMIT 1');
+        $stmt->execute([role_access_matrix_setting_key()]);
+        $rawValue = $stmt->fetchColumn();
+    } catch (Throwable $e) {
+        return true;
+    }
+
+    if (!is_string($rawValue) || $rawValue === '') {
+        return true;
+    }
+
+    $matrix = json_decode($rawValue, true);
+    if (!is_array($matrix)) {
+        return true;
+    }
+
+    foreach ($matrix as $entry) {
+        if (!is_array($entry) || ($entry['role_name'] ?? null) !== $roleLabel) {
+            continue;
+        }
+
+        if (array_key_exists('manage', $entry) && !$entry['manage']) {
+            return false;
+        }
+
+        $permissions = $entry['permissions'] ?? [];
+        if (!is_array($permissions)) {
+            return false;
+        }
+
+        return in_array('Authentication: Login / Logout', $permissions, true);
+    }
+
+    return true;
+}
 function is_active_user(): bool {
     if (!isset($_SESSION['user'])) {
         return false;
@@ -64,6 +130,12 @@ function require_role($roles)
     }
 
     if (!in_array($userRole, $roles, true)) {
+        header("Location: /auth/login.php");
+        exit;
+    }
+    
+    if (!can_role_login($userRole)) {
+        end_user_session();
         header("Location: /auth/login.php");
         exit;
     }
