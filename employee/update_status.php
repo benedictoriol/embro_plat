@@ -545,10 +545,14 @@ if(isset($_POST['update_status'])) {
                     <li><a href="assigned_jobs.php" class="nav-link">My Jobs</a></li>
                     <li><a href="schedule.php" class="nav-link">Schedule</a></li>
                 <?php endif; ?>
-                <?php if($can_update_status || $can_upload_photos): ?>
-                    <li><a href="update_status.php" class="nav-link active">Job Updates</a></li>
+                <?php if(!empty($staff_permissions['update_status'])): ?>
+                    <li><a href="update_status.php" class="nav-link active">Update Status</a></li>
                 <?php endif; ?>
-                <li><a href="../auth/logout.php" class="nav-link">Logout</a></li>
+                <?php if(!empty($staff_permissions['upload_photos'])): ?>
+                    <li><a href="upload_photos.php" class="nav-link">Upload Photos</a></li>
+                <?php endif; ?>
+                <li><a href="profile.php" class="dropdown-item"><i class="fas fa-user-cog"></i> Profile</a></li>
+                <li><a href="../auth/logout.php" class="dropdown-item"><i class="fas fa-sign-out-alt"></i> Logout</a></li>
             </ul>
         </div>
     </nav>

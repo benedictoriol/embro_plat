@@ -305,6 +305,7 @@ $status_labels = [
 ];
 
 $dashboard_link = $role === 'owner' ? '../owner/dashboard.php' : 'dashboard.php';
+$active_page = 'payroll';
 ?>
 <!DOCTYPE html>
 <html lang="en">
@@ -397,18 +398,17 @@ $dashboard_link = $role === 'owner' ? '../owner/dashboard.php' : 'dashboard.php'
     <nav class="navbar navbar--compact">
         <div class="container d-flex justify-between align-center">
             <a href="<?php echo $dashboard_link; ?>" class="navbar-brand">
-                <i class="fas fa-people-group"></i> <?php echo $display_name; ?>
+                <i class="fas fa-users"></i> Staff Portal
             </a>
             <ul class="navbar-nav">
-                <li><a href="<?php echo $dashboard_link; ?>" class="nav-link">Dashboard</a></li>
-                <?php if ($role === 'hr'): ?>
-                    <li><a href="hiring_management.php" class="nav-link">Hiring</a></li>
-                    <li><a href="staff_productivity_performance.php" class="nav-link">Productivity</a></li>
-                    <li><a href="payroll_compensation.php" class="nav-link active">Payroll</a></li>
-                    <li><a href="analytics_reporting.php" class="nav-link">Analytics</a></li>
-                <?php else: ?>
-                    <li><a href="payroll_compensation.php" class="nav-link active">Payroll</a></li>
-                <?php endif; ?>
+                <li><a href="<?php echo $dashboard_link; ?>" class="nav-link <?php echo $active_page === 'dashboard' ? 'active' : ''; ?>">Dashboard</a></li>
+                <li><a href="hiring_management.php" class="nav-link <?php echo $active_page === 'hiring' ? 'active' : ''; ?>">Hiring</a></li>
+                <li><a href="create_staff.php" class="nav-link <?php echo $active_page === 'create_staff' ? 'active' : ''; ?>">Create Staff</a></li>
+                <li><a href="attendance_management.php" class="nav-link <?php echo $active_page === 'attendance' ? 'active' : ''; ?>">Attendance</a></li>
+                <li><a href="staff_productivity_performance.php" class="nav-link <?php echo $active_page === 'productivity' ? 'active' : ''; ?>">Productivity</a></li>
+                <li><a href="payroll_compensation.php" class="nav-link <?php echo $active_page === 'payroll' ? 'active' : ''; ?>">Payroll</a></li>
+                <li><a href="analytics_reporting.php" class="nav-link <?php echo $active_page === 'analytics' ? 'active' : ''; ?>">Analytics</a></li>
+                <li><a href="notification_preferences.php" class="nav-link <?php echo $active_page === 'preferences' ? 'active' : ''; ?>">Preferences</a></li>
                 <li><a href="../auth/logout.php" class="nav-link">Logout</a></li>
             </ul>
         </div>

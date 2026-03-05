@@ -14,7 +14,7 @@ require_once 'config/db.php';
 </head>
 <body>
     <!-- Navigation -->
-    <nav class="navbar">
+    <nav class="navbar navbar--top-home">
         <div class="container d-flex justify-between align-center">
             <a href="index.php" class="navbar-brand">
                 <i class="fas fa-threads"></i> Embroidery Platform

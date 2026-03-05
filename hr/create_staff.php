@@ -147,6 +147,7 @@ if (isset($_POST['add_staff'])) {
         $error = "Failed to add staff: " . $e->getMessage();
     }
 }
+$active_page = 'create_staff';
 ?>
 <!DOCTYPE html>
 <html lang="en">
@@ -161,15 +162,16 @@ if (isset($_POST['add_staff'])) {
     <nav class="navbar navbar--compact">
         <div class="container d-flex justify-between align-center">
             <a href="dashboard.php" class="navbar-brand">
-                <i class="fas fa-people-group"></i> <?php echo htmlspecialchars($_SESSION['user']['fullname'] ?? 'HR'); ?>
+                <i class="fas fa-users"></i> Staff Portal
             </a>
             <ul class="navbar-nav">
-                <li><a href="dashboard.php" class="nav-link">Dashboard</a></li>
-                <li><a href="hiring_management.php" class="nav-link">Hiring</a></li>
-                <li><a href="create_staff.php" class="nav-link active">Create Staff</a></li>
-                <li><a href="staff_productivity_performance.php" class="nav-link">Productivity</a></li>
-                <li><a href="payroll_compensation.php" class="nav-link">Payroll</a></li>
-                <li><a href="analytics_reporting.php" class="nav-link">Analytics</a></li>
+                <li><a href="dashboard.php" class="nav-link <?php echo $active_page === 'dashboard' ? 'active' : ''; ?>">Dashboard</a></li>
+                <li><a href="hiring_management.php" class="nav-link <?php echo $active_page === 'hiring' ? 'active' : ''; ?>">Hiring</a></li>
+                <li><a href="create_staff.php" class="nav-link <?php echo $active_page === 'create_staff' ? 'active' : ''; ?>">Create Staff</a></li>
+                <li><a href="attendance_management.php" class="nav-link <?php echo $active_page === 'attendance' ? 'active' : ''; ?>">Attendance</a></li>
+                <li><a href="staff_productivity_performance.php" class="nav-link <?php echo $active_page === 'productivity' ? 'active' : ''; ?>">Productivity</a></li>
+                <li><a href="payroll_compensation.php" class="nav-link <?php echo $active_page === 'payroll' ? 'active' : ''; ?>">Payroll</a></li>
+                <li><a href="analytics_reporting.php" class="nav-link <?php echo $active_page === 'analytics' ? 'active' : ''; ?>">Analytics</a></li>
                 <li><a href="../auth/logout.php" class="nav-link">Logout</a></li>
             </ul>
         </div>

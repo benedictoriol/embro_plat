@@ -160,14 +160,8 @@ if ($can_view_jobs) {
                 <?php if($can_upload_photos): ?>
                     <li><a href="upload_photos.php" class="nav-link">Upload Photos</a></li>
                 <?php endif; ?>
-                <li class="dropdown">
-                    <a href="#" class="nav-link dropdown-toggle">
-                        <i class="fas fa-user"></i> <?php echo $_SESSION['user']['fullname']; ?>
-                    </a>
-                    <div class="dropdown-menu">
-                        <a href="profile.php" class="dropdown-item"><i class="fas fa-user-cog"></i> Profile</a>
-                        <a href="../auth/logout.php" class="dropdown-item"><i class="fas fa-sign-out-alt"></i> Logout</a>
-                    </div>
+                <li><a href="profile.php" class="dropdown-item"><i class="fas fa-user-cog"></i> Profile</a></li>
+                <li><a href="../auth/logout.php" class="dropdown-item"><i class="fas fa-sign-out-alt"></i> Logout</a></li>
                 </li>
             </ul>
         </div>

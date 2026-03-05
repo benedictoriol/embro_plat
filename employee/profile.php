@@ -102,18 +102,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             <ul class="navbar-nav">
                 <li><a href="dashboard.php" class="nav-link">Dashboard</a></li>
                 <li><a href="assigned_jobs.php" class="nav-link">My Jobs</a></li>
+                <li><a href="schedule.php" class="nav-link">Schedule</a></li>
                 <li><a href="update_status.php" class="nav-link">Update Status</a></li>
                 <li><a href="upload_photos.php" class="nav-link">Upload Photos</a></li>
-                <li><a href="schedule.php" class="nav-link">Schedule</a></li>
-                <li class="dropdown">
-                    <a href="#" class="nav-link dropdown-toggle active">
-                        <i class="fas fa-user"></i> <?php echo htmlspecialchars($_SESSION['user']['fullname']); ?>
-                    </a>
-                    <div class="dropdown-menu">
-                        <a href="profile.php" class="dropdown-item"><i class="fas fa-user-cog"></i> Profile</a>
-                        <a href="../auth/logout.php" class="dropdown-item"><i class="fas fa-sign-out-alt"></i> Logout</a>
-                    </div>
-                </li>
+                <li><a href="profile.php" class="dropdown-item"><i class="fas fa-user-cog"></i> Profile</a></li>
+                <li><a href="../auth/logout.php" class="dropdown-item"><i class="fas fa-sign-out-alt"></i> Logout</a></li>
             </ul>
         </div>
     </nav>

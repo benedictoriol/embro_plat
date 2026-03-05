@@ -107,14 +107,8 @@ foreach ($pref_stmt->fetchAll() as $row) {
             <ul class="navbar-nav">
                 <li><a href="dashboard.php" class="nav-link">Dashboard</a></li>
                 <li><a href="notification_preferences.php" class="nav-link active">Preferences</a></li>
-                <li class="dropdown">
-                    <a href="#" class="nav-link dropdown-toggle">
-                        <i class="fas fa-user-circle"></i> <?php echo htmlspecialchars($_SESSION['user']['fullname']); ?>
-                    </a>
-                    <div class="dropdown-menu">
-                        <a href="../auth/logout.php" class="dropdown-item"><i class="fas fa-sign-out-alt"></i> Logout</a>
-                    </div>
-                </li>
+                <li><a href="profile.php" class="dropdown-item"><i class="fas fa-user-cog"></i> Profile</a></li>
+                <li><a href="../auth/logout.php" class="dropdown-item"><i class="fas fa-sign-out-alt"></i> Logout</a></li>
             </ul>
         </div>
     </nav>

@@ -71,9 +71,6 @@ function sys_admin_nav(string $activePage): void {
                         <i class="fas fa-sign-out-alt"></i> Logout
                     </a>
                 </li>
-                <li>
-                    <span class="nav-link"><i class="fas fa-user-circle"></i> <?php echo $userName; ?></span>
-                </li>
             </ul>
         </div>
     </nav>
