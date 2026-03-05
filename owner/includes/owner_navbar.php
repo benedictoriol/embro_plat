@@ -42,8 +42,7 @@ $is_active = static function (string $key) use ($active_groups, $current_page): 
         </a>
         <ul class="navbar-nav">
             <li><a href="dashboard.php" class="nav-link <?php echo $is_active('dashboard') ? 'active' : ''; ?>">Dashboard</a></li>
-            <li><a href="shop_profile.php" class="nav-link <?php echo $is_active('shop_profile') ? 'active' : ''; ?>">Shop Profile</a></li>
-            <li><a href="pricing_management.php" class="nav-link <?php echo $is_active('pricing') ? 'active' : ''; ?>">Pricing</a></li>
+            <li><a href="profile.php" class="nav-link <?php echo $is_active('shop_profile') ? 'active' : ''; ?>">Shop Profile</a></li>            <li><a href="pricing_management.php" class="nav-link <?php echo $is_active('pricing') ? 'active' : ''; ?>">Pricing</a></li>
             <li><a href="manage_staff.php" class="nav-link <?php echo $is_active('staff') ? 'active' : ''; ?>">Staff</a></li>
             <li><a href="shop_orders.php" class="nav-link <?php echo $is_active('orders') ? 'active' : ''; ?>">Orders</a></li>
             <li><a href="quotation_requests.php" class="nav-link <?php echo $current_page === 'quotation_requests.php' ? 'active' : ''; ?>">Quote Requests</a></li>
