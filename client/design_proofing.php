@@ -11,6 +11,26 @@ $error = '';
 $success = '';
 $max_upload_mb = (int) ceil(MAX_FILE_SIZE / (1024 * 1024));
 
+$default_pricing_settings = [
+    'base_prices' => [
+        'T-shirt Embroidery' => 180,
+        'Logo Embroidery' => 160,
+        'Cap Embroidery' => 150,
+        'Bag Embroidery' => 200,
+        'Custom' => 200,
+    ],
+    'thread_color_pricing' => [
+        ['number_of_colors' => 1, 'price' => 0],
+        ['number_of_colors' => 2, 'price' => 30],
+        ['number_of_colors' => 3, 'price' => 60],
+    ],
+    'size_pricing' => [
+        ['width' => 4, 'length' => 4, 'price' => 120],
+        ['width' => 6, 'length' => 6, 'price' => 180],
+        ['width' => 8, 'length' => 8, 'price' => 260],
+    ],
+];
+
 function is_design_image(?string $filename): bool {
     if(!$filename) {
         return false;
@@ -94,7 +114,62 @@ function decode_quote_details(?string $raw_quote_details): array {
     return is_array($decoded) ? $decoded : [];
 }
 
-function estimate_design_quote_from_image(?string $image_path, ?int $fallback_width = null, ?int $fallback_height = null, ?int $fallback_colors = null): array {
+function resolve_pricing_settings(array $shop, array $defaults): array {
+    if(!empty($shop['pricing_settings'])) {
+        $decoded = json_decode($shop['pricing_settings'], true);
+        if(is_array($decoded)) {
+            return array_replace_recursive($defaults, $decoded);
+        }
+    }
+
+    return $defaults;
+}
+
+function resolve_thread_color_charge(int $color_count, array $thread_color_pricing): float {
+    if($color_count <= 0 || empty($thread_color_pricing)) {
+        return 0.0;
+    }
+
+    usort($thread_color_pricing, static fn($a, $b) => ((int) ($a['number_of_colors'] ?? 0)) <=> ((int) ($b['number_of_colors'] ?? 0)));
+    $charge = 0.0;
+    foreach($thread_color_pricing as $tier) {
+        $tier_colors = max(1, (int) ($tier['number_of_colors'] ?? 1));
+        $tier_price = max(0, (float) ($tier['price'] ?? 0));
+        if($color_count >= $tier_colors) {
+            $charge = $tier_price;
+            continue;
+        }
+        break;
+    }
+
+    return $charge;
+}
+
+function resolve_size_charge(float $width_in, float $height_in, array $size_pricing): float {
+    if($width_in <= 0 || $height_in <= 0 || empty($size_pricing)) {
+        return 0.0;
+    }
+
+    usort($size_pricing, static function($a, $b) {
+        $a_area = ((float) ($a['width'] ?? 0)) * ((float) ($a['length'] ?? 0));
+        $b_area = ((float) ($b['width'] ?? 0)) * ((float) ($b['length'] ?? 0));
+        return $a_area <=> $b_area;
+    });
+
+    $area = $width_in * $height_in;
+    foreach($size_pricing as $tier) {
+        $tier_area = max(0.0, ((float) ($tier['width'] ?? 0)) * ((float) ($tier['length'] ?? 0)));
+        $tier_price = max(0.0, (float) ($tier['price'] ?? 0));
+        if($area <= $tier_area && $tier_area > 0) {
+            return $tier_price;
+        }
+    }
+
+    $largest_tier = end($size_pricing);
+    return max(0.0, (float) ($largest_tier['price'] ?? 0));
+}
+
+function estimate_design_quote_from_image(?string $image_path, string $service_type, array $shop_pricing_settings, ?int $fallback_width = null, ?int $fallback_height = null, ?int $fallback_colors = null): array {
     $width = max(0, (int) ($fallback_width ?? 0));
     $height = max(0, (int) ($fallback_height ?? 0));
     $color_count = max(0, (int) ($fallback_colors ?? 0));
@@ -144,9 +219,15 @@ function estimate_design_quote_from_image(?string $image_path, ?int $fallback_wi
     }
 
     $area_sq_in = max(1, ($width / 300) * ($height / 300));
-    $base_price = 180;
-    $size_charge = round($area_sq_in * 55, 2);
-    $color_charge = $color_count <= 4 ? 0 : ($color_count <= 8 ? 60 : ($color_count <= 16 ? 120 : 180));
+    $width_in = max(1, $width / 300);
+    $height_in = max(1, $height / 300);
+    $base_prices = is_array($shop_pricing_settings['base_prices'] ?? null) ? $shop_pricing_settings['base_prices'] : [];
+    $thread_color_pricing = is_array($shop_pricing_settings['thread_color_pricing'] ?? null) ? $shop_pricing_settings['thread_color_pricing'] : [];
+    $size_pricing = is_array($shop_pricing_settings['size_pricing'] ?? null) ? $shop_pricing_settings['size_pricing'] : [];
+
+    $base_price = max(0, (float) ($base_prices[$service_type] ?? ($base_prices['Custom'] ?? 180)));
+    $size_charge = resolve_size_charge($width_in, $height_in, $size_pricing);
+    $color_charge = resolve_thread_color_charge($color_count, $thread_color_pricing);
     $estimated_price = round(($base_price + $size_charge + $color_charge) / 5) * 5;
 
     return [
@@ -195,7 +276,7 @@ if(isset($_POST['request_quote'])) {
         $error = 'Please provide your design requirements so the shop can prepare proofing and quotation.';
     }
 
-    $shop_stmt = $pdo->prepare("SELECT id, owner_id, shop_name FROM shops WHERE id = ? AND status = 'active' LIMIT 1");
+    $shop_stmt = $pdo->prepare("SELECT id, owner_id, shop_name, pricing_settings FROM shops WHERE id = ? AND status = 'active' LIMIT 1");
     $shop_stmt->execute([$shop_id]);
     $shop = $shop_stmt->fetch();
 
@@ -239,7 +320,15 @@ if(isset($_POST['request_quote'])) {
             $uploaded_design_abs_path = media_upload_dir('designs') . '/' . basename($uploaded_design_file);
         }
 
-        $design_estimate = estimate_design_quote_from_image($uploaded_design_abs_path, $uploaded_width, $uploaded_height, $uploaded_colors);
+        $shop_pricing_settings = resolve_pricing_settings($shop, $default_pricing_settings);
+        $design_estimate = estimate_design_quote_from_image(
+            $uploaded_design_abs_path,
+            $service_type,
+            $shop_pricing_settings,
+            $uploaded_width,
+            $uploaded_height,
+            $uploaded_colors
+        );
         if($design_estimate['estimated_price'] === null && $uploaded_estimate > 0) {
             $design_estimate['estimated_price'] = $uploaded_estimate;
         }
