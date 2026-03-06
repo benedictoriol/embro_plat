@@ -9,7 +9,6 @@ $active_groups = [
     'staff' => ['manage_staff.php', 'add_staff.php', 'edit_employee.php', 'create_hr.php'],
     'orders' => ['shop_orders.php', 'quotation_requests.php', 'view_order.php', 'accept_order.php', 'reject_order.php', 'view_invoice.php', 'view_receipt.php'],
     'community' => ['client_community_posts.php', 'shop_posting_content.php'],
-    'reviews' => ['reviews.php'],
     'messages' => ['messages.php'],
     'delivery' => ['delivery_management.php'],
     'finance' => ['payment_verifications.php', 'earnings.php'],
@@ -46,7 +45,6 @@ $is_active = static function (string $key) use ($active_groups, $current_page): 
             <li><a href="shop_orders.php" class="nav-link <?php echo $is_active('orders') ? 'active' : ''; ?>">Orders</a></li>
             <li><a href="quotation_requests.php" class="nav-link <?php echo $current_page === 'quotation_requests.php' ? 'active' : ''; ?>">Quote Requests</a></li>
             <li><a href="client_community_posts.php" class="nav-link <?php echo $is_active('community') ? 'active' : ''; ?>">Community Posts</a></li>
-            <li><a href="reviews.php" class="nav-link <?php echo $is_active('reviews') ? 'active' : ''; ?>">Reviews</a></li>
             <li><a href="messages.php" class="nav-link <?php echo $is_active('messages') ? 'active' : ''; ?>">Messages</a></li>
             <li><a href="delivery_management.php" class="nav-link <?php echo $is_active('delivery') ? 'active' : ''; ?>">Delivery & Pickup</a></li>
             <li><a href="payment_verifications.php" class="nav-link <?php echo $current_page === 'payment_verifications.php' ? 'active' : ''; ?>">Payments</a></li>
