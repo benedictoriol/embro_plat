@@ -344,23 +344,18 @@ h6 {
     transition: all var(--transition-fast);
     position: relative;
     width: 100%;
-    overflow: hidden;
 }
 
 .nav-link:hover {
-    color: var(--primary-700);
-    background: linear-gradient(90deg, var(--primary-100) 0%, var(--primary-50) 100%);
-    box-shadow: var(--shadow-sm);
-    transform: translateX(4px);
+    color: var(--primary-600);
+    background: var(--primary-50);
 }
 
 .nav-link.active {
     color: var(--primary-700);
-    background: linear-gradient(90deg, var(--primary-100) 0%, var(--primary-50) 100%);
-    box-shadow: var(--shadow-sm);
+    background: var(--primary-50);
 }
 
-.nav-link:hover::after,
 .nav-link.active::after {
     content: '';
     position: absolute;
@@ -1161,9 +1156,8 @@ h6 {
 }
 
 .sidebar-link:hover {
-    background: linear-gradient(90deg, rgba(255, 255, 255, 0.22) 0%, rgba(255, 255, 255, 0.08) 100%);
+    background: rgba(255, 255, 255, 0.1);
     color: white;
-    transform: translateX(4px);
 }
 
 .sidebar-link.active {
