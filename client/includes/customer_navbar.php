@@ -30,3 +30,4 @@ $isCustomerProfileActive = $currentPage === 'customer_profile.php';
         </ul>
     </div>
 </nav>
+<?php require_once __DIR__ . '/client_messages.php'; ?>

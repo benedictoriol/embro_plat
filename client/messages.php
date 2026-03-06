@@ -92,6 +92,10 @@ if ($active_shop) {
     <link rel="stylesheet" href="../assets/css/style.css">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
     <style>
+        .container {
+            max-width: 1120px;
+            margin: 0 auto;
+        }
         .messages-layout {
             display: grid;
             grid-template-columns: 300px 1fr;
