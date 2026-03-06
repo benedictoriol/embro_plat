@@ -665,6 +665,16 @@ unset($request);
             background: var(--bg-secondary);
         }
 
+        .upload-preview-media {
+            margin-top: 0.75rem;
+            width: 100%;
+            max-height: 280px;
+            border: 1px solid var(--gray-200);
+            border-radius: var(--radius);
+            background: #fff;
+            object-fit: contain;
+        }
+
         .quote-meta {
             border: 1px solid var(--gray-200);
             border-radius: var(--radius);
@@ -943,6 +953,7 @@ unset($request);
         const designColorCountInput = document.getElementById('designColorCountInput');
         const estimatedDesignPriceInput = document.getElementById('estimatedDesignPriceInput');
         const uploadEstimateLabel = document.getElementById('uploadEstimateLabel');
+        let activePreviewUrl = null;
 
         function resetEstimateFields() {
             if (designWidthInput) designWidthInput.value = '0';
@@ -1024,6 +1035,12 @@ unset($request);
         function refreshUploadPreview() {
             if(!designFileInput || !uploadPreview) return;
             const file = designFileInput.files && designFileInput.files[0];
+            
+            if (activePreviewUrl) {
+                URL.revokeObjectURL(activePreviewUrl);
+                activePreviewUrl = null;
+            }
+
             if(!file) {
                 uploadPreview.style.display = 'none';
                 uploadPreview.innerHTML = '';
@@ -1031,8 +1048,29 @@ unset($request);
                 return;
             }
 
+            const fileSizeKb = Math.max(1, Math.round(file.size / 1024));
+            activePreviewUrl = URL.createObjectURL(file);
+            const isImage = file.type.startsWith('image/');
+            const isPdf = file.type === 'application/pdf';
+            let previewMarkup = '';
+
+            if (isImage) {
+                previewMarkup = `<img src="${activePreviewUrl}" alt="Selected image preview" class="upload-preview-media">`;
+            } else if (isPdf) {
+                previewMarkup = `<iframe src="${activePreviewUrl}" title="Selected PDF preview" class="upload-preview-media"></iframe>`;
+            }
+
             uploadPreview.style.display = 'block';
-            uploadPreview.innerHTML = `<strong>Selected file:</strong> ${file.name} (${Math.max(1, Math.round(file.size / 1024))} KB)<br><button type="button" class="btn btn-outline-danger btn-sm" id="removeUploadBtn"><i class="fas fa-trash"></i> Remove selected design</button>`;
+            uploadPreview.innerHTML = `
+                <strong>Selected file:</strong> ${file.name} (${fileSizeKb} KB)
+                <div class="mt-2">
+                    <a href="${activePreviewUrl}" target="_blank" rel="noopener" class="btn btn-sm btn-outline">
+                        <i class="fas fa-eye"></i> View selected file
+                    </a>
+                    <button type="button" class="btn btn-outline-danger btn-sm" id="removeUploadBtn"><i class="fas fa-trash"></i> Remove selected design</button>
+                </div>
+                ${previewMarkup}
+            `;
             const removeBtn = document.getElementById('removeUploadBtn');
             if(removeBtn) {
                 removeBtn.addEventListener('click', () => {
