@@ -15,7 +15,6 @@ $isCustomerProfileActive = $currentPage === 'customer_profile.php';
         <ul class="navbar-nav">
             <li><a href="dashboard.php" class="nav-link<?php echo $isHomeActive ? ' active' : ''; ?>">Home</a></li>
             <li><a href="track_order.php" class="nav-link<?php echo $currentPage === 'track_order.php' ? ' active' : ''; ?>">Track Orders</a></li>
-            <li><a href="rate_provider.php" class="nav-link<?php echo $currentPage === 'rate_provider.php' ? ' active' : ''; ?>">Rate Orders</a></li>
             <li><a href="payment_handling.php" class="nav-link<?php echo $currentPage === 'payment_handling.php' ? ' active' : ''; ?>">Payment Methods</a></li>
             <li><a href="design_editor.php" class="nav-link<?php echo $currentPage === 'design_editor.php' || $currentPage === 'customize_design.php' ? ' active' : ''; ?>">Customize Design</a></li>
             <li><a href="design_proofing.php" class="nav-link<?php echo $currentPage === 'design_proofing.php' || $currentPage === 'pricing_quotation.php' ? ' active' : ''; ?>">Design Proofing & Quotation</a></li>

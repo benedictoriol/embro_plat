@@ -449,11 +449,17 @@ h6 {
     display: none;
 }
 
-.navbar--top-home ~ * {
+.navbar:not(.navbar--top-home)~* {
+    margin-left: 280px;
+}
+
+.navbar--top-home~* {
     margin-left: 0;
 }
-.navbar~* {
-    margin-left: 280px;
+
+.home-main {
+    width: 100%;
+    margin-left: 0;
 }
 
 .dropdown:hover .dropdown-menu {

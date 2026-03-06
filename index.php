@@ -1,6 +1,36 @@
 <?php
 session_start();
 require_once 'config/db.php';
+
+$dashboard_url = 'index.php';
+if (isset($_SESSION['user'])) {
+    switch ($_SESSION['user']['role']) {
+        case 'sys_admin':
+            $dashboard_url = 'sys_admin/dashboard.php';
+            break;
+        case 'owner':
+            $dashboard_url = 'owner/dashboard.php';
+            break;
+        case 'hr':
+            $dashboard_url = 'hr/dashboard.php';
+            break;
+        case 'staff':
+            $dashboard_url = 'employee/dashboard.php';
+            break;
+        case 'client':
+            $dashboard_url = 'client/search_discovery.php';
+            break;
+    }
+}
+
+try {
+    $total_shops = $pdo->query("SELECT COUNT(*) as count FROM shops WHERE status = 'active'")->fetch()['count'];
+    $total_orders = $pdo->query("SELECT COUNT(*) as count FROM orders")->fetch()['count'];
+    $total_users = $pdo->query("SELECT COUNT(*) as count FROM users")->fetch()['count'];
+    $completed_orders = $pdo->query("SELECT COUNT(*) as count FROM orders WHERE status = 'completed'")->fetch()['count'];
+} catch (Exception $e) {
+    $total_shops = $total_orders = $total_users = $completed_orders = 0;
+}
 ?>
 <!DOCTYPE html>
 <html lang="en">
@@ -26,17 +56,6 @@ require_once 'config/db.php';
                 <li><a href="#about" class="nav-link">About</a></li>
                 <li><a href="hiring_shops.php" class="nav-link">Hiring Shops</a></li>
                 <?php if(isset($_SESSION['user'])): ?>
-                    <?php 
-                    $dashboard_url = '';
-                    switch($_SESSION['user']['role']) {
-                        case 'sys_admin': $dashboard_url = 'sys_admin/dashboard.php'; break;
-                        case 'owner': $dashboard_url = 'owner/dashboard.php'; break;
-                        case 'hr': $dashboard_url = 'staff/dashboard.php'; break;
-                        case 'staff': $dashboard_url = 'staff/dashboard.php'; break;
-                        case 'client': $dashboard_url = 'client/search_discovery.php'; break;
-                        default: $dashboard_url = 'index.php'; break;
-                    }
-                    ?>
                     <li><a href="<?php echo $dashboard_url; ?>" class="nav-link">Dashboard</a></li>
                     <li><a href="auth/logout.php" class="nav-link">Logout</a></li>
                 <?php else: ?>
@@ -47,33 +66,34 @@ require_once 'config/db.php';
         </div>
     </nav>
 
-    <!-- Hero Section -->
-    <section class="hero-section">
-        <div class="container">
-            <h1 class="hero-title">Professional Embroidery Services Platform</h1>
-            <p class="hero-subtitle">
-                Connect with the best embroidery service providers. From custom designs to bulk orders, 
-                we provide a complete solution for all your embroidery needs.
-            </p>
-            <div class="hero-actions">
-                <?php if(!isset($_SESSION['user'])): ?>
-                    <a href="auth/register.php?type=client" class="btn btn-primary btn-lg">
-                        <i class="fas fa-shopping-cart"></i> Order Services
-                    </a>
-                    <a href="auth/register.php?type=owner" class="btn btn-outline-primary btn-lg">
-                        <i class="fas fa-store"></i> Register as Provider
-                    </a>
-                <?php else: ?>
-                    <a href="<?php echo $dashboard_url; ?>" class="btn btn-primary btn-lg">
-                        <i class="fas fa-tachometer-alt"></i> Go to Dashboard
-                    </a>
-                <?php endif; ?>
+    <main>
+        <!-- Hero Section -->
+        <section class="hero-section">
+            <div class="container">
+                <h1 class="hero-title">Professional Embroidery Services Platform</h1>
+                <p class="hero-subtitle">
+                    Connect with the best embroidery service providers. From custom designs to bulk orders,
+                    we provide a complete solution for all your embroidery needs.
+                </p>
+                <div class="hero-actions">
+                    <?php if(!isset($_SESSION['user'])): ?>
+                        <a href="auth/register.php?type=client" class="btn btn-primary btn-lg">
+                            <i class="fas fa-shopping-cart"></i> Order Services
+                        </a>
+                        <a href="auth/register.php?type=owner" class="btn btn-outline-primary btn-lg">
+                            <i class="fas fa-store"></i> Register as Provider
+                        </a>
+                    <?php else: ?>
+                        <a href="<?php echo $dashboard_url; ?>" class="btn btn-primary btn-lg">
+                            <i class="fas fa-tachometer-alt"></i> Go to Dashboard
+                        </a>
+                    <?php endif; ?>
+                </div>
             </div>
-        </div>
     </section>
 
     <!-- Features Section -->
-    <section id="features" class="section">
+        <section id="features" class="section">
         <div class="container">
             <h2 class="section-title">Why Choose Our Platform?</h2>
             <div class="feature-grid">
@@ -105,7 +125,7 @@ require_once 'config/db.php';
     </section>
 
     <!-- Roles Section -->
-    <section id="roles" class="section section-alt">
+        <section id="roles" class="section section-alt">
         <div class="container">
             <h2 class="section-title">Platform Roles</h2>
             <div class="role-grid">
@@ -131,17 +151,7 @@ require_once 'config/db.php';
     </section>
 
     <!-- Stats Section -->
-    <?php
-    try {
-        $total_shops = $pdo->query("SELECT COUNT(*) as count FROM shops WHERE status = 'active'")->fetch()['count'];
-        $total_orders = $pdo->query("SELECT COUNT(*) as count FROM orders")->fetch()['count'];
-        $total_users = $pdo->query("SELECT COUNT(*) as count FROM users")->fetch()['count'];
-        $completed_orders = $pdo->query("SELECT COUNT(*) as count FROM orders WHERE status = 'completed'")->fetch()['count'];
-    } catch(Exception $e) {
-        $total_shops = $total_orders = $total_users = $completed_orders = 0;
-    }
-    ?>
-    <section class="section" id="about">
+        <section class="section" id="about">
         <div class="container">
             <h2 class="section-title">Trusted by the Embroidery Community</h2>
             <div class="stats-grid">
@@ -169,15 +179,34 @@ require_once 'config/db.php';
         </div>
     </section>
 
+        <section class="section" id="quick-actions">
+            <div class="container">
+                <div class="quick-action-panel">
+                    <div>
+                        <h2>Quick Actions for Hiring & Applications</h2>
+                        <p class="text-muted mb-0">Need work or need talent? Jump straight into the hiring flow in one click.</p>
+                    </div>
+                    <div class="quick-action-buttons">
+                        <a href="hiring_shops.php" class="btn btn-primary">
+                            <i class="fas fa-briefcase"></i> View Hiring Shops
+                        </a>
+                        <a href="auth/register.php?type=client" class="btn btn-outline-primary">
+                            <i class="fas fa-user-plus"></i> Create Applicant Account
+                        </a>
+                    </div>
+                </div>
+            </div>
+        </section>
+
     <!-- CTA Section -->
-    <section class="section section-alt">
+        <section class="section section-alt">
         <div class="container">
             <div class="card text-center">
                 <h2>Ready to Get Started?</h2>
                 <p class="hero-subtitle">
                 Join thousands of satisfied customers and service providers on our platform.
-                Whether you need embroidery services or want to offer them, we have the perfect solution for you.
-            </p>
+                    Whether you need embroidery services or want to offer them, we have the perfect solution for you.
+                </p>
                 <div class="hero-actions">
                     <?php if(!isset($_SESSION['user'])): ?>
                         <a href="auth/register.php?type=client" class="btn btn-primary btn-lg">
@@ -195,25 +224,7 @@ require_once 'config/db.php';
             </div>
         </div>
     </section>
-
-    <section class="section" id="quick-actions">
-        <div class="container">
-            <div class="quick-action-panel">
-                <div>
-                    <h2>Quick Actions for Hiring & Applications</h2>
-                    <p class="text-muted mb-0">Need work or need talent? Jump straight into the hiring flow in one click.</p>
-                </div>
-                <div class="quick-action-buttons">
-                    <a href="hiring_shops.php" class="btn btn-primary">
-                        <i class="fas fa-briefcase"></i> View Hiring Shops
-                    </a>
-                    <a href="auth/register.php?type=client" class="btn btn-outline-primary">
-                        <i class="fas fa-user-plus"></i> Create Applicant Account
-                    </a>
-                </div>
-            </div>
-        </div>
-    </section>
+    </main>
 
     <!-- Footer -->
     <footer class="footer">

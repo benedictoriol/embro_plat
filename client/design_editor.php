@@ -2328,7 +2328,77 @@ exportPngBtn.addEventListener('click', () => {
     link.click();
 });
 
+function formatPesoAmount(amount) {
+    return Number(amount).toLocaleString('en-PH', {
+        minimumFractionDigits: 2,
+        maximumFractionDigits: 2
+    });
+}
+
+function buildDesignSummary() {
+    return state.elements
+        .map(element => element.type === 'text' ? `Text: "${element.text}"` : `Image: ${element.label}`)
+        .join(', ');
+}
+
+function estimateDesignBudget() {
+    const baseCost = 450;
+    const hoopCostMap = {
+        '4x4': 120,
+        '5x7': 180,
+        '6x10': 240,
+        cap: 160,
+        sleeve: 140,
+        chest: 200
+    };
+
+    const textCount = state.elements.filter(element => element.type === 'text').length;
+    const imageCount = state.elements.filter(element => element.type === 'image').length;
+    const estimatedAmount = baseCost
+        + (hoopCostMap[state.hoopPreset] || 150)
+        + (textCount * 70)
+        + (imageCount * 120)
+        + (state.elements.length * 35);
+
+    return {
+        amount: estimatedAmount,
+        formatted: formatPesoAmount(estimatedAmount),
+        note: 'Estimated budget only. Final quotation is provided by the shop after proofing.'
+    };
+}
+
+function buildEditorDraftPayload() {
+    const estimate = estimateDesignBudget();
+    return {
+        source: 'design_editor',
+        title: `Design concept ${new Date().toLocaleDateString()}`,
+        service_type: 'Custom Embroidery Design',
+        design_description: `Design from editor preview.\n\nCanvas: ${state.canvasType} (${state.canvasColor})\nPlacement: ${state.placementMethod}\nHoop preset: ${state.hoopPreset}\nThread color: ${state.threadColor}\nElements: ${buildDesignSummary()}`,
+        design_summary: buildDesignSummary(),
+        design_details: {
+            canvas_type: state.canvasType,
+            canvas_color: state.canvasColor,
+            placement_method: state.placementMethod,
+            hoop_preset: state.hoopPreset,
+            thread_color: state.threadColor,
+            total_elements: state.elements.length
+        },
+        estimated_price: estimate.amount,
+        estimated_price_label: estimate.formatted,
+        estimate_note: estimate.note,
+        design_preview: canvas.toDataURL('image/png'),
+        generatedAt: new Date().toISOString()
+    };
+}
+
 goToProofingQuoteBtn.addEventListener('click', () => {
+    if (!state.elements.length) {
+        alert('Please add at least one design element before requesting proofing and quotation.');
+        return;
+    }
+
+    const proofingDraft = buildEditorDraftPayload();
+    localStorage.setItem('embroider_proofing_quote_draft', JSON.stringify(proofingDraft));
     window.location.href = 'design_proofing.php?from_design_editor=1&next=pricing_quotation';
 });
 
@@ -2339,19 +2409,10 @@ postToCommunityBtn.addEventListener('click', () => {
         return;
     }
 
-    const generatedTitle = `Design concept ${new Date().toLocaleDateString()}`;
-    const elementSummary = state.elements
-        .map(element => element.type === 'text' ? `Text: "${element.text}"` : `Image: ${element.label}`)
-        .join(', ');
-
-    const communityDraft = {
-        source: 'design_editor',
-        title: generatedTitle,
-        category: 'Request',
-        description: `I created this design in the editor and I would like feedback/quotes from shop owners.\n\nCanvas: ${state.canvasType} (${state.canvasColor})\nPlacement: ${state.placementMethod}\nHoop preset: ${state.hoopPreset}\nThread color: ${state.threadColor}\nElements: ${elementSummary}`,
-        design_preview: canvas.toDataURL('image/png'),
-        generatedAt: new Date().toISOString()
-    };
+    const communityDraft = buildEditorDraftPayload();
+    communityDraft.category = 'Request';
+    communityDraft.description = `I created this design in the editor and I would like feedback/quotes from shop owners.\n\nCanvas: ${state.canvasType} (${state.canvasColor})\nPlacement: ${state.placementMethod}\nHoop preset: ${state.hoopPreset}\nThread color: ${state.threadColor}\nElements: ${communityDraft.design_summary}\nEstimated budget: ₱${communityDraft.estimated_price_label} (not final price).`;
+    communityDraft.preferred_price = communityDraft.estimated_price;
 
     localStorage.setItem('embroider_community_post_draft', JSON.stringify(communityDraft));
     window.location.href = 'client_posting_community.php?from_design_editor=1';

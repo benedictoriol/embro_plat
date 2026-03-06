@@ -606,6 +606,25 @@ unset($request);
             background: var(--bg-primary);
         }
 
+        .editor-draft-card {
+            display: none;
+            border: 1px solid var(--gray-200);
+            border-radius: var(--radius);
+            padding: 1rem;
+            margin-bottom: 1rem;
+            background: var(--bg-secondary);
+        }
+
+        .editor-draft-card img {
+            width: 100%;
+            max-height: 260px;
+            object-fit: contain;
+            border: 1px solid var(--gray-200);
+            border-radius: var(--radius);
+            background: #fff;
+            margin-bottom: 0.75rem;
+        }
+
         @media(max-width: 900px) {
             .quotation-layout {
                 grid-template-columns: 1fr;
@@ -646,7 +665,7 @@ unset($request);
 
                     <div class="form-group">
                          <label>Service Selection</label>
-                        <select class="form-control" name="service_type" required>
+                        <select class="form-control" name="service_type" id="serviceTypeField" required>
                             <?php foreach($service_type_options as $service_option): ?>
                                 <option value="<?php echo htmlspecialchars($service_option); ?>" <?php echo $selected_service_type === $service_option ? 'selected' : ''; ?>>
                                     <?php echo htmlspecialchars($service_option); ?>
@@ -657,7 +676,14 @@ unset($request);
 
                     <div class="form-group">
                         <label>Design Description</label>
-                        <textarea class="form-control" name="design_description" rows="5" required placeholder="Describe the design you want for proofing and price quotation."><?php echo htmlspecialchars($selected_design_description); ?></textarea>
+                        <textarea class="form-control" id="designDescriptionField" name="design_description" rows="5" required placeholder="Describe the design you want for proofing and price quotation."><?php echo htmlspecialchars($selected_design_description); ?></textarea>
+                    </div>
+
+                    <div id="editorDraftCard" class="editor-draft-card">
+                        <h4 class="mb-2"><i class="fas fa-wand-magic-sparkles text-primary"></i> Imported design details</h4>
+                        <img id="editorDraftImage" src="" alt="Editor design preview">
+                        <p class="mb-1" id="editorDraftEstimate"></p>
+                        <small class="text-muted" id="editorDraftMeta"></small>
                     </div>
 
                     <input type="hidden" name="shop_id" value="<?php echo (int) $selected_shop_id; ?>" required>
@@ -773,6 +799,12 @@ unset($request);
         const uploadPreview = document.getElementById('uploadPreview');
         const shopOptions = document.querySelectorAll('[data-shop-option]');
         const shopSelect = document.querySelector('[name="shop_id"]');
+        const serviceTypeField = document.getElementById('serviceTypeField');
+        const designDescriptionField = document.getElementById('designDescriptionField');
+        const editorDraftCard = document.getElementById('editorDraftCard');
+        const editorDraftImage = document.getElementById('editorDraftImage');
+        const editorDraftEstimate = document.getElementById('editorDraftEstimate');
+        const editorDraftMeta = document.getElementById('editorDraftMeta');
 
         function refreshUploadPreview() {
             if(!designFileInput || !uploadPreview) return;
@@ -814,6 +846,47 @@ unset($request);
                 });
             });
         }
+        
+        (function hydrateProofingDraftFromDesignEditor() {
+            const params = new URLSearchParams(window.location.search);
+            if (!params.get('from_design_editor')) {
+                return;
+            }
+
+            const draftRaw = localStorage.getItem('embroider_proofing_quote_draft');
+            if (!draftRaw) {
+                return;
+            }
+
+            try {
+                const draft = JSON.parse(draftRaw);
+
+                if (serviceTypeField && draft.service_type) {
+                    serviceTypeField.value = draft.service_type;
+                }
+
+                if (designDescriptionField && draft.design_description) {
+                    designDescriptionField.value = draft.design_description;
+                }
+
+                if (editorDraftCard && editorDraftImage && draft.design_preview) {
+                    editorDraftCard.style.display = 'block';
+                    editorDraftImage.src = draft.design_preview;
+                }
+
+                if (editorDraftEstimate && draft.estimated_price_label) {
+                    editorDraftEstimate.textContent = `Initial estimated budget: ₱${draft.estimated_price_label} (not the final price).`;
+                }
+
+                if (editorDraftMeta && draft.design_details) {
+                    editorDraftMeta.textContent = `Canvas: ${draft.design_details.canvas_type || '-'} (${draft.design_details.canvas_color || '-'}) • Placement: ${draft.design_details.placement_method || '-'} • Hoop: ${draft.design_details.hoop_preset || '-'} • Thread: ${draft.design_details.thread_color || '-'} • Elements: ${draft.design_details.total_elements || 0}`;
+                }
+
+                localStorage.removeItem('embroider_proofing_quote_draft');
+            } catch (error) {
+                console.warn('Unable to prefill proofing draft from design editor.', error);
+            }
+        })();
     </script>
 </body>
 </html>

@@ -67,3 +67,5 @@ $is_active = static function (string $key) use ($active_groups, $current_page): 
         </ul>
     </div>
 </nav>
+
+<?php include __DIR__ . '/owner_messages.php'; ?>

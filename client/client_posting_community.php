@@ -227,6 +227,24 @@ if ($community_comments_table_exists && !empty($client_posts)) {
             padding: 0.75rem;
             margin-bottom: 0.75rem;
         }
+        
+        .editor-design-preview {
+            display: none;
+            border: 1px solid var(--gray-200);
+            border-radius: var(--radius);
+            padding: 1rem;
+            background: var(--bg-secondary);
+            margin-bottom: 1rem;
+        }
+
+        .editor-design-preview img {
+            width: 100%;
+            max-height: 260px;
+            object-fit: contain;
+            border: 1px solid var(--gray-200);
+            border-radius: var(--radius);
+            background: #fff;
+        }
     </style>
 </head>
 <body>
@@ -265,6 +283,12 @@ if ($community_comments_table_exists && !empty($client_posts)) {
                 <form method="POST" class="post-form" enctype="multipart/form-data">
                     <?php echo csrf_field(); ?>
                     <input type="hidden" id="design_preview" name="design_preview" value="">
+                    <div id="editorDesignPreview" class="editor-design-preview">
+                        <h4 class="mb-2"><i class="fas fa-wand-magic-sparkles text-primary"></i> Design imported from editor</h4>
+                        <img id="editorDesignPreviewImage" src="" alt="Design editor preview">
+                        <p class="text-muted mt-2 mb-1" id="editorDesignEstimateText"></p>
+                        <small class="text-muted" id="editorDesignDetailsText"></small>
+                    </div>
                     <div class="form-grid">
                         <div>
                             <label for="title">Post title</label>
@@ -381,6 +405,10 @@ if ($community_comments_table_exists && !empty($client_posts)) {
         const descriptionField = document.getElementById('description');
         const priceField = document.getElementById('preferred_price');
         const previewField = document.getElementById('design_preview');
+        const previewPanel = document.getElementById('editorDesignPreview');
+        const previewImage = document.getElementById('editorDesignPreviewImage');
+        const estimateText = document.getElementById('editorDesignEstimateText');
+        const detailsText = document.getElementById('editorDesignDetailsText');
 
         if (titleField && draft.title) {
             titleField.value = draft.title;
@@ -393,6 +421,19 @@ if ($community_comments_table_exists && !empty($client_posts)) {
         }
         if (previewField && draft.design_preview) {
             previewField.value = draft.design_preview;
+        }
+        
+        if (previewPanel && previewImage && draft.design_preview) {
+            previewPanel.style.display = 'block';
+            previewImage.src = draft.design_preview;
+
+            if (estimateText && draft.estimated_price_label) {
+                estimateText.textContent = `Estimated budget: ₱${draft.estimated_price_label} (not final price)`;
+            }
+
+            if (detailsText && draft.design_details) {
+                detailsText.textContent = `Canvas: ${draft.design_details.canvas_type || '-'} (${draft.design_details.canvas_color || '-'}) • Placement: ${draft.design_details.placement_method || '-'} • Hoop: ${draft.design_details.hoop_preset || '-'} • Elements: ${draft.design_details.total_elements || 0}`;
+            }
         }
         
         localStorage.removeItem('embroider_community_post_draft');
