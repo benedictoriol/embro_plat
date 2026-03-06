@@ -245,6 +245,36 @@ if ($community_comments_table_exists && !empty($client_posts)) {
             border-radius: var(--radius);
             background: #fff;
         }
+        
+        .upload-preview {
+            display: none;
+            margin-top: 0.75rem;
+            border: 1px solid var(--gray-200);
+            border-radius: var(--radius);
+            padding: 0.75rem;
+            background: var(--bg-secondary);
+        }
+
+        .upload-preview img {
+            width: 100%;
+            max-height: 220px;
+            object-fit: contain;
+            border-radius: var(--radius);
+            border: 1px solid var(--gray-200);
+            background: #fff;
+            margin-top: 0.5rem;
+        }
+
+        .upload-preview .file-pill {
+            display: inline-flex;
+            align-items: center;
+            gap: 0.5rem;
+            padding: 0.3rem 0.6rem;
+            border: 1px solid var(--gray-300);
+            border-radius: 999px;
+            font-size: 0.85rem;
+            background: var(--bg-primary);
+        }
     </style>
 </head>
 <body>
@@ -317,6 +347,10 @@ if ($community_comments_table_exists && !empty($client_posts)) {
                         <label for="reference_image">Add a reference image (optional)</label>
                         <input type="file" id="reference_image" name="reference_image" class="form-control" accept="image/*">
                         <small class="text-muted">JPG, PNG, or GIF up to 5 MB.</small>
+                        <div id="uploadPreview" class="upload-preview" aria-live="polite">
+                            <small id="uploadFileName" class="file-pill"></small>
+                            <img id="uploadPreviewImage" src="" alt="Selected upload preview">
+                        </div>
                     </div>
                     <button type="submit" name="submit_post" class="btn btn-primary">
                         <i class="fas fa-paper-plane"></i> Post
@@ -440,6 +474,44 @@ if ($community_comments_table_exists && !empty($client_posts)) {
     } catch (error) {
         console.warn('Unable to prefill community draft from design editor.', error);
     }
+})();
+
+(function previewUploadedReference() {
+    const fileInput = document.getElementById('reference_image');
+    const previewPanel = document.getElementById('uploadPreview');
+    const previewImage = document.getElementById('uploadPreviewImage');
+    const fileName = document.getElementById('uploadFileName');
+
+    if (!fileInput || !previewPanel || !previewImage || !fileName) {
+        return;
+    }
+
+    fileInput.addEventListener('change', function handleUploadPreview(event) {
+        const selectedFile = event.target.files && event.target.files[0];
+
+        if (!selectedFile) {
+            previewPanel.style.display = 'none';
+            previewImage.removeAttribute('src');
+            fileName.textContent = '';
+            return;
+        }
+
+        fileName.innerHTML = `<i class="fas fa-file-image text-primary"></i> ${selectedFile.name}`;
+        previewPanel.style.display = 'block';
+
+        if (selectedFile.type.startsWith('image/')) {
+            previewImage.style.display = 'block';
+            const fileReader = new FileReader();
+            fileReader.onload = function onFileRead(loadEvent) {
+                previewImage.src = loadEvent.target?.result || '';
+            };
+            fileReader.readAsDataURL(selectedFile);
+            return;
+        }
+
+        previewImage.style.display = 'none';
+        previewImage.removeAttribute('src');
+    });
 })();
 </script>
 </body>
