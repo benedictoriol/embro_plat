@@ -94,6 +94,75 @@ function decode_quote_details(?string $raw_quote_details): array {
     return is_array($decoded) ? $decoded : [];
 }
 
+function estimate_design_quote_from_image(?string $image_path, ?int $fallback_width = null, ?int $fallback_height = null, ?int $fallback_colors = null): array {
+    $width = max(0, (int) ($fallback_width ?? 0));
+    $height = max(0, (int) ($fallback_height ?? 0));
+    $color_count = max(0, (int) ($fallback_colors ?? 0));
+
+    if($image_path && is_file($image_path)) {
+        $meta = @getimagesize($image_path);
+        if(is_array($meta)) {
+            $width = $width > 0 ? $width : (int) ($meta[0] ?? 0);
+            $height = $height > 0 ? $height : (int) ($meta[1] ?? 0);
+        }
+
+        if($color_count <= 0 && function_exists('imagecreatefromstring')) {
+            $raw = @file_get_contents($image_path);
+            $img = $raw !== false ? @imagecreatefromstring($raw) : false;
+            if($img !== false) {
+                $img_width = imagesx($img);
+                $img_height = imagesy($img);
+                $sample_step_x = max(1, (int) floor($img_width / 120));
+                $sample_step_y = max(1, (int) floor($img_height / 120));
+                $samples = [];
+
+                for($y = 0; $y < $img_height; $y += $sample_step_y) {
+                    for($x = 0; $x < $img_width; $x += $sample_step_x) {
+                        $rgb = imagecolorat($img, $x, $y);
+                        $r = ($rgb >> 16) & 0xFF;
+                        $g = ($rgb >> 8) & 0xFF;
+                        $b = $rgb & 0xFF;
+                        $bucket = sprintf('%02x%02x%02x', (int) floor($r / 16), (int) floor($g / 16), (int) floor($b / 16));
+                        $samples[$bucket] = true;
+                    }
+                }
+
+                $color_count = count($samples);
+                imagedestroy($img);
+            }
+        }
+    }
+
+    if($width <= 0 || $height <= 0) {
+        return [
+            'estimated_price' => null,
+            'width' => $width,
+            'height' => $height,
+            'color_count' => $color_count,
+            'price_components' => null,
+        ];
+    }
+
+    $area_sq_in = max(1, ($width / 300) * ($height / 300));
+    $base_price = 180;
+    $size_charge = round($area_sq_in * 55, 2);
+    $color_charge = $color_count <= 4 ? 0 : ($color_count <= 8 ? 60 : ($color_count <= 16 ? 120 : 180));
+    $estimated_price = round(($base_price + $size_charge + $color_charge) / 5) * 5;
+
+    return [
+        'estimated_price' => (float) $estimated_price,
+        'width' => $width,
+        'height' => $height,
+        'color_count' => $color_count,
+        'price_components' => [
+            'base_price' => $base_price,
+            'size_charge' => $size_charge,
+            'color_charge' => $color_charge,
+            'area_sq_in' => round($area_sq_in, 2),
+        ],
+    ];
+}
+
 $shops_stmt = $pdo->query("SELECT id, shop_name, shop_description, address, rating FROM shops WHERE status = 'active' ORDER BY rating DESC, total_orders DESC, shop_name ASC");
 $shops = $shops_stmt->fetchAll();
 
@@ -113,6 +182,10 @@ if(isset($_POST['request_quote'])) {
     $service_type = sanitize($_POST['service_type'] ?? '');
     $design_description = sanitize($_POST['design_description'] ?? '');
     $customize_order_id = (int) ($_POST['customize_order_id'] ?? 0);
+    $uploaded_width = (int) ($_POST['design_width'] ?? 0);
+    $uploaded_height = (int) ($_POST['design_height'] ?? 0);
+    $uploaded_colors = (int) ($_POST['design_color_count'] ?? 0);
+    $uploaded_estimate = (float) ($_POST['estimated_design_price'] ?? 0);
 
     if($shop_id <= 0) {
         $error = 'Please select the shop where you want to request design proofing and quotation.';
@@ -161,12 +234,30 @@ if(isset($_POST['request_quote'])) {
     }
 
     if($error === '') {
+        $uploaded_design_abs_path = null;
+        if($uploaded_design_file && is_design_image($uploaded_design_file)) {
+            $uploaded_design_abs_path = media_upload_dir('designs') . '/' . basename($uploaded_design_file);
+        }
+
+        $design_estimate = estimate_design_quote_from_image($uploaded_design_abs_path, $uploaded_width, $uploaded_height, $uploaded_colors);
+        if($design_estimate['estimated_price'] === null && $uploaded_estimate > 0) {
+            $design_estimate['estimated_price'] = $uploaded_estimate;
+        }
+
         $order_number = 'ORD-' . date('Ymd') . '-' . strtoupper(substr(uniqid(), -6));
         $quote_details = [
             'requested_from_services' => true,
             'owner_request_status' => 'pending_acceptance',
             'customize_order_id' => $customize_order_id > 0 ? $customize_order_id : null,
             'requested_at' => date('c'),
+            'client_estimate' => [
+                'estimated_price' => $design_estimate['estimated_price'],
+                'width' => $design_estimate['width'],
+                'height' => $design_estimate['height'],
+                'color_count' => $design_estimate['color_count'],
+                'price_components' => $design_estimate['price_components'],
+                'source' => $uploaded_design_abs_path ? 'uploaded_design_file' : 'client_input',
+            ],
         ];
 
         $insert_stmt = $pdo->prepare("INSERT INTO orders (
@@ -196,7 +287,11 @@ if(isset($_POST['request_quote'])) {
         notify_shop_staff($pdo, $shop_id, $order_id, 'order_status', $message);
         create_notification($pdo, $client_id, $order_id, 'success', 'Your design proofing and quotation request has been sent to ' . $shop['shop_name'] . '.');
         cleanup_media($pdo);
-        $success = 'Request submitted! The selected shop will prepare your design proofing and price quotation shortly.';
+        if(!empty($design_estimate['estimated_price'])) {
+            $success = 'Request submitted! Estimated starting price based on your uploaded design is ₱' . number_format((float) $design_estimate['estimated_price'], 2) . '. The selected shop will confirm the final quotation shortly.';
+        } else {
+            $success = 'Request submitted! The selected shop will prepare your design proofing and price quotation shortly.';
+        }
     }
 }
 
@@ -691,8 +786,13 @@ unset($request);
                     <div class="form-group">
                         <label>Upload Design File (Optional)</label>
                         <input type="file" class="form-control" name="design_file" id="designFileInput" accept=".jpg,.jpeg,.png,.gif,.pdf,.doc,.docx">
+                        <input type="hidden" name="design_width" id="designWidthInput" value="0">
+                        <input type="hidden" name="design_height" id="designHeightInput" value="0">
+                        <input type="hidden" name="design_color_count" id="designColorCountInput" value="0">
+                        <input type="hidden" name="estimated_design_price" id="estimatedDesignPriceInput" value="0">
                         <small class="text-muted">Max <?php echo $max_upload_mb; ?>MB.</small>
                         <div class="upload-preview" id="uploadPreview" style="display:none;"></div>
+                        <small class="text-muted" id="uploadEstimateLabel" style="display:none;"></small>
                     </div>
 
                     <button type="submit" name="request_quote" class="btn btn-primary btn-block">
@@ -805,6 +905,88 @@ unset($request);
         const editorDraftImage = document.getElementById('editorDraftImage');
         const editorDraftEstimate = document.getElementById('editorDraftEstimate');
         const editorDraftMeta = document.getElementById('editorDraftMeta');
+        const designWidthInput = document.getElementById('designWidthInput');
+        const designHeightInput = document.getElementById('designHeightInput');
+        const designColorCountInput = document.getElementById('designColorCountInput');
+        const estimatedDesignPriceInput = document.getElementById('estimatedDesignPriceInput');
+        const uploadEstimateLabel = document.getElementById('uploadEstimateLabel');
+
+        function resetEstimateFields() {
+            if (designWidthInput) designWidthInput.value = '0';
+            if (designHeightInput) designHeightInput.value = '0';
+            if (designColorCountInput) designColorCountInput.value = '0';
+            if (estimatedDesignPriceInput) estimatedDesignPriceInput.value = '0';
+            if (uploadEstimateLabel) {
+                uploadEstimateLabel.style.display = 'none';
+                uploadEstimateLabel.textContent = '';
+            }
+        }
+
+        function estimateClientPrice(width, height, colorCount) {
+            const areaSqIn = Math.max(1, (width / 300) * (height / 300));
+            const basePrice = 180;
+            const sizeCharge = areaSqIn * 55;
+            const colorCharge = colorCount <= 4 ? 0 : (colorCount <= 8 ? 60 : (colorCount <= 16 ? 120 : 180));
+            return Math.round((basePrice + sizeCharge + colorCharge) / 5) * 5;
+        }
+
+        function analyzeImageFile(file) {
+            if (!file || !file.type.startsWith('image/')) {
+                resetEstimateFields();
+                return;
+            }
+
+            const reader = new FileReader();
+            reader.onload = () => {
+                const image = new Image();
+                image.onload = () => {
+                    const width = image.naturalWidth || 0;
+                    const height = image.naturalHeight || 0;
+                    if (!width || !height) {
+                        resetEstimateFields();
+                        return;
+                    }
+
+                    const canvas = document.createElement('canvas');
+                    const sampleWidth = Math.min(width, 160);
+                    const sampleHeight = Math.max(1, Math.round((sampleWidth / width) * height));
+                    canvas.width = sampleWidth;
+                    canvas.height = sampleHeight;
+                    const context = canvas.getContext('2d', { willReadFrequently: true });
+                    if (!context) {
+                        resetEstimateFields();
+                        return;
+                    }
+
+                    context.drawImage(image, 0, 0, sampleWidth, sampleHeight);
+                    const pixels = context.getImageData(0, 0, sampleWidth, sampleHeight).data;
+                    const buckets = new Set();
+
+                    for (let i = 0; i < pixels.length; i += 4) {
+                        const r = Math.floor(pixels[i] / 16).toString(16);
+                        const g = Math.floor(pixels[i + 1] / 16).toString(16);
+                        const b = Math.floor(pixels[i + 2] / 16).toString(16);
+                        buckets.add(`${r}${g}${b}`);
+                    }
+
+                    const colorCount = buckets.size;
+                    const estimate = estimateClientPrice(width, height, colorCount);
+
+                    if (designWidthInput) designWidthInput.value = String(width);
+                    if (designHeightInput) designHeightInput.value = String(height);
+                    if (designColorCountInput) designColorCountInput.value = String(colorCount);
+                    if (estimatedDesignPriceInput) estimatedDesignPriceInput.value = String(estimate);
+                    if (uploadEstimateLabel) {
+                        uploadEstimateLabel.style.display = 'block';
+                        uploadEstimateLabel.textContent = `Estimated starting price: ₱${estimate.toFixed(2)} (size: ${width}×${height}px, colors detected: ${colorCount}).`;
+                    }
+                };
+
+                image.src = String(reader.result || '');
+            };
+
+            reader.readAsDataURL(file);
+        }
 
         function refreshUploadPreview() {
             if(!designFileInput || !uploadPreview) return;
@@ -812,6 +994,7 @@ unset($request);
             if(!file) {
                 uploadPreview.style.display = 'none';
                 uploadPreview.innerHTML = '';
+                resetEstimateFields();
                 return;
             }
 
@@ -824,6 +1007,8 @@ unset($request);
                     refreshUploadPreview();
                 });
             }
+
+            analyzeImageFile(file);
         }
 
         if(designFileInput) {
