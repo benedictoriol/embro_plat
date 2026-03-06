@@ -568,7 +568,7 @@ $approvals_stmt->execute([$client_id]);
 $approvals = $approvals_stmt->fetchAll();
 
 $requests_stmt = $pdo->prepare("
-    SELECT o.id, o.order_number, o.service_type, o.design_description, o.status, o.price,
+    SELECT o.id, o.order_number, o.service_type, o.design_description, o.design_file, o.status, o.price,           
            o.created_at, o.updated_at, o.design_approved, o.quote_details, s.shop_name
     FROM orders o
     JOIN shops s ON s.id = o.shop_id
@@ -602,6 +602,8 @@ foreach($request_history as &$request) {
     $request['price_quote_comment'] = (string) ($quote_details['price_quote_comment'] ?? '');
     $request['can_client_decide'] = $owner_quote !== null && $request['owner_request_status'] !== 'accepted';
     $request['client_quote_status_label'] = $client_quote_status_labels[$request['price_quote_status']] ?? ucfirst(str_replace('_', ' ', $request['price_quote_status']));
+    $request['design_file_url'] = proof_file_url($request['design_file'] ?? null);
+    $request['design_file_is_image'] = is_design_image($request['design_file'] ?? null);
 }
 unset($request);
 ?>
@@ -699,6 +701,24 @@ unset($request);
             border-radius: var(--radius);
             padding: 1rem;
             background: var(--bg-primary);
+        }
+
+        .request-design-preview {
+            margin-top: 0.75rem;
+            padding: 0.75rem;
+            border: 1px solid var(--gray-200);
+            border-radius: var(--radius);
+            background: var(--bg-secondary);
+        }
+
+        .request-design-preview img {
+            width: 100%;
+            max-height: 260px;
+            object-fit: contain;
+            border-radius: var(--radius);
+            border: 1px solid var(--gray-200);
+            background: #fff;
+            margin-top: 0.5rem;
         }
 
         .editor-draft-card {
@@ -852,6 +872,19 @@ unset($request);
                             <p class="mb-1"><strong>Service:</strong> <?php echo htmlspecialchars($request['service_type'] ?: 'Custom Embroidery Design'); ?></p>
                             <p class="mb-1"><strong>Design request:</strong> <?php echo htmlspecialchars($request['design_description'] ?: 'No design details provided.'); ?></p>
                             <p class="mb-1"><strong>Quoted price:</strong> <?php echo $request['price'] !== null ? '₱' . number_format((float) $request['price'], 2) : 'Waiting for shop quotation'; ?></p>
+
+                            <?php if(!empty($request['design_file_url'])): ?>
+                                <div class="request-design-preview">
+                                    <p class="mb-0"><strong>Uploaded reference file:</strong></p>
+                                    <?php if(!empty($request['design_file_is_image'])): ?>
+                                        <img src="<?php echo htmlspecialchars($request['design_file_url']); ?>" alt="Uploaded design reference for order <?php echo htmlspecialchars($request['order_number']); ?>">
+                                    <?php else: ?>
+                                        <a class="btn btn-sm btn-outline mt-2" href="<?php echo htmlspecialchars($request['design_file_url']); ?>" target="_blank" rel="noopener">
+                                            <i class="fas fa-file-arrow-down"></i> View uploaded file
+                                        </a>
+                                    <?php endif; ?>
+                                </div>
+                            <?php endif; ?>
 
                             <?php if(!empty($request['owner_quote'])): ?>
                                 <div class="quote-meta">
