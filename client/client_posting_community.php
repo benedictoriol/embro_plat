@@ -275,6 +275,20 @@ if ($community_comments_table_exists && !empty($client_posts)) {
             font-size: 0.85rem;
             background: var(--bg-primary);
         }
+        
+        .price-estimate-box {
+            display: none;
+            margin-top: 0.75rem;
+            border: 1px dashed var(--primary-color);
+            border-radius: var(--radius);
+            background: rgba(59, 130, 246, 0.06);
+            padding: 0.75rem;
+        }
+
+        .price-estimate-box strong {
+            display: block;
+            margin-bottom: 0.25rem;
+        }
     </style>
 </head>
 <body>
@@ -346,10 +360,14 @@ if ($community_comments_table_exists && !empty($client_posts)) {
                     <div>
                         <label for="reference_image">Add a reference image (optional)</label>
                         <input type="file" id="reference_image" name="reference_image" class="form-control" accept="image/*">
-                        <small class="text-muted">JPG, PNG, or GIF up to 5 MB.</small>
+                        <small class="text-muted">JPG, PNG, or GIF up to 5 MB. Price is auto-estimated from design size and color complexity.</small>
                         <div id="uploadPreview" class="upload-preview" aria-live="polite">
                             <small id="uploadFileName" class="file-pill"></small>
                             <img id="uploadPreviewImage" src="" alt="Selected upload preview">
+                        </div>
+                        <div id="uploadEstimate" class="price-estimate-box" aria-live="polite">
+                            <strong id="uploadEstimateTitle"></strong>
+                            <small class="text-muted" id="uploadEstimateDetails"></small>
                         </div>
                     </div>
                     <button type="submit" name="submit_post" class="btn btn-primary">
@@ -481,9 +499,88 @@ if ($community_comments_table_exists && !empty($client_posts)) {
     const previewPanel = document.getElementById('uploadPreview');
     const previewImage = document.getElementById('uploadPreviewImage');
     const fileName = document.getElementById('uploadFileName');
+    const preferredPriceField = document.getElementById('preferred_price');
+    const estimatePanel = document.getElementById('uploadEstimate');
+    const estimateTitle = document.getElementById('uploadEstimateTitle');
+    const estimateDetails = document.getElementById('uploadEstimateDetails');
 
-    if (!fileInput || !previewPanel || !previewImage || !fileName) {
+    if (!fileInput || !previewPanel || !previewImage || !fileName || !estimatePanel || !estimateTitle || !estimateDetails) {
         return;
+    }
+
+     function estimateDesignPrice(width, height, uniqueColorCount) {
+        const boundedColors = Math.max(1, Math.min(uniqueColorCount, 18));
+        const megapixels = Math.max(0.2, (width * height) / 1000000);
+
+        const basePrice = 350;
+        const sizeCost = megapixels * 420;
+        const colorCost = boundedColors * 95;
+        const complexityBoost = megapixels > 1.2 && boundedColors > 10 ? 250 : 0;
+        const estimatedPrice = Math.round(basePrice + sizeCost + colorCost + complexityBoost);
+
+        return {
+            estimatedPrice,
+            boundedColors,
+            megapixels,
+        };
+    }
+
+    function renderEstimate(width, height, uniqueColorCount) {
+        const estimate = estimateDesignPrice(width, height, uniqueColorCount);
+
+        estimatePanel.style.display = 'block';
+        estimateTitle.textContent = `Estimated design cost: ₱${estimate.estimatedPrice.toLocaleString()}`;
+        estimateDetails.textContent = `${width}×${height}px (${estimate.megapixels.toFixed(2)} MP) • ~${estimate.boundedColors} dominant colors. This is an automated estimate and may change after shop review.`;
+
+        if (preferredPriceField && !preferredPriceField.value) {
+            preferredPriceField.value = estimate.estimatedPrice;
+        }
+    }
+
+    function analyzeImageForEstimate(dataUrl) {
+        return new Promise(function(resolve, reject) {
+            const image = new Image();
+            image.onload = function onImageLoad() {
+                const analysisCanvas = document.createElement('canvas');
+                const maxDimension = 320;
+                const scale = Math.min(1, maxDimension / Math.max(image.width, image.height));
+                analysisCanvas.width = Math.max(1, Math.round(image.width * scale));
+                analysisCanvas.height = Math.max(1, Math.round(image.height * scale));
+                const ctx = analysisCanvas.getContext('2d', { willReadFrequently: true });
+                if (!ctx) {
+                    reject(new Error('Unable to initialize image analysis context.'));
+                    return;
+                }
+
+                ctx.drawImage(image, 0, 0, analysisCanvas.width, analysisCanvas.height);
+                const pixels = ctx.getImageData(0, 0, analysisCanvas.width, analysisCanvas.height).data;
+                const colorBuckets = new Set();
+                const step = 4;
+
+                for (let index = 0; index < pixels.length; index += 4 * step) {
+                    const alpha = pixels[index + 3];
+                    if (alpha < 20) {
+                        continue;
+                    }
+
+                    const red = Math.round(pixels[index] / 32);
+                    const green = Math.round(pixels[index + 1] / 32);
+                    const blue = Math.round(pixels[index + 2] / 32);
+                    colorBuckets.add(`${red}-${green}-${blue}`);
+                }
+
+                resolve({
+                    width: image.width,
+                    height: image.height,
+                    uniqueColorCount: Math.max(1, colorBuckets.size),
+                });
+            };
+
+            image.onerror = function onImageError() {
+                reject(new Error('Could not analyze the uploaded image.'));
+            };
+            image.src = dataUrl;
+        });
     }
 
     fileInput.addEventListener('change', function handleUploadPreview(event) {
@@ -491,6 +588,7 @@ if ($community_comments_table_exists && !empty($client_posts)) {
 
         if (!selectedFile) {
             previewPanel.style.display = 'none';
+            estimatePanel.style.display = 'none';
             previewImage.removeAttribute('src');
             fileName.textContent = '';
             return;
@@ -503,12 +601,22 @@ if ($community_comments_table_exists && !empty($client_posts)) {
             previewImage.style.display = 'block';
             const fileReader = new FileReader();
             fileReader.onload = function onFileRead(loadEvent) {
-                previewImage.src = loadEvent.target?.result || '';
+                const dataUrl = loadEvent.target?.result || '';
+                previewImage.src = dataUrl;
+                analyzeImageForEstimate(dataUrl)
+                    .then(function(result) {
+                        renderEstimate(result.width, result.height, result.uniqueColorCount);
+                    })
+                    .catch(function(error) {
+                        estimatePanel.style.display = 'none';
+                        console.warn(error.message);
+                    });
             };
             fileReader.readAsDataURL(selectedFile);
             return;
         }
 
+        estimatePanel.style.display = 'none';
         previewImage.style.display = 'none';
         previewImage.removeAttribute('src');
     });
