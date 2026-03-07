@@ -2,6 +2,7 @@
 session_start();
 require_once '../config/db.php';
 require_once '../config/constants.php';
+require_once '../config/automation_helpers.php';
 require_role('owner');
 
 $owner_id = $_SESSION['user']['id'];
@@ -145,107 +146,27 @@ if(isset($_POST['save_fulfillment'])) {
         $error = 'Please select a valid fulfillment type.';
     } elseif(!isset($fulfillment_statuses[$status])) {
         $error = 'Please select a valid fulfillment status.';
-         } elseif($fulfillment_type === 'pickup' && $pickup_handler === '') {
+    } elseif($fulfillment_type === 'pickup' && $pickup_handler === '') {
         $error = 'Please assign a pickup staff handler for pickup orders.';
     } else {
-        $existing_stmt = $pdo->prepare("SELECT * FROM order_fulfillments WHERE order_id = ?");
-        $existing_stmt->execute([$order_id]);
-        $existing = $existing_stmt->fetch();
+        [$saved, $save_error] = automation_upsert_order_fulfillment(
+            $pdo,
+            $order,
+            [
+                'fulfillment_type' => $fulfillment_type,
+                'status' => $status,
+                'courier' => $courier,
+                'tracking_number' => $tracking_number,
+                'pickup_location' => $pickup_location,
+                'notes' => $final_notes,
+            ],
+            $owner_id,
+            'owner'
+        );
 
-        $current_status = $existing['status'] ?? FULFILLMENT_PENDING;
-        if($status !== $current_status) {
-            [$can_transition, $transition_error] = order_workflow_validate_fulfillment_status(
-                $pdo,
-                $order_id,
-                $current_status,
-                $status
-            );
-            if(!$can_transition) {
-                $error = $transition_error ?: 'Status transition is not allowed from the current state.';
-            }
-        }
-
-        if(!$error) {
-            $ready_at = $existing['ready_at'] ?? null;
-            $delivered_at = $existing['delivered_at'] ?? null;
-            $claimed_at = $existing['claimed_at'] ?? null;
-            $now = date('Y-m-d H:i:s');
-
-            if($status === FULFILLMENT_READY_FOR_PICKUP && !$ready_at) {
-                $ready_at = $now;
-            }
-            if($status === FULFILLMENT_DELIVERED && !$delivered_at) {
-                $delivered_at = $now;
-            }
-            if($status === FULFILLMENT_CLAIMED && !$claimed_at) {
-                $claimed_at = $now;
-            }
-
-            if($existing) {
-                $update_stmt = $pdo->prepare("
-                    UPDATE order_fulfillments
-                    SET fulfillment_type = ?,
-                        status = ?,
-                        courier = ?,
-                        tracking_number = ?,
-                        pickup_location = ?,
-                        notes = ?,
-                        ready_at = ?,
-                        delivered_at = ?,
-                        claimed_at = ?,
-                        updated_at = NOW()
-                    WHERE id = ?
-                ");
-                $update_stmt->execute([
-                    $fulfillment_type,
-                    $status,
-                    $courier ?: null,
-                    $tracking_number ?: null,
-                    $pickup_location ?: null,
-                     $final_notes,
-                    $ready_at,
-                    $delivered_at,
-                    $claimed_at,
-                    $existing['id']
-                ]);
-                $fulfillment_id = (int) $existing['id'];
-            } else {
-                $insert_stmt = $pdo->prepare("
-                    INSERT INTO order_fulfillments
-                        (order_id, fulfillment_type, status, courier, tracking_number, pickup_location, notes, ready_at, delivered_at, claimed_at)
-                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-                ");
-                $insert_stmt->execute([
-                    $order_id,
-                    $fulfillment_type,
-                    $status,
-                    $courier ?: null,
-                    $tracking_number ?: null,
-                    $pickup_location ?: null,
-                     $final_notes,
-                    $ready_at,
-                    $delivered_at,
-                    $claimed_at
-                ]);
-                $fulfillment_id = (int) $pdo->lastInsertId();
-            }
-
-            if(!$existing || $status !== $current_status) {
-                $history_stmt = $pdo->prepare("
-                    INSERT INTO order_fulfillment_history (fulfillment_id, status, notes)
-                    VALUES (?, ?, ?)
-                ");
-                $history_stmt->execute([$fulfillment_id, $status, $final_notes]);
-
-                $message = sprintf(
-                    'Order #%s fulfillment updated to %s (%s).',
-                    $order['order_number'],
-                    strtolower(str_replace('_', ' ', $status)),
-                    $fulfillment_types[$fulfillment_type]
-                );
-                create_notification($pdo, (int) $order['client_id'], $order_id, 'info', $message);
-            }
-
+        if(!$saved) {
+            $error = $save_error ?: 'Failed to save fulfillment update.';
+        } else {
             $success = 'Fulfillment details updated successfully.';
         }
     }
