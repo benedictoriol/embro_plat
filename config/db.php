@@ -92,8 +92,31 @@ function ensure_orders_image_dimension_columns(PDO $pdo): void {
     }
 }
 
+
+function ensure_orders_cap_measurement_columns(PDO $pdo): void {
+    if (!table_exists($pdo, 'orders')) {
+        return;
+    }
+
+    $columns = [
+        'detected_width_mm' => 'DECIMAL(10,2) DEFAULT NULL',
+        'detected_height_mm' => 'DECIMAL(10,2) DEFAULT NULL',
+        'fits_cap_area' => 'TINYINT(1) DEFAULT NULL',
+        'suggested_width_mm' => 'DECIMAL(10,2) DEFAULT NULL',
+        'suggested_height_mm' => 'DECIMAL(10,2) DEFAULT NULL',
+        'scale_ratio' => 'DECIMAL(10,4) DEFAULT NULL',
+    ];
+
+    foreach ($columns as $column => $definition) {
+        if (!column_exists($pdo, 'orders', $column)) {
+            $pdo->exec("ALTER TABLE orders ADD COLUMN {$column} {$definition}");
+        }
+    }
+}
+
 ensure_orders_price_column($pdo);
 ensure_orders_image_dimension_columns($pdo);
+ensure_orders_cap_measurement_columns($pdo);
 ensure_shop_staff_position_column($pdo);
 ensure_payments_payment_method_column($pdo);
 function log_audit(PDO $pdo, ?int $actorId, ?string $actorRole, string $action, string $entityType, ?int $entityId, array $oldValues = [], array $newValues = []): void {

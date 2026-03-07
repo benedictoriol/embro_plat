@@ -40,7 +40,7 @@ if(isset($_POST['update_design'])) {
     $client_notes = sanitize($_POST['client_notes'] ?? '');
 
     $order_stmt = $pdo->prepare("
-        SELECT id, design_file, width_px, height_px, client_notes
+        SELECT id, service_type, design_file, width_px, height_px, client_notes, detected_width_mm, detected_height_mm, fits_cap_area, suggested_width_mm, suggested_height_mm, scale_ratio
         FROM orders
         WHERE id = ? AND client_id = ? AND status IN ('pending', 'accepted', 'in_progress')
     ");
@@ -61,6 +61,12 @@ if(isset($_POST['update_design'])) {
         $width_px = isset($order['width_px']) ? (int) $order['width_px'] : null;
         $height_px = isset($order['height_px']) ? (int) $order['height_px'] : null;
         $existing_notes = $order['client_notes'] ?? '';
+        $detected_width_mm = isset($order['detected_width_mm']) ? (float) $order['detected_width_mm'] : null;
+        $detected_height_mm = isset($order['detected_height_mm']) ? (float) $order['detected_height_mm'] : null;
+        $fits_cap_area = isset($order['fits_cap_area']) ? (int) $order['fits_cap_area'] : null;
+        $suggested_width_mm = isset($order['suggested_width_mm']) ? (float) $order['suggested_width_mm'] : null;
+        $suggested_height_mm = isset($order['suggested_height_mm']) ? (float) $order['suggested_height_mm'] : null;
+        $scale_ratio = isset($order['scale_ratio']) ? (float) $order['scale_ratio'] : null;
 
         if(isset($_FILES['design_file']) && $_FILES['design_file']['error'] !== UPLOAD_ERR_NO_FILE) {
             $file = $_FILES['design_file'];
@@ -87,6 +93,18 @@ if(isset($_POST['update_design'])) {
             }
         }
 
+        if (is_cap_service_type($order['service_type'] ?? null)) {
+            $capMeasurement = build_cap_measurements_from_pixels($width_px, $height_px);
+            if ($capMeasurement !== null) {
+                $detected_width_mm = $capMeasurement['detected_width_mm'];
+                $detected_height_mm = $capMeasurement['detected_height_mm'];
+                $fits_cap_area = $capMeasurement['fits_cap_area'] ? 1 : 0;
+                $suggested_width_mm = $capMeasurement['suggested_width_mm'];
+                $suggested_height_mm = $capMeasurement['suggested_height_mm'];
+                $scale_ratio = $capMeasurement['scale_ratio'];
+            }
+        }
+
         if($error === '') {
             $combined_notes = $existing_notes;
             if($client_notes !== '') {
@@ -95,10 +113,10 @@ if(isset($_POST['update_design'])) {
 
             $update_stmt = $pdo->prepare("
                 UPDATE orders
-                SET design_description = ?, design_file = ?, width_px = ?, height_px = ?, client_notes = ?, updated_at = NOW()
+                SET design_description = ?, design_file = ?, width_px = ?, height_px = ?, detected_width_mm = ?, detected_height_mm = ?, fits_cap_area = ?, suggested_width_mm = ?, suggested_height_mm = ?, scale_ratio = ?, client_notes = ?, updated_at = NOW()
                 WHERE id = ? AND client_id = ?
             ");
-            $update_stmt->execute([$design_description, $design_file, $width_px, $height_px, $combined_notes, $order_id, $client_id]);
+            $update_stmt->execute([$design_description, $design_file, $width_px, $height_px, $detected_width_mm, $detected_height_mm, $fits_cap_area, $suggested_width_mm, $suggested_height_mm, $scale_ratio, $combined_notes, $order_id, $client_id]);
             $success = 'Design details updated successfully.';
             cleanup_media($pdo);
         }
@@ -199,6 +217,28 @@ if(isset($_POST['update_design'])) {
                                 <i class="fas fa-ruler-combined"></i>
                                 Detected image size: not available for this file type
                             </div>
+                        <?php endif; ?>
+                        <?php if(is_cap_service_type($order['service_type'] ?? null)): ?>
+                            <div>
+                                <i class="fas fa-hat-cowboy"></i>
+                                Cap allowed area: <?php echo number_format((float) CAP_FRONT_WIDTH_MM, 0); ?> × <?php echo number_format((float) CAP_FRONT_HEIGHT_MM, 0); ?> mm
+                            </div>
+                            <?php if(!empty($order['detected_width_mm']) && !empty($order['detected_height_mm'])): ?>
+                                <div>
+                                    <i class="fas fa-ruler"></i>
+                                    Detected design size: <?php echo number_format((float) $order['detected_width_mm'], 2); ?> × <?php echo number_format((float) $order['detected_height_mm'], 2); ?> mm
+                                </div>
+                                <div>
+                                    <i class="fas fa-circle-check"></i>
+                                    Cap fit check: <?php echo !empty($order['fits_cap_area']) ? 'Fits cap area' : 'Needs scaling'; ?>
+                                </div>
+                                <?php if(empty($order['fits_cap_area']) && !empty($order['suggested_width_mm']) && !empty($order['suggested_height_mm'])): ?>
+                                    <div>
+                                        <i class="fas fa-up-right-and-down-left-from-center"></i>
+                                        Suggested size: <?php echo number_format((float) $order['suggested_width_mm'], 2); ?> × <?php echo number_format((float) $order['suggested_height_mm'], 2); ?> mm (<?php echo number_format(((float) ($order['scale_ratio'] ?? 1)) * 100, 1); ?>% scale)
+                                    </div>
+                                <?php endif; ?>
+                            <?php endif; ?>
                         <?php endif; ?>
                     </div>
 

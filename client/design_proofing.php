@@ -248,7 +248,7 @@ $shops = $shops_stmt->fetchAll();
 $selected_custom_order = null;
 $prefill_order_id = isset($_GET['order_id']) ? (int) $_GET['order_id'] : 0;
 if($prefill_order_id > 0) {
-    $prefill_stmt = $pdo->prepare("SELECT o.id, o.order_number, o.shop_id, o.service_type, o.design_description, o.design_file, o.width_px, o.height_px, o.client_notes, s.shop_name
+    $prefill_stmt = $pdo->prepare("SELECT o.id, o.order_number, o.shop_id, o.service_type, o.design_description, o.design_file, o.width_px, o.height_px, o.detected_width_mm, o.detected_height_mm, o.fits_cap_area, o.suggested_width_mm, o.suggested_height_mm, o.scale_ratio, o.client_notes, s.shop_name
         FROM orders o
         JOIN shops s ON s.id = o.shop_id
         WHERE o.id = ? AND o.client_id = ?");
@@ -265,6 +265,12 @@ if(isset($_POST['request_quote'])) {
     $uploaded_height = 0;
     $uploaded_colors = (int) ($_POST['design_color_count'] ?? 0);
     $uploaded_estimate = (float) ($_POST['estimated_design_price'] ?? 0);
+    $detected_width_mm = null;
+    $detected_height_mm = null;
+    $fits_cap_area = null;
+    $suggested_width_mm = null;
+    $suggested_height_mm = null;
+    $scale_ratio = null;
 
     if($shop_id <= 0) {
         $error = 'Please select the shop where you want to request design proofing and quotation.';
@@ -308,13 +314,19 @@ if(isset($_POST['request_quote'])) {
     }
 
     if($error === '' && !$uploaded_design_file && $customize_order_id > 0) {
-        $customized_stmt = $pdo->prepare("SELECT id, design_file, width_px, height_px FROM orders WHERE id = ? AND client_id = ? LIMIT 1");
+        $customized_stmt = $pdo->prepare("SELECT id, design_file, width_px, height_px, detected_width_mm, detected_height_mm, fits_cap_area, suggested_width_mm, suggested_height_mm, scale_ratio FROM orders WHERE id = ? AND client_id = ? LIMIT 1");
         $customized_stmt->execute([$customize_order_id, $client_id]);
         $customized_order = $customized_stmt->fetch();
         if($customized_order) {
             $uploaded_design_file = $customized_order['design_file'] ?: null;
             $uploaded_width = max(0, (int) ($customized_order['width_px'] ?? 0));
             $uploaded_height = max(0, (int) ($customized_order['height_px'] ?? 0));
+            $detected_width_mm = isset($customized_order['detected_width_mm']) ? (float) $customized_order['detected_width_mm'] : null;
+            $detected_height_mm = isset($customized_order['detected_height_mm']) ? (float) $customized_order['detected_height_mm'] : null;
+            $fits_cap_area = isset($customized_order['fits_cap_area']) ? (int) $customized_order['fits_cap_area'] : null;
+            $suggested_width_mm = isset($customized_order['suggested_width_mm']) ? (float) $customized_order['suggested_width_mm'] : null;
+            $suggested_height_mm = isset($customized_order['suggested_height_mm']) ? (float) $customized_order['suggested_height_mm'] : null;
+            $scale_ratio = isset($customized_order['scale_ratio']) ? (float) $customized_order['scale_ratio'] : null;
             if($uploaded_design_file && ($uploaded_width <= 0 || $uploaded_height <= 0) && is_design_image($uploaded_design_file)) {
                 $uploaded_path = media_upload_dir('designs') . '/' . basename($uploaded_design_file);
                 $dimension_data = get_uploaded_image_dimensions($uploaded_path);
@@ -343,6 +355,18 @@ if(isset($_POST['request_quote'])) {
             $design_estimate['estimated_price'] = $uploaded_estimate;
         }
 
+        if (is_cap_service_type($service_type)) {
+            $capMeasurement = build_cap_measurements_from_pixels($uploaded_width, $uploaded_height);
+            if ($capMeasurement !== null) {
+                $detected_width_mm = $capMeasurement['detected_width_mm'];
+                $detected_height_mm = $capMeasurement['detected_height_mm'];
+                $fits_cap_area = $capMeasurement['fits_cap_area'] ? 1 : 0;
+                $suggested_width_mm = $capMeasurement['suggested_width_mm'];
+                $suggested_height_mm = $capMeasurement['suggested_height_mm'];
+                $scale_ratio = $capMeasurement['scale_ratio'];
+            }
+        }
+
         $order_number = 'ORD-' . date('Ymd') . '-' . strtoupper(substr(uniqid(), -6));
         $quote_details = [
             'requested_from_services' => true,
@@ -356,13 +380,23 @@ if(isset($_POST['request_quote'])) {
                 'color_count' => $design_estimate['color_count'],
                 'price_components' => $design_estimate['price_components'],
                 'source' => $uploaded_design_abs_path ? 'uploaded_design_file' : 'client_input',
+                'cap_measurement' => is_cap_service_type($service_type) ? [
+                    'detected_width_mm' => $detected_width_mm,
+                    'detected_height_mm' => $detected_height_mm,
+                    'max_width_mm' => (float) CAP_FRONT_WIDTH_MM,
+                    'max_height_mm' => (float) CAP_FRONT_HEIGHT_MM,
+                    'fits_cap_area' => $fits_cap_area !== null ? (bool) $fits_cap_area : null,
+                    'suggested_width_mm' => $suggested_width_mm,
+                    'suggested_height_mm' => $suggested_height_mm,
+                    'scale_ratio' => $scale_ratio,
+                ] : null,
             ],
         ];
 
         $insert_stmt = $pdo->prepare("INSERT INTO orders (
                 order_number, client_id, shop_id, service_type, design_description,
-                quantity, price, client_notes, quote_details, design_file, width_px, height_px, status, design_approved
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'pending', 0)");
+                quantity, price, client_notes, quote_details, design_file, width_px, height_px, detected_width_mm, detected_height_mm, fits_cap_area, suggested_width_mm, suggested_height_mm, scale_ratio, status, design_approved
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'pending', 0)");
 
         $insert_stmt->execute([
             $order_number,
@@ -377,6 +411,12 @@ if(isset($_POST['request_quote'])) {
             $uploaded_design_file,
             $design_estimate['width'] > 0 ? (int) $design_estimate['width'] : null,
             $design_estimate['height'] > 0 ? (int) $design_estimate['height'] : null,
+            $detected_width_mm,
+            $detected_height_mm,
+            $fits_cap_area,
+            $suggested_width_mm,
+            $suggested_height_mm,
+            $scale_ratio,
         ]);
 
         $order_id = (int) $pdo->lastInsertId();
@@ -669,7 +709,8 @@ $approvals_stmt->execute([$client_id]);
 $approvals = $approvals_stmt->fetchAll();
 
 $requests_stmt = $pdo->prepare("
-    SELECT o.id, o.order_number, o.service_type, o.design_description, o.design_file, o.status, o.price,           
+    SELECT o.id, o.order_number, o.service_type, o.design_description, o.design_file, o.status, o.price,
+           o.width_px, o.height_px, o.detected_width_mm, o.detected_height_mm, o.fits_cap_area, o.suggested_width_mm, o.suggested_height_mm, o.scale_ratio,         
            o.created_at, o.updated_at, o.design_approved, o.quote_details, s.shop_name
     FROM orders o
     JOIN shops s ON s.id = o.shop_id
@@ -705,6 +746,7 @@ foreach($request_history as &$request) {
     $request['client_quote_status_label'] = $client_quote_status_labels[$request['price_quote_status']] ?? ucfirst(str_replace('_', ' ', $request['price_quote_status']));
     $request['design_file_url'] = proof_file_url($request['design_file'] ?? null);
     $request['design_file_is_image'] = is_design_image($request['design_file'] ?? null);
+    $request['is_cap_service'] = is_cap_service_type($request['service_type'] ?? null);
 }
 unset($request);
 ?>
@@ -929,6 +971,7 @@ unset($request);
                                 Uploaded image dimensions are auto-detected after upload.
                             <?php endif; ?>
                         </small>
+                        <small class="text-muted" style="display:block; margin-top:4px;">Cap embroidery limit: <?php echo number_format((float) CAP_FRONT_WIDTH_MM, 0); ?> × <?php echo number_format((float) CAP_FRONT_HEIGHT_MM, 0); ?> mm.</small>
                         <div class="upload-preview" id="uploadPreview" style="display:none;"></div>
                         <small class="text-muted" id="uploadEstimateLabel" style="display:none;"></small>
                     </div>
@@ -988,6 +1031,16 @@ unset($request);
                             </div>
                             <p class="mb-1"><i class="fas fa-store"></i> <?php echo htmlspecialchars($request['shop_name']); ?></p>
                             <p class="mb-1"><strong>Service:</strong> <?php echo htmlspecialchars($request['service_type'] ?: 'Custom Embroidery Design'); ?></p>
+                            <?php if(!empty($request['is_cap_service'])): ?>
+                                <p class="mb-1"><strong>Cap allowed area:</strong> <?php echo number_format((float) CAP_FRONT_WIDTH_MM, 0); ?> × <?php echo number_format((float) CAP_FRONT_HEIGHT_MM, 0); ?> mm</p>
+                                <?php if(!empty($request['detected_width_mm']) && !empty($request['detected_height_mm'])): ?>
+                                    <p class="mb-1"><strong>Detected design size:</strong> <?php echo number_format((float) $request['detected_width_mm'], 2); ?> × <?php echo number_format((float) $request['detected_height_mm'], 2); ?> mm</p>
+                                    <p class="mb-1"><strong>Cap fit:</strong> <?php echo !empty($request['fits_cap_area']) ? 'Fits' : 'Needs scaling'; ?></p>
+                                    <?php if(empty($request['fits_cap_area']) && !empty($request['suggested_width_mm']) && !empty($request['suggested_height_mm'])): ?>
+                                        <p class="mb-1"><strong>Suggested corrected size:</strong> <?php echo number_format((float) $request['suggested_width_mm'], 2); ?> × <?php echo number_format((float) $request['suggested_height_mm'], 2); ?> mm (<?php echo number_format(((float) ($request['scale_ratio'] ?? 1)) * 100, 1); ?>% scale)</p>
+                                    <?php endif; ?>
+                                <?php endif; ?>
+                            <?php endif; ?>
                             <p class="mb-1"><strong>Design request:</strong> <?php echo htmlspecialchars($request['design_description'] ?: 'No design details provided.'); ?></p>
                             <p class="mb-1"><strong>Quoted price:</strong> <?php echo $request['price'] !== null ? '₱' . number_format((float) $request['price'], 2) : 'Waiting for shop quotation'; ?></p>
 

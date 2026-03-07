@@ -1,5 +1,13 @@
 <?php
 
+if (!defined('CAP_FRONT_WIDTH_MM')) {
+    define('CAP_FRONT_WIDTH_MM', 120.0);
+}
+
+if (!defined('CAP_FRONT_HEIGHT_MM')) {
+    define('CAP_FRONT_HEIGHT_MM', 60.0);
+}
+
 function normalize_image_dimension_data(array $sizeData): array {
     $width = 0;
     $height = 0;
@@ -78,4 +86,81 @@ function get_uploaded_image_dimensions(string $absolutePath): array {
         'height_px' => null,
         'mime_type' => null,
     ];
+}
+
+function px_to_mm_estimate(int $px, float $dpi = 96): float {
+    if ($px <= 0 || $dpi <= 0) {
+        return 0.0;
+    }
+
+    return round(($px / $dpi) * 25.4, 2);
+}
+
+function suggest_cap_scale(float $designWidthMm, float $designHeightMm, float $maxWidthMm, float $maxHeightMm): array {
+    $safeWidth = max(0.0, $designWidthMm);
+    $safeHeight = max(0.0, $designHeightMm);
+    $safeMaxWidth = max(0.0, $maxWidthMm);
+    $safeMaxHeight = max(0.0, $maxHeightMm);
+
+    if ($safeWidth <= 0 || $safeHeight <= 0 || $safeMaxWidth <= 0 || $safeMaxHeight <= 0) {
+        return [
+            'suggested_width_mm' => round($safeWidth, 2),
+            'suggested_height_mm' => round($safeHeight, 2),
+            'scale_ratio' => 1.0,
+        ];
+    }
+
+    $widthRatio = $safeMaxWidth / $safeWidth;
+    $heightRatio = $safeMaxHeight / $safeHeight;
+    $scaleRatio = min(1.0, $widthRatio, $heightRatio);
+
+    return [
+        'suggested_width_mm' => round($safeWidth * $scaleRatio, 2),
+        'suggested_height_mm' => round($safeHeight * $scaleRatio, 2),
+        'scale_ratio' => round($scaleRatio, 4),
+    ];
+}
+
+function compute_cap_fit(float $designWidthMm, float $designHeightMm): array {
+    $maxWidth = (float) CAP_FRONT_WIDTH_MM;
+    $maxHeight = (float) CAP_FRONT_HEIGHT_MM;
+    $safeWidth = max(0.0, $designWidthMm);
+    $safeHeight = max(0.0, $designHeightMm);
+    $fits = $safeWidth > 0
+        && $safeHeight > 0
+        && $safeWidth <= $maxWidth
+        && $safeHeight <= $maxHeight;
+
+    $suggestion = suggest_cap_scale($safeWidth, $safeHeight, $maxWidth, $maxHeight);
+
+    return [
+        'detected_width_mm' => round($safeWidth, 2),
+        'detected_height_mm' => round($safeHeight, 2),
+        'max_width_mm' => round($maxWidth, 2),
+        'max_height_mm' => round($maxHeight, 2),
+        'fits_cap_area' => $fits,
+        'suggested_width_mm' => $suggestion['suggested_width_mm'],
+        'suggested_height_mm' => $suggestion['suggested_height_mm'],
+        'scale_ratio' => $suggestion['scale_ratio'],
+    ];
+}
+
+function is_cap_service_type(?string $serviceType): bool {
+    if (!is_string($serviceType) || trim($serviceType) === '') {
+        return false;
+    }
+
+    return str_contains(strtolower($serviceType), 'cap');
+}
+
+function build_cap_measurements_from_pixels(?int $widthPx, ?int $heightPx, float $dpi = 96): ?array {
+    $safeWidthPx = max(0, (int) ($widthPx ?? 0));
+    $safeHeightPx = max(0, (int) ($heightPx ?? 0));
+    if ($safeWidthPx <= 0 || $safeHeightPx <= 0) {
+        return null;
+    }
+
+    $widthMm = px_to_mm_estimate($safeWidthPx, $dpi);
+    $heightMm = px_to_mm_estimate($safeHeightPx, $dpi);
+    return compute_cap_fit($widthMm, $heightMm);
 }
