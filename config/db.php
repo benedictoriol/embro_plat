@@ -56,6 +56,16 @@ function column_exists(PDO $pdo, string $tableName, string $columnName): bool {
     return (int) $stmt->fetchColumn() > 0;
 }
 
+
+function ensure_shop_staff_position_column(PDO $pdo): void {
+    if (!table_exists($pdo, 'shop_staffs') || column_exists($pdo, 'shop_staffs', 'position')) {
+        return;
+    }
+
+    $positionClause = column_exists($pdo, 'shop_staffs', 'staff_role') ? ' AFTER staff_role' : '';
+    $pdo->exec("ALTER TABLE shop_staffs ADD COLUMN position VARCHAR(100) DEFAULT NULL{$positionClause}");
+}
+
 function ensure_orders_price_column(PDO $pdo): void {
     if (!table_exists($pdo, 'orders') || column_exists($pdo, 'orders', 'price')) {
         return;
@@ -66,6 +76,7 @@ function ensure_orders_price_column(PDO $pdo): void {
 }
 
 ensure_orders_price_column($pdo);
+ensure_shop_staff_position_column($pdo);
 ensure_payments_payment_method_column($pdo);
 function log_audit(PDO $pdo, ?int $actorId, ?string $actorRole, string $action, string $entityType, ?int $entityId, array $oldValues = [], array $newValues = []): void {
     $stmt = $pdo->prepare("

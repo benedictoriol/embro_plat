@@ -1,7 +1,8 @@
 <?php
 session_start();
 require_once '../config/db.php';
-require_role('hr');
+require_role(['hr', 'staff', 'employee']);
+require_staff_position(['hr_staff']);
 
 $hr_id = $_SESSION['user']['id'];
 $available_permissions = [
@@ -23,7 +24,7 @@ $hr_stmt = $pdo->prepare("
     SELECT se.shop_id, s.shop_name
     FROM shop_staffs se
     JOIN shops s ON se.shop_id = s.id
-    WHERE se.user_id = ? AND se.staff_role = 'hr' AND se.status = 'active'
+    WHERE se.user_id = ? AND (se.staff_role = 'hr' OR LOWER(REPLACE(se.position, ' ', '_')) = 'hr_staff') AND se.status = 'active'
 ");
 $hr_stmt->execute([$hr_id]);
 $hr_shop = $hr_stmt->fetch();
@@ -217,10 +218,11 @@ $active_page = 'create_staff';
                     <label>Position *</label>
                     <select name="position" class="form-control" required>
                         <option value="">Select position</option>
-                        <option value="Designer">Designer</option>
-                        <option value="Embroidery Technician">Embroidery Technician</option>
-                        <option value="Quality Control">Quality Control</option>
-                        <option value="Production Manager">Production Manager</option>
+                        <option value="digitizer">Digitizer</option>
+                        <option value="embroidery_operator">Embroidery Operator</option>
+                        <option value="qc_staff">QC Staff</option>
+                        <option value="delivery_staff">Delivery Staff</option>
+                        <option value="hr_staff">HR Staff</option>
                     </select>
                 </div>
 

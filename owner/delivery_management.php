@@ -3,17 +3,30 @@ session_start();
 require_once '../config/db.php';
 require_once '../config/constants.php';
 require_once '../config/automation_helpers.php';
-require_role('owner');
+require_role(['owner', 'staff', 'employee']);
+require_staff_position(['delivery_staff']);
 
 $owner_id = $_SESSION['user']['id'];
 $owner_role = $_SESSION['user']['role'] ?? null;
-$shop_stmt = $pdo->prepare("SELECT * FROM shops WHERE owner_id = ?");
-$shop_stmt->execute([$owner_id]);
+if ($owner_role === 'owner') {
+    $shop_stmt = $pdo->prepare("SELECT * FROM shops WHERE owner_id = ?");
+    $shop_stmt->execute([$owner_id]);
+} else {
+    $shop_stmt = $pdo->prepare("
+        SELECT s.*
+        FROM shop_staffs ss
+        JOIN shops s ON s.id = ss.shop_id
+        WHERE ss.user_id = ? AND ss.status = 'active'
+        ORDER BY ss.created_at DESC
+        LIMIT 1
+    ");
+    $shop_stmt->execute([$owner_id]);
+}
 $shop = $shop_stmt->fetch();
 
 if(!$shop) {
-    header("Location: create_shop.php");
-    exit();
+     http_response_code(403);
+    die('You are not assigned to an active shop for delivery management.');
 }
 
 $shop_id = $shop['id'];

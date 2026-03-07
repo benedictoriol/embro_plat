@@ -1,11 +1,25 @@
 <?php
 session_start();
 require_once '../config/db.php';
-require_role('owner');
+require_role(['owner', 'staff', 'employee']);
+require_staff_position(['qc_staff']);
 
-$owner_id = $_SESSION['user']['id'];
-$shop_stmt = $pdo->prepare("SELECT shop_name FROM shops WHERE owner_id = ?");
-$shop_stmt->execute([$owner_id]);
+$user_id = (int) $_SESSION['user']['id'];
+$user_role = $_SESSION['user']['role'] ?? null;
+if ($user_role === 'owner') {
+    $shop_stmt = $pdo->prepare("SELECT shop_name FROM shops WHERE owner_id = ?");
+    $shop_stmt->execute([$user_id]);
+} else {
+    $shop_stmt = $pdo->prepare("
+        SELECT s.shop_name
+        FROM shop_staffs ss
+        JOIN shops s ON s.id = ss.shop_id
+        WHERE ss.user_id = ? AND ss.status = 'active'
+        ORDER BY ss.created_at DESC
+        LIMIT 1
+    ");
+    $shop_stmt->execute([$user_id]);
+}
 $shop = $shop_stmt->fetch();
 
 $inspection_steps = [

@@ -5,6 +5,7 @@ require_once '../config/automation_helpers.php';
 require_once '../config/constants.php';
 require_once '../includes/media_manager.php';
 require_role(['staff','employee','hr']);
+require_staff_position(['digitizer', 'embroidery_operator'], ['bypass_roles' => []]);
 
 $staff_id = $_SESSION['user']['id'];
 $staff_role = $_SESSION['user']['role'] ?? null;
@@ -23,12 +24,15 @@ if(!$staff) {
 }
 
 $staff_permissions = fetch_staff_permissions($pdo, $staff_id);
-$can_update_status = !empty($staff_permissions['update_status']);
-$can_upload_photos = !empty($staff_permissions['upload_photos']);
+$is_digitizer = user_has_position($_SESSION['user'], ['digitizer'], $pdo);
+$is_embroidery_operator = user_has_position($_SESSION['user'], ['embroidery_operator'], $pdo);
+$can_upload_proof = !empty($staff_permissions['update_status']) && $is_digitizer;
+$can_update_status = !empty($staff_permissions['update_status']) && $is_embroidery_operator;
+$can_upload_photos = !empty($staff_permissions['upload_photos']) && $is_embroidery_operator;
 
-if(!$can_update_status && !$can_upload_photos) {
+if(!$can_update_status && !$can_upload_photos && !$can_upload_proof) {
     http_response_code(403);
-    die('You do not have access to job status updates or photo uploads.');
+    die('Your position is not allowed to update production stages, upload output photos, or upload design proofs.');
 }
 
 // Get assigned jobs
@@ -123,7 +127,7 @@ if(!empty($jobs)) {
 
 // Update status
 if(isset($_POST['upload_proof'])) {
-     if(!$can_update_status) {
+    if(!$can_upload_proof) {
         $error = 'You do not have permission to upload design proofs.';
     } else {
         $order_id = (int) ($_POST['order_id'] ?? 0);

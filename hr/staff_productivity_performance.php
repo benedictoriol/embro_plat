@@ -1,6 +1,8 @@
 <?php
 session_start();
 require_once '../config/db.php';
+require_role(['hr', 'staff', 'employee']);
+require_staff_position(['hr_staff']);
 require_role('hr');
 
 $hr_id = $_SESSION['user']['id'];
@@ -10,7 +12,7 @@ $hr_stmt = $pdo->prepare("
     SELECT se.shop_id, s.shop_name
     FROM shop_staffs se
     JOIN shops s ON se.shop_id = s.id
-    WHERE se.user_id = ? AND se.staff_role = 'hr' AND se.status = 'active'
+    WHERE se.user_id = ? AND (se.staff_role = 'hr' OR LOWER(REPLACE(se.position, ' ', '_')) = 'hr_staff') AND se.status = 'active'
 ");
 $hr_stmt->execute([$hr_id]);
 $hr_shop = $hr_stmt->fetch();

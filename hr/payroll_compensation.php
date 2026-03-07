@@ -1,7 +1,8 @@
 <?php
 session_start();
 require_once '../config/db.php';
-require_role(['hr','owner']);
+require_role(['hr','owner','staff','employee']);
+require_staff_position(['hr_staff'], ['bypass_roles' => ['owner', 'hr', 'sys_admin']]);
 
 $user = $_SESSION['user'];
 $role = $user['role'];
@@ -15,7 +16,7 @@ if ($role === 'hr') {
         SELECT se.shop_id, s.shop_name
         FROM shop_staffs se
         JOIN shops s ON se.shop_id = s.id
-        WHERE se.user_id = ? AND se.staff_role = 'hr' AND se.status = 'active'
+        WHERE se.user_id = ? AND (se.staff_role = 'hr' OR LOWER(REPLACE(se.position, ' ', '_')) = 'hr_staff') AND se.status = 'active'
     ");
     $hr_stmt->execute([$user['id']]);
     $hr_shop = $hr_stmt->fetch();

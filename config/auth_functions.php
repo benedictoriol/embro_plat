@@ -322,4 +322,76 @@ function require_staff_permission(PDO $pdo, int $userId, string $permissionKey):
         exit();
     }
 }
+
+function normalize_staff_position(?string $position): string {
+    $normalized = strtolower(trim((string) $position));
+    return str_replace([' ', '-'], '_', $normalized);
+}
+
+function fetch_user_staff_position(PDO $pdo, int $userId): ?string {
+    $stmt = $pdo->prepare(
+        "SELECT position
+         FROM shop_staffs
+         WHERE user_id = ? AND status = 'active'
+         ORDER BY created_at DESC
+         LIMIT 1"
+    );
+    $stmt->execute([$userId]);
+    $position = $stmt->fetchColumn();
+
+    if (!is_string($position) || trim($position) === '') {
+        return null;
+    }
+
+    return normalize_staff_position($position);
+}
+
+function user_has_position($user, $positions, ?PDO $pdo = null): bool {
+    if (!is_array($positions)) {
+        $positions = [$positions];
+    }
+
+    $allowedPositions = array_values(array_filter(array_map(static function ($position) {
+        return normalize_staff_position((string) $position);
+    }, $positions)));
+
+    if (empty($allowedPositions) || !is_array($user)) {
+        return false;
+    }
+
+    $userPosition = normalize_staff_position((string) ($user['position'] ?? ''));
+
+    if ($userPosition === '' && isset($user['id'])) {
+        $pdo = $pdo instanceof PDO ? $pdo : ($GLOBALS['pdo'] ?? null);
+        if ($pdo instanceof PDO) {
+            $dbPosition = fetch_user_staff_position($pdo, (int) $user['id']);
+            if ($dbPosition !== null) {
+                $userPosition = $dbPosition;
+                $_SESSION['user']['position'] = $dbPosition;
+            }
+        }
+    }
+
+    return $userPosition !== '' && in_array($userPosition, $allowedPositions, true);
+}
+
+function require_staff_position($allowed_positions, array $options = []): void {
+    if (!isset($_SESSION['user']) || !is_array($_SESSION['user'])) {
+        header('Location: /auth/login.php');
+        exit;
+    }
+
+    $bypassRoles = $options['bypass_roles'] ?? ['owner', 'sys_admin', 'hr'];
+    $role = $_SESSION['user']['role'] ?? null;
+
+    if (in_array($role, $bypassRoles, true)) {
+        return;
+    }
+
+    if (!user_has_position($_SESSION['user'], $allowed_positions)) {
+        http_response_code(403);
+        echo 'You do not have permission to access this page.';
+        exit;
+    }
+}
 ?>
