@@ -117,6 +117,7 @@ if($_SERVER['REQUEST_METHOD'] === 'POST' && $action !== '') {
             o.revision_count,
             o.price,
             o.payment_status,
+            o.assigned_to,
             s.owner_id,
             s.shop_name
         FROM orders o
@@ -227,6 +228,33 @@ if($_SERVER['REQUEST_METHOD'] === 'POST' && $action !== '') {
                 WHERE id = ? AND client_id = ?
             ");
             $approve_stmt->execute([$order_id, $client_id]);
+            
+            $approval_update_stmt = $pdo->prepare("
+                UPDATE design_approvals
+                SET status = 'approved', approved_at = NOW(), updated_at = NOW()
+                WHERE order_id = ?
+            ");
+            $approval_update_stmt->execute([$order_id]);
+
+            $owner_message = 'Client approved the design proof for order #' . $order['order_number'] . '.';
+            if(!empty($order['owner_id'])) {
+                create_notification($pdo, (int) $order['owner_id'], $order_id, 'design', $owner_message);
+            }
+            if(!empty($order['assigned_to'])) {
+                create_notification($pdo, (int) $order['assigned_to'], $order_id, 'design', $owner_message);
+            }
+
+            automation_log_audit_if_available(
+                $pdo,
+                $client_id,
+                $_SESSION['user']['role'] ?? null,
+                'approve_design',
+                'orders',
+                $order_id,
+                ['design_approved' => $order['design_approved'] ?? null],
+                ['design_approved' => 1]
+            );
+
             $success = 'Design approved. Production can begin once the shop starts work.';
         }
     } elseif($action === 'request_revision') {
@@ -250,6 +278,41 @@ if($_SERVER['REQUEST_METHOD'] === 'POST' && $action !== '') {
                 WHERE id = ? AND client_id = ?
             ");
             $revision_stmt->execute([$notes, $order_id, $client_id]);
+            
+            $pending_status = order_workflow_design_pending_status($pdo);
+            $approval_update_stmt = $pdo->prepare("
+                UPDATE design_approvals
+                SET status = ?, approved_at = NULL, customer_notes = ?, updated_at = NOW()
+                WHERE order_id = ?
+            ");
+            $approval_update_stmt->execute([$pending_status, $notes, $order_id]);
+
+            $revision_message = 'Client requested a design revision for order #' . $order['order_number'] . '.';
+            if(!empty($order['owner_id'])) {
+                create_notification($pdo, (int) $order['owner_id'], $order_id, 'design', $revision_message);
+            }
+            if(!empty($order['assigned_to'])) {
+                create_notification($pdo, (int) $order['assigned_to'], $order_id, 'design', $revision_message);
+            }
+
+            automation_log_audit_if_available(
+                $pdo,
+                $client_id,
+                $_SESSION['user']['role'] ?? null,
+                'request_design_revision',
+                'orders',
+                $order_id,
+                [
+                    'design_approved' => $order['design_approved'] ?? null,
+                    'revision_count' => $order['revision_count'] ?? null,
+                ],
+                [
+                    'design_approved' => 0,
+                    'revision_notes' => $notes,
+                    'revision_count' => ((int) ($order['revision_count'] ?? 0)) + 1,
+                ]
+            );
+
             $success = 'Revision request sent to the shop.';
         }
         } elseif($action === 'accept_price') {

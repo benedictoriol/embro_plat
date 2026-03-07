@@ -200,10 +200,29 @@ if(isset($_POST['upload_proof'])) {
                 'A new design proof is ready for order #%s.',
                 $order_info['order_number']
             );
-            create_notification($pdo, (int) $order_info['client_id'], $order_id, 'order_status', $message);
+            create_notification($pdo, (int) $order_info['client_id'], $order_id, 'design', $message);
             if(!empty($order_info['owner_id'])) {
-                create_notification($pdo, (int) $order_info['owner_id'], $order_id, 'info', $message);
+                $owner_message = sprintf(
+                    'A new design proof was uploaded for order #%s.',
+                    $order_info['order_number']
+                );
+                create_notification($pdo, (int) $order_info['owner_id'], $order_id, 'design', $owner_message);
             }
+
+            automation_log_audit_if_available(
+                $pdo,
+                $staff_id,
+                $staff_role,
+                'upload_design_proof',
+                'orders',
+                $order_id,
+                ['design_approved' => $order_info['design_approved'] ?? null],
+                [
+                    'design_approved' => 0,
+                    'design_file' => $design_file,
+                    'provider_notes' => $provider_notes ?: null,
+                ]
+            );
 
              $success = 'Proof uploaded and sent to the client for approval.';
             }

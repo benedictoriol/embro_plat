@@ -34,6 +34,27 @@ function order_workflow_can_transition_order_status(string $current, string $nex
     return order_workflow_can_transition(order_workflow_status_transitions(), $current, $next);
 }
 
+
+function order_workflow_design_pending_status(PDO $pdo): string {
+    try {
+        $status_column_stmt = $pdo->query("SHOW COLUMNS FROM design_approvals LIKE 'status'");
+        $status_column = $status_column_stmt ? $status_column_stmt->fetch() : null;
+        $column_type = strtolower((string) ($status_column['Type'] ?? ''));
+
+        if(str_starts_with($column_type, 'enum(')) {
+            preg_match_all("/'([^']+)'/", $column_type, $matches);
+            $allowed_statuses = $matches[1] ?? [];
+            if(in_array('pending_review', $allowed_statuses, true)) {
+                return 'pending_review';
+            }
+        }
+    } catch(PDOException $e) {
+        // Fallback to the baseline pending status when schema introspection is unavailable.
+    }
+
+    return 'pending';
+}
+
 function order_workflow_is_design_approved(PDO $pdo, int $order_id): bool {
     $approval_stmt = $pdo->prepare("
         SELECT o.design_approved, da.status
