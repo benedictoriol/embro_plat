@@ -94,22 +94,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     </style>
 </head>
 <body>
-    <nav class="navbar">
-        <div class="container d-flex justify-between align-center">
-            <a href="dashboard.php" class="navbar-brand">
-                <i class="fas fa-user-tie"></i> staff Dashboard
-            </a>
-            <ul class="navbar-nav">
-                <li><a href="dashboard.php" class="nav-link">Dashboard</a></li>
-                <li><a href="assigned_jobs.php" class="nav-link">My Jobs</a></li>
-                <li><a href="schedule.php" class="nav-link">Schedule</a></li>
-                <li><a href="update_status.php" class="nav-link">Update Status</a></li>
-                <li><a href="upload_photos.php" class="nav-link">Upload Photos</a></li>
-                <li><a href="profile.php" class="dropdown-item"><i class="fas fa-user-cog"></i> Profile</a></li>
-                <li><a href="../auth/logout.php" class="dropdown-item"><i class="fas fa-sign-out-alt"></i> Logout</a></li>
-            </ul>
-        </div>
-    </nav>
+    <?php require_once __DIR__ . '/includes/employee_navbar.php'; ?>
 
     <div class="container">
         <div class="dashboard-header fade-in">
