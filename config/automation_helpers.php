@@ -6,29 +6,7 @@ require_once __DIR__ . '/payment_helpers.php';
 require_once __DIR__ . '/notification_functions.php';
 
 function get_order_progress_for_status(string $status, ?string $fulfillment_status = null): int {
-    $normalized_status = strtolower(trim($status));
-    $normalized_fulfillment = $fulfillment_status !== null ? strtolower(trim($fulfillment_status)) : null;
-
-    $progress_map = [
-        STATUS_PENDING => 10,
-        STATUS_ACCEPTED => 25,
-        STATUS_IN_PROGRESS => 65,
-        STATUS_COMPLETED => 90,
-    ];
-
-    if($normalized_status === STATUS_CANCELLED) {
-        return 0;
-    }
-
-    if(isset($progress_map[$normalized_status])) {
-        return $progress_map[$normalized_status];
-    }
-
-    if(in_array($normalized_fulfillment, [FULFILLMENT_DELIVERED, FULFILLMENT_CLAIMED], true)) {
-        return 90;
-    }
-
-    return 0;
+    return order_workflow_display_progress($status, 0, $fulfillment_status);
 }
 
 function automation_update_order_status(PDO $pdo, int $order_id, string $next_status, ?int $staff_id = null, ?string $notes = null, bool $record_history = true): array {

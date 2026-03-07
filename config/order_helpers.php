@@ -28,4 +28,31 @@ function record_order_status_history(
     ");
     $stmt->execute([$order_id, $staff_id, $status, $progress, $notes]);
 }
+
+function order_display_progress(array $order, ?string $fulfillment_status = null): int {
+    return order_workflow_display_progress(
+        (string) ($order['status'] ?? STATUS_PENDING),
+        (int) ($order['progress'] ?? 0),
+        $fulfillment_status
+    );
+}
+
+function order_current_stage_label(array $order, ?string $fulfillment_status = null): string {
+    return order_workflow_current_stage_label((string) ($order['status'] ?? STATUS_PENDING), $fulfillment_status);
+}
+
+function ensure_status_history_with_fallback(array $status_history, array $order, ?string $fallback_note = null): array {
+    if(!empty($status_history)) {
+        return $status_history;
+    }
+
+    return [[
+        'order_id' => (int) ($order['id'] ?? 0),
+        'staff_id' => null,
+        'status' => (string) ($order['status'] ?? STATUS_PENDING),
+        'progress' => (int) ($order['progress'] ?? 0),
+        'notes' => $fallback_note,
+        'created_at' => (string) ($order['updated_at'] ?? $order['created_at'] ?? date('Y-m-d H:i:s')),
+    ]];
+}
 ?>

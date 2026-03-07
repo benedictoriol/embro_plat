@@ -34,6 +34,58 @@ function order_workflow_can_transition_order_status(string $current, string $nex
     return order_workflow_can_transition(order_workflow_status_transitions(), $current, $next);
 }
 
+function order_workflow_display_progress(string $order_status, int $current_progress = 0, ?string $fulfillment_status = null): int {
+    $normalized_status = strtolower(trim($order_status));
+    $normalized_fulfillment = $fulfillment_status !== null ? strtolower(trim($fulfillment_status)) : null;
+    $safe_progress = max(0, min(100, $current_progress));
+
+    if(in_array($normalized_fulfillment, [FULFILLMENT_DELIVERED, FULFILLMENT_CLAIMED], true)) {
+        return 100;
+    }
+
+    return match ($normalized_status) {
+        STATUS_COMPLETED => 90,
+        STATUS_IN_PROGRESS => max($safe_progress, 65),
+        STATUS_ACCEPTED => max($safe_progress, 25),
+        STATUS_PENDING => max($safe_progress, 10),
+        STATUS_CANCELLED => $safe_progress,
+        default => $safe_progress,
+    };
+}
+
+function order_workflow_current_stage_label(string $order_status, ?string $fulfillment_status = null): string {
+    $normalized_status = strtolower(trim($order_status));
+    $normalized_fulfillment = $fulfillment_status !== null ? strtolower(trim($fulfillment_status)) : null;
+
+    if($normalized_status === STATUS_CANCELLED) {
+        return 'Cancelled';
+    }
+
+    if($normalized_fulfillment === FULFILLMENT_DELIVERED) {
+        return 'Delivered';
+    }
+
+    if($normalized_fulfillment === FULFILLMENT_CLAIMED) {
+        return 'Claimed';
+    }
+
+    if($normalized_status === STATUS_COMPLETED && $normalized_fulfillment === FULFILLMENT_READY_FOR_PICKUP) {
+        return 'Ready for pickup';
+    }
+
+    if($normalized_status === STATUS_COMPLETED && $normalized_fulfillment === FULFILLMENT_OUT_FOR_DELIVERY) {
+        return 'Out for delivery';
+    }
+
+    return match ($normalized_status) {
+        STATUS_PENDING => 'Order placed',
+        STATUS_ACCEPTED => 'Order accepted',
+        STATUS_IN_PROGRESS => 'In production',
+        STATUS_COMPLETED => 'Completed',
+        STATUS_CANCELLED => 'Cancelled',
+        default => ucfirst(str_replace('_', ' ', $normalized_status)),
+    };
+}
 
 function order_workflow_design_pending_status(PDO $pdo): string {
     try {

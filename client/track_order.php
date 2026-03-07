@@ -404,24 +404,12 @@ if(!empty($all_orders)) {
     $status_history_stmt = $pdo->prepare("
         SELECT * FROM order_status_history
         WHERE order_id IN ($placeholders)
-        ORDER BY created_at DESC
+        ORDER BY created_at ASC, id ASC
     ");
     $status_history_stmt->execute($order_ids);
     $status_histories = $status_history_stmt->fetchAll();
     foreach($status_histories as $history) {
         $status_history_by_order[$history['order_id']][] = $history;
-    }
-    
-    $claimed_fulfillment_stmt = $pdo->prepare("
-        SELECT order_id
-        FROM order_fulfillments
-        WHERE order_id IN ($placeholders)
-          AND status = 'claimed'
-    ");
-    $claimed_fulfillment_stmt->execute($order_ids);
-    $claimed_fulfillments = $claimed_fulfillment_stmt->fetchAll();
-    foreach($claimed_fulfillments as $claimed) {
-        $claimed_fulfillment_by_order[$claimed['order_id']] = true;
     }
     
     $payments_stmt = $pdo->prepare("
@@ -465,11 +453,17 @@ if(!empty($all_orders)) {
     $fulfillment_stmt = $pdo->prepare("
         SELECT * FROM order_fulfillments
         WHERE order_id IN ($placeholders)
+        ORDER BY created_at DESC, id DESC
     ");
     $fulfillment_stmt->execute($order_ids);
     $fulfillments = $fulfillment_stmt->fetchAll();
     foreach($fulfillments as $fulfillment) {
-        $fulfillment_by_order[$fulfillment['order_id']] = $fulfillment;
+        if(!isset($fulfillment_by_order[$fulfillment['order_id']])) {
+            $fulfillment_by_order[$fulfillment['order_id']] = $fulfillment;
+            if(($fulfillment['status'] ?? null) === FULFILLMENT_CLAIMED) {
+                $claimed_fulfillment_by_order[$fulfillment['order_id']] = true;
+            }
+        }
     }
 
     if(!empty($fulfillments)) {
@@ -890,7 +884,11 @@ function order_overview_label(array $order, array $fulfillment_by_order, array $
         <?php if(!empty($orders)): ?>
             <?php foreach($orders as $index => $order): ?>
                 <?php $quote_details = !empty($order['quote_details']) ? json_decode($order['quote_details'], true) : null; ?>
-                <?php $status_history = $status_history_by_order[$order['id']] ?? []; ?>
+                <?php $fulfillment = $fulfillment_by_order[$order['id']] ?? null; ?>
+                <?php $fulfillment_status = $fulfillment['status'] ?? null; ?>
+                <?php $display_progress = order_display_progress($order, $fulfillment_status); ?>
+                <?php $current_stage_label = order_current_stage_label($order, $fulfillment_status); ?>
+                <?php $status_history = ensure_status_history_with_fallback($status_history_by_order[$order['id']] ?? [], $order, 'Current order status.'); ?>
                 <div class="order-card">
                    <div class="order-card-header" data-toggle-order="order-detail-<?php echo (int) $order['id']; ?>">
                         <div>
@@ -938,7 +936,6 @@ function order_overview_label(array $order, array $fulfillment_by_order, array $
                             : 0.0;
                         $balance_due = $amount_total !== null ? max(0, $amount_total - (float) $amount_paid) : null;
                         $payment_method = $payment ? ($payment_method_labels[$payment['payment_method'] ?? ''] ?? 'Uploaded proof of payment') : 'Not provided';
-                        $fulfillment = $fulfillment_by_order[$order['id']] ?? null;
                         $history = $fulfillment ? ($fulfillment_history_by_id[$fulfillment['id']] ?? []) : [];
                     ?>
 
@@ -949,6 +946,7 @@ function order_overview_label(array $order, array $fulfillment_by_order, array $
                             <div><strong>Order Number:</strong> #<?php echo htmlspecialchars($order['order_number']); ?></div>
                             <div><strong>Order Date:</strong> <?php echo date('M d, Y', strtotime($order['created_at'])); ?></div>
                             <div><strong>Order Status:</strong> <?php echo status_pill($order['status']); ?></div>
+                            <div><strong>Current Stage:</strong> <?php echo htmlspecialchars($current_stage_label); ?></div>
                         </div>
                     </div>
 
@@ -1003,25 +1001,25 @@ function order_overview_label(array $order, array $fulfillment_by_order, array $
                         <strong>Status Timeline</strong>
                         <div class="status-timeline">
                             <?php if(!empty($status_history)): ?>
-                                <?php foreach($status_history as $history): ?>
+                                <?php foreach($status_history as $status_entry): ?>
                                     <div class="timeline-item">
                                         <div>
-                                            <?php echo status_pill($history['status']); ?>
-                                            <?php if((int) $history['progress'] > 0): ?>
-                                                <span class="text-muted small">· <?php echo (int) $history['progress']; ?>% complete</span>
+                                            <?php echo status_pill($status_entry['status']); ?>
+                                            <?php if((int) $status_entry['progress'] > 0): ?>
+                                                <span class="text-muted small">· <?php echo (int) $status_entry['progress']; ?>% complete</span>
                                             <?php endif; ?>
                                         </div>
-                                        <?php if(!empty($history['notes'])): ?>
-                                            <div class="text-muted small mt-1"><?php echo nl2br(htmlspecialchars($history['notes'])); ?></div>
+                                        <?php if(!empty($status_entry['notes'])): ?>
+                                            <div class="text-muted small mt-1"><?php echo nl2br(htmlspecialchars($status_entry['notes'])); ?></div>
                                         <?php endif; ?>
                                         <div class="timeline-meta">
-                                            <?php echo date('M d, Y H:i', strtotime($history['created_at'])); ?>
+                                            <?php echo date('M d, Y H:i', strtotime($status_entry['created_at'])); ?>
                                         </div>
                                     </div>
                                 <?php endforeach; ?>
                             <?php else: ?>
                                 <div class="timeline-item">
-                                    <div class="text-muted small">No status updates have been recorded yet.</div>
+                                    <div class="text-muted small">Showing the current order status while detailed history is not yet available.</div>
                                 </div>
                             <?php endif; ?>
                         </div>
@@ -1171,9 +1169,9 @@ function order_overview_label(array $order, array $fulfillment_by_order, array $
 
 
                     <div class="mt-3">
-                        <strong>Progress: <?php echo $order['progress']; ?>%</strong>
+                        <strong>Progress: <?php echo (int) $display_progress; ?>%</strong>
                         <div class="progress-bar">
-                            <div class="progress-fill" style="width: <?php echo $order['progress']; ?>%;"></div>
+                            <div class="progress-fill" style="width: <?php echo (int) $display_progress; ?>%;"></div>
                         </div>
                     </div>
 
