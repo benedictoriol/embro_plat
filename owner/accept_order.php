@@ -32,7 +32,7 @@ $order_stmt->execute([$order_id, $shop['id']]);
 $order = $order_stmt->fetch();
 
 if(!$order || $order['status'] !== 'pending') {
-    header("Location: shop_orders.php?filter=pending");
+    header("Location: shop_orders.php?filter=pending&action=invalid_transition");
     exit();
 }
 
@@ -47,7 +47,9 @@ if(!empty($order['quote_details'])) {
     }
 }
 
-$final_price = $order['price'] !== null ? (float) $order['price'] : $estimated_price;
+$stored_price = $order['price'];
+$has_stored_price = $stored_price !== null && $stored_price !== '';
+$final_price = $has_stored_price ? (float) $stored_price : $estimated_price;
 
 if($final_price !== null) {
     $price_stmt = $pdo->prepare("UPDATE orders SET price = ?, updated_at = NOW() WHERE id = ? AND shop_id = ?");
@@ -62,7 +64,7 @@ if($final_price !== null) {
     'Order accepted by shop.'
 );
 if(!$status_updated) {
-    header("Location: shop_orders.php?filter=pending&error=" . urlencode($status_error ?? 'Unable to update order status.'));
+    header("Location: shop_orders.php?filter=pending&action=invalid_transition");
     exit();
 }
 
