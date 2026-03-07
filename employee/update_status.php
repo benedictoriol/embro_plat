@@ -1,6 +1,7 @@
 <?php
 session_start();
 require_once '../config/db.php';
+require_once '../config/automation_helpers.php';
 require_once '../config/constants.php';
 require_once '../includes/media_manager.php';
 require_role(['staff','employee','hr']);

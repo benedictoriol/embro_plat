@@ -1,6 +1,7 @@
 <?php
 session_start();
 require_once '../config/db.php';
+require_once '../config/automation_helpers.php';
 require_role('owner');
 
 $owner_id = $_SESSION['user']['id'];
@@ -49,35 +50,39 @@ if(!empty($order['quote_details'])) {
 $final_price = $order['price'] !== null ? (float) $order['price'] : $estimated_price;
 
 if($final_price !== null) {
-    $update_stmt = $pdo->prepare("UPDATE orders SET status = 'accepted', price = ?, updated_at = NOW() WHERE id = ? AND shop_id = ?");
-    $update_stmt->execute([$final_price, $order_id, $shop['id']]);
-
-    $invoice_status = determine_invoice_status('accepted', $order['payment_status'] ?? 'unpaid');
-    ensure_order_invoice($pdo, $order_id, $order['order_number'], $final_price, $invoice_status);
-} else {
-    $update_stmt = $pdo->prepare("UPDATE orders SET status = 'accepted', updated_at = NOW() WHERE id = ? AND shop_id = ?");
-    $update_stmt->execute([$order_id, $shop['id']]);
-}
-record_order_status_history($pdo, $order_id, STATUS_ACCEPTED, 0, 'Order accepted by shop.');
-
-if($order) {
-    $message = sprintf(
-        'Your order #%s has been accepted by %s.',
-        $order['order_number'],
-        $order['shop_name']
-    );
-    create_notification($pdo, (int) $order['client_id'], $order_id, 'order_status', $message);
+    $price_stmt = $pdo->prepare("UPDATE orders SET price = ?, updated_at = NOW() WHERE id = ? AND shop_id = ?");
+    $price_stmt->execute([$final_price, $order_id, $shop['id']]);
 }
 
-create_notification(
+[$status_updated, $status_error] = automation_update_order_status(
     $pdo,
-    (int) $order['client_id'],
+    $order_id,
+    STATUS_ACCEPTED,
+    $owner_id,
+    'Order accepted by shop.'
+);
+if(!$status_updated) {
+    header("Location: shop_orders.php?filter=pending&error=" . urlencode($status_error ?? 'Unable to update order status.'));
+    exit();
+}
+
+automation_sync_invoice_for_order($pdo, $order_id);
+
+automation_notify_order_parties(
+    $pdo,
+    $order_id,
+    'order_status',
+    sprintf('Your order #%s has been accepted by %s.', $order['order_number'], $order['shop_name'])
+);
+
+automation_notify_order_parties(
+    $pdo,
     $order_id,
     'success',
     'Your order #' . $order['order_number'] . ' has been accepted and will be scheduled shortly.'
 );
 
-log_audit(
+automation_log_audit_if_available(
     $pdo,
     $owner_id,
     $owner_role,
@@ -85,7 +90,7 @@ log_audit(
     'orders',
     $order_id,
     ['status' => $order['status'] ?? null],
-    ['status' => 'accepted']
+    ['status' => 'STATUS_ACCEPTED']
 );
 
 header("Location: shop_orders.php?filter=accepted&action=accepted");

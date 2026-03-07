@@ -1,6 +1,7 @@
 <?php
 session_start();
 require_once '../config/db.php';
+require_once '../config/automation_helpers.php';
 require_role('owner');
 
 $owner_id = $_SESSION['user']['id'];
@@ -88,12 +89,10 @@ if(isset($_POST['action'], $_POST['payment_id'])) {
                     ");
                     $order_update_stmt->execute([$refunded_at, $payment['order_id']]);
 
-            $invoice_status = determine_invoice_status($payment['order_status'], 'refunded');
-                    ensure_order_invoice($pdo, $payment['order_id'], $payment['order_number'], (float) ($payment['price'] ?? $payment['amount'] ?? 0), $invoice_status);
+            automation_sync_invoice_for_order($pdo, (int) $payment['order_id']);
 
-            create_notification(
+            automation_notify_order_parties(
                         $pdo,
-                        (int) $payment['client_id'],
                         (int) $payment['order_id'],
                         'payment',
                         sprintf('Refund processed for order #%s.', $payment['order_number'])
@@ -120,21 +119,14 @@ if(isset($_POST['action'], $_POST['payment_id'])) {
                     $order_update_stmt->execute([$order_payment_status, $verified_at, $payment['order_id']]);
 
                     if($action === 'verify') {
-                        $invoice_status = determine_invoice_status($payment['order_status'], 'paid');
-                        $invoice = ensure_order_invoice(
-                            $pdo,
-                            $payment['order_id'],
-                            $payment['order_number'],
-                            (float) ($payment['price'] ?? $payment['amount'] ?? 0),
-                            $invoice_status
-                        );
-                        ensure_payment_receipt($pdo, $payment_id, $owner_id, $verified_at);
+                        automation_sync_invoice_for_order($pdo, (int) $payment['order_id']);
+                        automation_sync_receipt_for_payment($pdo, $payment_id, $owner_id);
                     }
 
                     $message = $action === 'verify'
                         ? sprintf('Payment verified for order #%s.', $payment['order_number'])
                         : sprintf('Payment proof rejected for order #%s. Please resubmit.', $payment['order_number']);
-                    create_notification($pdo, (int) $payment['client_id'], (int) $payment['order_id'], 'payment', $message);
+                    automation_notify_order_parties($pdo, (int) $payment['order_id'], 'payment', $message);
 
                     $success = $action === 'verify'
                         ? 'Payment verified successfully.'

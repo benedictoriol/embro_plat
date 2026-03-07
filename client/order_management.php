@@ -1,6 +1,7 @@
 <?php
 session_start();
 require_once '../config/db.php';
+require_once '../config/automation_helpers.php';
 require_role('client');
 
 $client_id = $_SESSION['user']['id'];
