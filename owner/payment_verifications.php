@@ -36,6 +36,11 @@ if(isset($_POST['action'], $_POST['payment_id'])) {
         if(!$payment) {
             $error = 'Payment record not found.';
         } else {
+            $previous_state = [
+                'payment_status' => (string) ($payment['status'] ?? 'pending'),
+                'order_payment_status' => (string) ($payment['payment_status'] ?? 'unpaid'),
+            ];
+
             if($action === 'verify' && $payment['order_status'] === 'cancelled') {
                 $error = 'Cannot verify payments for cancelled orders.';
             } elseif($action === 'verify' && !can_transition_payment_status($payment['payment_status'] ?? 'unpaid', 'paid')) {
@@ -47,90 +52,166 @@ if(isset($_POST['action'], $_POST['payment_id'])) {
                 if(!$can_release) {
                     $error = $release_error ?: 'Delivery confirmation is required before payment release.';
                 }
-            } else {
-                if($action === 'refund') {
-                    $refund_status = 'refunded';
-                    $refunded_at = date('Y-m-d H:i:s');
-                    $refund_stmt = $pdo->prepare("
-                        SELECT id FROM payment_refunds
-                        WHERE order_id = ? AND payment_id = ?
-                        ORDER BY requested_at DESC
-                        LIMIT 1
-                    ");
-                    $refund_stmt->execute([$payment['order_id'], $payment_id]);
-                    $existing_refund = $refund_stmt->fetch();
+            }
 
-            if($existing_refund) {
-                        $update_refund = $pdo->prepare("
-                            UPDATE payment_refunds
-                            SET status = 'refunded', refunded_by = ?, refunded_at = ?
-                            WHERE id = ?
-                        ");
-                        $update_refund->execute([$owner_id, $refunded_at, $existing_refund['id']]);
-                    } else {
-                        $insert_refund = $pdo->prepare("
-                            INSERT INTO payment_refunds (order_id, payment_id, amount, requested_by, refunded_by, status, requested_at, refunded_at)
-                            VALUES (?, ?, ?, ?, ?, 'refunded', NOW(), ?)
-                        ");
-                        $insert_refund->execute([
-                            $payment['order_id'],
-                            $payment_id,
-                            $payment['amount'] ?? $payment['price'] ?? 0,
-                            $payment['client_id'],
-                            $owner_id,
-                            $refunded_at
-                        ]);
-                    }
-
-            $order_update_stmt = $pdo->prepare("
-                        UPDATE orders
-                        SET payment_status = 'refunded', payment_verified_at = ?
-                        WHERE id = ?
-                    ");
-                    $order_update_stmt->execute([$refunded_at, $payment['order_id']]);
-
-            automation_sync_invoice_for_order($pdo, (int) $payment['order_id']);
-
-            automation_notify_order_parties(
-                        $pdo,
-                        (int) $payment['order_id'],
-                        'payment',
-                        sprintf('Refund processed for order #%s.', $payment['order_number'])
-                    );
-
-                    $success = 'Refund recorded successfully.';
-                } else {
-                    $new_status = $action === 'verify' ? 'verified' : 'rejected';
-                    $order_payment_status = $action === 'verify' ? 'paid' : 'rejected';
-                    $verified_at = $action === 'verify' ? date('Y-m-d H:i:s') : null;
-
-                    $update_stmt = $pdo->prepare("
-                        UPDATE payments
-                        SET status = ?, verified_by = ?, verified_at = ?, updated_at = NOW()
-                        WHERE id = ?
-                    ");
-                    $update_stmt->execute([$new_status, $owner_id, $verified_at, $payment_id]);
-
-                    $order_update_stmt = $pdo->prepare("
-                        UPDATE orders
-                        SET payment_status = ?, payment_verified_at = ?
-                        WHERE id = ?
-                    ");
-                    $order_update_stmt->execute([$order_payment_status, $verified_at, $payment['order_id']]);
+            if(!$error) {
+                try {
+                    $pdo->beginTransaction();
 
                     if($action === 'verify') {
+                        $verified_at = date('Y-m-d H:i:s');
+
+                        $update_payment_stmt = $pdo->prepare("
+                            UPDATE payments
+                            SET status = 'verified', verified_by = ?, verified_at = ?, updated_at = NOW()
+                            WHERE id = ?
+                        ");
+                        $update_payment_stmt->execute([$owner_id, $verified_at, $payment_id]);
+
+                        $update_order_stmt = $pdo->prepare("
+                            UPDATE orders
+                            SET payment_status = 'paid', payment_verified_at = ?
+                            WHERE id = ?
+                        ");
+                        $update_order_stmt->execute([$verified_at, $payment['order_id']]);
+
                         automation_sync_invoice_for_order($pdo, (int) $payment['order_id']);
                         automation_sync_receipt_for_payment($pdo, $payment_id, $owner_id);
+                        automation_sync_payment_hold_state($pdo, (int) $payment['order_id']);
+                        automation_notify_order_parties(
+                            $pdo,
+                            (int) $payment['order_id'],
+                            'payment',
+                            sprintf('Payment verified for order #%s.', $payment['order_number'])
+                        );
+
+                        automation_log_audit_if_available(
+                            $pdo,
+                            $owner_id,
+                            'owner',
+                            'verify_payment',
+                            'payment',
+                            $payment_id,
+                            $previous_state,
+                            [
+                                'payment_status' => 'verified',
+                                'order_payment_status' => 'paid',
+                                'verified_at' => $verified_at,
+                            ]
+                        );
+
+                        $success = 'Payment verified successfully.';
+                    } elseif($action === 'reject') {
+                        $update_payment_stmt = $pdo->prepare("
+                            UPDATE payments
+                            SET status = 'rejected', verified_by = ?, verified_at = NULL, updated_at = NOW()
+                            WHERE id = ?
+                        ");
+                        $update_payment_stmt->execute([$owner_id, $payment_id]);
+
+                        $update_order_stmt = $pdo->prepare("
+                            UPDATE orders
+                            SET payment_status = 'rejected', payment_verified_at = NULL
+                            WHERE id = ?
+                        ");
+                        $update_order_stmt->execute([$payment['order_id']]);
+
+                        automation_sync_invoice_for_order($pdo, (int) $payment['order_id']);
+                        automation_notify_order_parties(
+                            $pdo,
+                            (int) $payment['order_id'],
+                            'payment',
+                            sprintf('Payment proof rejected for order #%s. Please resubmit.', $payment['order_number'])
+                        );
+
+                        automation_log_audit_if_available(
+                            $pdo,
+                            $owner_id,
+                            'owner',
+                            'reject_payment',
+                            'payment',
+                            $payment_id,
+                            $previous_state,
+                            [
+                                'payment_status' => 'rejected',
+                                'order_payment_status' => 'rejected',
+                            ]
+                        );
+
+            $success = 'Payment rejected. Client notified to resubmit proof.';
+                    } else {
+                        $refunded_at = date('Y-m-d H:i:s');
+                        $refund_stmt = $pdo->prepare("
+                            SELECT id FROM payment_refunds
+                            WHERE order_id = ? AND payment_id = ?
+                            ORDER BY requested_at DESC
+                            LIMIT 1
+                        ");
+                        $refund_stmt->execute([$payment['order_id'], $payment_id]);
+                        $existing_refund = $refund_stmt->fetch();
+
+                        if($existing_refund) {
+                            $update_refund = $pdo->prepare("
+                                UPDATE payment_refunds
+                                SET status = 'refunded', refunded_by = ?, refunded_at = ?
+                                WHERE id = ?
+                            ");
+                            $update_refund->execute([$owner_id, $refunded_at, $existing_refund['id']]);
+                        } else {
+                            $insert_refund = $pdo->prepare("
+                                INSERT INTO payment_refunds (order_id, payment_id, amount, requested_by, refunded_by, status, requested_at, refunded_at)
+                                VALUES (?, ?, ?, ?, ?, 'refunded', NOW(), ?)
+                            ");
+                            $insert_refund->execute([
+                                $payment['order_id'],
+                                $payment_id,
+                                $payment['amount'] ?? $payment['price'] ?? 0,
+                                $payment['client_id'],
+                                $owner_id,
+                                $refunded_at
+                            ]);
+                        }
+
+                        $update_order_stmt = $pdo->prepare("
+                            UPDATE orders
+                            SET payment_status = 'refunded', payment_verified_at = ?
+                            WHERE id = ?
+                        ");
+                        $update_order_stmt->execute([$refunded_at, $payment['order_id']]);
+
+                        automation_sync_invoice_for_order($pdo, (int) $payment['order_id']);
+                        automation_sync_payment_hold_state($pdo, (int) $payment['order_id']);
+                        automation_notify_order_parties(
+                            $pdo,
+                            (int) $payment['order_id'],
+                            'payment',
+                            sprintf('Refund processed for order #%s.', $payment['order_number'])
+                        );
+
+                    automation_log_audit_if_available(
+                            $pdo,
+                            $owner_id,
+                            'owner',
+                            'refund_payment',
+                            'payment',
+                            $payment_id,
+                            $previous_state,
+                            [
+                                'payment_status' => (string) ($payment['status'] ?? 'verified'),
+                                'order_payment_status' => 'refunded',
+                                'refunded_at' => $refunded_at,
+                            ]
+                        );
+
+                        $success = 'Refund recorded successfully.';
                     }
 
-                    $message = $action === 'verify'
-                        ? sprintf('Payment verified for order #%s.', $payment['order_number'])
-                        : sprintf('Payment proof rejected for order #%s. Please resubmit.', $payment['order_number']);
-                    automation_notify_order_parties($pdo, (int) $payment['order_id'], 'payment', $message);
-
-                    $success = $action === 'verify'
-                        ? 'Payment verified successfully.'
-                        : 'Payment rejected. Client notified to resubmit proof.';
+                    $pdo->commit();
+                } catch(Throwable $e) {
+                    if($pdo->inTransaction()) {
+                        $pdo->rollBack();
+                    }
+                    $error = 'Unable to process payment action right now. Please try again.';
                 }
             }
         }
