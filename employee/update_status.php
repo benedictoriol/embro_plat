@@ -90,7 +90,7 @@ function is_design_image(?string $filename): bool {
 
 function fetch_order_info(PDO $pdo, int $staff_id, int $order_id): ?array {
     $order_info_stmt = $pdo->prepare("
-        SELECT o.id, o.shop_id, o.status, o.progress, o.order_number, o.client_id, o.design_approved, s.shop_name, s.owner_id
+        SELECT o.id, o.shop_id, o.status, o.progress, o.order_number, o.client_id, o.design_approved, o.quantity, s.shop_name, s.owner_id
         FROM orders o
         JOIN shops s ON o.shop_id = s.id
         LEFT JOIN job_schedule js ON js.order_id = o.id AND js.staff_id = ?
@@ -431,6 +431,30 @@ if(isset($_POST['update_status'])) {
                         $complete_stmt->execute([$order_id]);
                     }
 
+                    $order_qty = max(1, (int) ($order_info['quantity'] ?? 1));
+                    $production_inventory_log = null;
+                    $is_first_production_entry = ($order_before['status'] ?? '') !== STATUS_IN_PROGRESS
+                        && $target_status === STATUS_IN_PROGRESS;
+                    if($is_first_production_entry) {
+                        [$issue_logged, $issue_error, $issue_created] = automation_log_inventory_transaction_once(
+                            $pdo,
+                            (int) ($order_info['shop_id'] ?? 0),
+                            $order_id,
+                            'order_production_start',
+                            'issue',
+                            (float) $order_qty
+                        );
+
+                        if($issue_error !== null) {
+                            throw new RuntimeException($issue_error);
+                        }
+
+                        $production_inventory_log = [
+                            'logged' => $issue_logged,
+                            'created' => $issue_created,
+                        ];
+                    }
+
                     $qc_finished_goods = null;
                     if($selected_stage === 'ready_to_pickup') {
                         [$fg_saved, $fg_error, $finished_goods_id, $fg_created] = automation_ensure_finished_goods_record(
@@ -442,14 +466,24 @@ if(isset($_POST['update_status'])) {
                             throw new RuntimeException($fg_error ?: 'Failed to register QC approval.');
                         }
 
+                        [$fg_inventory_logged, $fg_inventory_error, $fg_inventory_created] = automation_log_inventory_transaction_once(
+                            $pdo,
+                            (int) ($order_info['shop_id'] ?? 0),
+                            $order_id,
+                            'order_finished_goods',
+                            'in',
+                            (float) $order_qty
+                        );
+                        if($fg_inventory_error !== null) {
+                            throw new RuntimeException($fg_inventory_error);
+                        }
+
                         $qc_finished_goods = [
                             'id' => $finished_goods_id,
                             'created' => $fg_created,
+                            'inventory_logged' => $fg_inventory_logged,
+                            'inventory_created' => $fg_inventory_created,
                         ];
-
-                        if($fg_created) {
-                            // Finished-goods registration completed; stage notification below will notify parties.
-                        }
                     }
 
                     record_order_status_history(
@@ -481,6 +515,7 @@ if(isset($_POST['update_status'])) {
                             'status' => $target_status,
                             'progress' => $next_progress,
                             'stage' => $selected_stage,
+                            'production_inventory_log' => $production_inventory_log,
                             'qc_finished_goods' => $qc_finished_goods,
                         ]
                     );

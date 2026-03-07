@@ -157,6 +157,70 @@ function automation_log_audit_if_available(PDO $pdo, int $actor_user_id, ?string
     }
 }
 
+function automation_log_inventory_transaction_once(
+    PDO $pdo,
+    int $shop_id,
+    int $order_id,
+    string $event_ref_type,
+    string $transaction_type,
+    float $qty = 1.0,
+    ?int $material_id = null
+): array {
+    if($shop_id <= 0 || $order_id <= 0 || $event_ref_type === '') {
+        return [false, 'Invalid inventory transaction context.', false];
+    }
+
+    $allowed_types = ['issue', 'return', 'adjust', 'move', 'in', 'out'];
+    if(!in_array($transaction_type, $allowed_types, true)) {
+        return [false, 'Invalid inventory transaction type.', false];
+    }
+
+    if($material_id === null || $material_id <= 0) {
+        $material_stmt = $pdo->prepare("SELECT id FROM raw_materials WHERE shop_id = ? ORDER BY id ASC LIMIT 1");
+        $material_stmt->execute([$shop_id]);
+        $material_id = $material_stmt->fetchColumn() ?: null;
+    }
+
+    if($material_id === null || $material_id <= 0) {
+        return [false, null, false];
+    }
+
+    $exists_stmt = $pdo->prepare("
+        SELECT id
+        FROM inventory_transactions
+        WHERE shop_id = ? AND ref_type = ? AND ref_id = ? AND type = ?
+        LIMIT 1
+    ");
+    $exists_stmt->execute([$shop_id, $event_ref_type, $order_id, $transaction_type]);
+    if($exists_stmt->fetchColumn()) {
+        return [true, null, false];
+    }
+
+    $normalized_qty = abs($qty);
+    if(in_array($transaction_type, ['issue', 'out'], true)) {
+        $normalized_qty *= -1;
+    }
+
+    try {
+        $insert_stmt = $pdo->prepare("
+            INSERT INTO inventory_transactions (shop_id, material_id, type, qty, ref_type, ref_id)
+            VALUES (?, ?, ?, ?, ?, ?)
+        ");
+        $insert_stmt->execute([
+            $shop_id,
+            $material_id,
+            $transaction_type,
+            $normalized_qty,
+            $event_ref_type,
+            $order_id,
+        ]);
+    } catch(Throwable $e) {
+        return [false, 'Failed to log inventory transaction.', false];
+    }
+
+    return [true, null, true];
+}
+
 function automation_ensure_finished_goods_record(PDO $pdo, int $order_id, int $shop_id, ?int $storage_location_id = null, string $status = 'stored'): array {
     if($order_id <= 0 || $shop_id <= 0) {
         return [false, 'Invalid order or shop id.', null, false];
