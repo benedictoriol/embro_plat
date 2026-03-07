@@ -377,6 +377,8 @@ CREATE TABLE `orders` (
   `scheduled_date` date DEFAULT NULL,
   `shop_notes` text DEFAULT NULL,
   `design_file` varchar(255) DEFAULT NULL,
+  `width_px` int(11) DEFAULT NULL,
+  `height_px` int(11) DEFAULT NULL,
   `design_version_id` int(11) DEFAULT NULL,
   `design_approved` tinyint(1) DEFAULT 0,
   `rating` tinyint(1) DEFAULT NULL,

@@ -26,6 +26,7 @@ require_once __DIR__ . '/auth_functions.php';
 require_once __DIR__ . '/notification_functions.php';
 require_once __DIR__ . '/order_helpers.php';
 require_once __DIR__ . '/payment_helpers.php';
+require_once __DIR__ . '/design_helpers.php';
 
 enforce_csrf_protection();
 
@@ -75,7 +76,24 @@ function ensure_orders_price_column(PDO $pdo): void {
     $pdo->exec("ALTER TABLE orders ADD COLUMN price DECIMAL(10,2) DEFAULT NULL{$positionClause}");
 }
 
+function ensure_orders_image_dimension_columns(PDO $pdo): void {
+    if (!table_exists($pdo, 'orders')) {
+        return;
+    }
+
+    if (!column_exists($pdo, 'orders', 'width_px')) {
+        $positionClause = column_exists($pdo, 'orders', 'design_file') ? ' AFTER design_file' : '';
+        $pdo->exec("ALTER TABLE orders ADD COLUMN width_px INT DEFAULT NULL{$positionClause}");
+    }
+
+    if (!column_exists($pdo, 'orders', 'height_px')) {
+        $positionClause = column_exists($pdo, 'orders', 'width_px') ? ' AFTER width_px' : '';
+        $pdo->exec("ALTER TABLE orders ADD COLUMN height_px INT DEFAULT NULL{$positionClause}");
+    }
+}
+
 ensure_orders_price_column($pdo);
+ensure_orders_image_dimension_columns($pdo);
 ensure_shop_staff_position_column($pdo);
 ensure_payments_payment_method_column($pdo);
 function log_audit(PDO $pdo, ?int $actorId, ?string $actorRole, string $action, string $entityType, ?int $entityId, array $oldValues = [], array $newValues = []): void {

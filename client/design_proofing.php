@@ -175,11 +175,9 @@ function estimate_design_quote_from_image(?string $image_path, string $service_t
     $color_count = max(0, (int) ($fallback_colors ?? 0));
 
     if($image_path && is_file($image_path)) {
-        $meta = @getimagesize($image_path);
-        if(is_array($meta)) {
-            $width = $width > 0 ? $width : (int) ($meta[0] ?? 0);
-            $height = $height > 0 ? $height : (int) ($meta[1] ?? 0);
-        }
+        $meta = get_uploaded_image_dimensions($image_path);
+        $width = $width > 0 ? $width : (int) ($meta['width_px'] ?? 0);
+        $height = $height > 0 ? $height : (int) ($meta['height_px'] ?? 0);
 
         if($color_count <= 0 && function_exists('imagecreatefromstring')) {
             $raw = @file_get_contents($image_path);
@@ -250,7 +248,7 @@ $shops = $shops_stmt->fetchAll();
 $selected_custom_order = null;
 $prefill_order_id = isset($_GET['order_id']) ? (int) $_GET['order_id'] : 0;
 if($prefill_order_id > 0) {
-    $prefill_stmt = $pdo->prepare("SELECT o.id, o.order_number, o.shop_id, o.service_type, o.design_description, o.design_file, o.client_notes, s.shop_name
+    $prefill_stmt = $pdo->prepare("SELECT o.id, o.order_number, o.shop_id, o.service_type, o.design_description, o.design_file, o.width_px, o.height_px, o.client_notes, s.shop_name
         FROM orders o
         JOIN shops s ON s.id = o.shop_id
         WHERE o.id = ? AND o.client_id = ?");
@@ -263,8 +261,8 @@ if(isset($_POST['request_quote'])) {
     $service_type = sanitize($_POST['service_type'] ?? '');
     $design_description = sanitize($_POST['design_description'] ?? '');
     $customize_order_id = (int) ($_POST['customize_order_id'] ?? 0);
-    $uploaded_width = (int) ($_POST['design_width'] ?? 0);
-    $uploaded_height = (int) ($_POST['design_height'] ?? 0);
+    $uploaded_width = 0;
+    $uploaded_height = 0;
     $uploaded_colors = (int) ($_POST['design_color_count'] ?? 0);
     $uploaded_estimate = (float) ($_POST['estimated_design_price'] ?? 0);
 
@@ -302,15 +300,27 @@ if(isset($_POST['request_quote'])) {
                 : 'Unsupported file format. Please upload JPG, PNG, GIF, PDF, DOC, or DOCX.';
         } else {
             $uploaded_design_file = $upload['filename'];
+            $uploaded_path = media_upload_dir('designs') . '/' . basename($uploaded_design_file);
+            $dimension_data = get_uploaded_image_dimensions($uploaded_path);
+            $uploaded_width = (int) ($dimension_data['width_px'] ?? 0);
+            $uploaded_height = (int) ($dimension_data['height_px'] ?? 0);
         }
     }
 
     if($error === '' && !$uploaded_design_file && $customize_order_id > 0) {
-        $customized_stmt = $pdo->prepare("SELECT id, design_file FROM orders WHERE id = ? AND client_id = ? LIMIT 1");
+        $customized_stmt = $pdo->prepare("SELECT id, design_file, width_px, height_px FROM orders WHERE id = ? AND client_id = ? LIMIT 1");
         $customized_stmt->execute([$customize_order_id, $client_id]);
         $customized_order = $customized_stmt->fetch();
         if($customized_order) {
             $uploaded_design_file = $customized_order['design_file'] ?: null;
+            $uploaded_width = max(0, (int) ($customized_order['width_px'] ?? 0));
+            $uploaded_height = max(0, (int) ($customized_order['height_px'] ?? 0));
+            if($uploaded_design_file && ($uploaded_width <= 0 || $uploaded_height <= 0) && is_design_image($uploaded_design_file)) {
+                $uploaded_path = media_upload_dir('designs') . '/' . basename($uploaded_design_file);
+                $dimension_data = get_uploaded_image_dimensions($uploaded_path);
+                $uploaded_width = max($uploaded_width, (int) ($dimension_data['width_px'] ?? 0));
+                $uploaded_height = max($uploaded_height, (int) ($dimension_data['height_px'] ?? 0));
+            }
         }
     }
 
@@ -351,8 +361,8 @@ if(isset($_POST['request_quote'])) {
 
         $insert_stmt = $pdo->prepare("INSERT INTO orders (
                 order_number, client_id, shop_id, service_type, design_description,
-                quantity, price, client_notes, quote_details, design_file, status, design_approved
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'pending', 0)");
+                quantity, price, client_notes, quote_details, design_file, width_px, height_px, status, design_approved
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'pending', 0)");
 
         $insert_stmt->execute([
             $order_number,
@@ -365,6 +375,8 @@ if(isset($_POST['request_quote'])) {
             'Quote request submitted via Services page.',
             json_encode($quote_details),
             $uploaded_design_file,
+            $design_estimate['width'] > 0 ? (int) $design_estimate['width'] : null,
+            $design_estimate['height'] > 0 ? (int) $design_estimate['height'] : null,
         ]);
 
         $order_id = (int) $pdo->lastInsertId();
@@ -910,6 +922,13 @@ unset($request);
                         <input type="hidden" name="design_color_count" id="designColorCountInput" value="0">
                         <input type="hidden" name="estimated_design_price" id="estimatedDesignPriceInput" value="0">
                         <small class="text-muted">Max <?php echo $max_upload_mb; ?>MB.</small>
+                        <small class="text-muted" id="detectedDimensionLabel" style="display:block; margin-top:4px;">
+                            <?php if(!empty($selected_custom_order['width_px']) && !empty($selected_custom_order['height_px'])): ?>
+                                Stored uploaded image dimensions: <?php echo (int) $selected_custom_order['width_px']; ?> × <?php echo (int) $selected_custom_order['height_px']; ?> px
+                            <?php else: ?>
+                                Uploaded image dimensions are auto-detected after upload.
+                            <?php endif; ?>
+                        </small>
                         <div class="upload-preview" id="uploadPreview" style="display:none;"></div>
                         <small class="text-muted" id="uploadEstimateLabel" style="display:none;"></small>
                     </div>

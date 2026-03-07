@@ -40,7 +40,7 @@ if(isset($_POST['update_design'])) {
     $client_notes = sanitize($_POST['client_notes'] ?? '');
 
     $order_stmt = $pdo->prepare("
-        SELECT id, design_file, client_notes
+        SELECT id, design_file, width_px, height_px, client_notes
         FROM orders
         WHERE id = ? AND client_id = ? AND status IN ('pending', 'accepted', 'in_progress')
     ");
@@ -58,6 +58,8 @@ if(isset($_POST['update_design'])) {
 
     if ($error === '') {
         $design_file = $order['design_file'];
+        $width_px = isset($order['width_px']) ? (int) $order['width_px'] : null;
+        $height_px = isset($order['height_px']) ? (int) $order['height_px'] : null;
         $existing_notes = $order['client_notes'] ?? '';
 
         if(isset($_FILES['design_file']) && $_FILES['design_file']['error'] !== UPLOAD_ERR_NO_FILE) {
@@ -78,6 +80,10 @@ if(isset($_POST['update_design'])) {
                     : 'Only JPG, PNG, GIF, PDF, DOC, and DOCX files are allowed.';
             } else {
                 $design_file = $upload['filename'];
+                $uploaded_path = media_upload_dir('designs') . '/' . basename($upload['filename']);
+                $dimension_data = get_uploaded_image_dimensions($uploaded_path);
+                $width_px = $dimension_data['width_px'];
+                $height_px = $dimension_data['height_px'];
             }
         }
 
@@ -89,10 +95,10 @@ if(isset($_POST['update_design'])) {
 
             $update_stmt = $pdo->prepare("
                 UPDATE orders
-                SET design_description = ?, design_file = ?, client_notes = ?, updated_at = NOW()
+                SET design_description = ?, design_file = ?, width_px = ?, height_px = ?, client_notes = ?, updated_at = NOW()
                 WHERE id = ? AND client_id = ?
             ");
-            $update_stmt->execute([$design_description, $design_file, $combined_notes, $order_id, $client_id]);
+            $update_stmt->execute([$design_description, $design_file, $width_px, $height_px, $combined_notes, $order_id, $client_id]);
             $success = 'Design details updated successfully.';
             cleanup_media($pdo);
         }
@@ -181,6 +187,17 @@ if(isset($_POST['update_design'])) {
                             <div>
                                 <i class="fas fa-paperclip"></i>
                                 <a href="../assets/uploads/designs/<?php echo htmlspecialchars($order['design_file']); ?>" target="_blank">Current design file</a>
+                            </div>
+                        <?php endif; ?>
+                        <?php if(!empty($order['width_px']) && !empty($order['height_px'])): ?>
+                            <div>
+                                <i class="fas fa-ruler-combined"></i>
+                                Detected image size: <?php echo (int) $order['width_px']; ?> × <?php echo (int) $order['height_px']; ?> px
+                            </div>
+                        <?php elseif(!empty($order['design_file'])): ?>
+                            <div>
+                                <i class="fas fa-ruler-combined"></i>
+                                Detected image size: not available for this file type
                             </div>
                         <?php endif; ?>
                     </div>
