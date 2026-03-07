@@ -81,11 +81,11 @@ automation_log_audit_if_available(
     $pdo,
     $owner_id,
     $owner_role,
-    'accept_order',
+    'order_accepted',
     'orders',
     $order_id,
     ['status' => $order['status'] ?? null],
-    ['status' => 'STATUS_ACCEPTED']
+    ['status' => STATUS_ACCEPTED]
 );
 
 header("Location: shop_orders.php?filter=accepted&action=accepted");

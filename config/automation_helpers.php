@@ -423,20 +423,17 @@ function automation_upsert_order_fulfillment(PDO $pdo, array $order, array $payl
             $pdo,
             $actor_user_id,
             $actor_role,
-            'update_fulfillment_status',
+            'fulfillment_status_changed',
             'order_fulfillments',
-            $order_id,
-            $existing ?: ['status' => FULFILLMENT_PENDING],
+            $fulfillment_id,
             [
-                'fulfillment_type' => $fulfillment_type,
+                'order_id' => $order_id,
+                'fulfillment_type' => $existing['fulfillment_type'] ?? null,
+                'status' => $current_status,
+            ],
+            [
+                'order_id' => $order_id,
                 'status' => $next_status,
-                'courier' => $courier ?: null,
-                'tracking_number' => $tracking_number ?: null,
-                'pickup_location' => $pickup_location ?: null,
-                'notes' => $notes,
-                'ready_at' => $ready_at,
-                'delivered_at' => $delivered_at,
-                'claimed_at' => $claimed_at,
             ]
         );
 

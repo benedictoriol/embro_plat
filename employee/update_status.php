@@ -266,6 +266,19 @@ if(isset($_POST['escalate_issue'])) {
         $client_message = $escalation_type === 'needs_clarification' ? $message : '';
         automation_notify_order_parties($pdo, $order_id, 'warning', $client_message, $message);
 
+        if($escalation_type === 'blocked') {
+            automation_log_audit_if_available(
+                $pdo,
+                $staff_id,
+                $staff_role,
+                'qc_failed',
+                'orders',
+                $order_id,
+                ['qc_stage' => 'in_progress'],
+                ['qc_stage' => 'failed', 'reason' => $escalation_note]
+            );
+        }
+
          $success = $label . " request sent successfully.";
         }
     }
@@ -507,7 +520,7 @@ if(isset($_POST['update_status'])) {
                         $pdo,
                         $staff_id,
                         $staff_role,
-                        'update_order_status',
+                        'production_status_changed',
                         'orders',
                         $order_id,
                         $order_before,
@@ -515,10 +528,21 @@ if(isset($_POST['update_status'])) {
                             'status' => $target_status,
                             'progress' => $next_progress,
                             'stage' => $selected_stage,
-                            'production_inventory_log' => $production_inventory_log,
-                            'qc_finished_goods' => $qc_finished_goods,
                         ]
                     );
+
+                    if($selected_stage === 'ready_to_pickup') {
+                        automation_log_audit_if_available(
+                            $pdo,
+                            $staff_id,
+                            $staff_role,
+                            'qc_passed',
+                            'orders',
+                            $order_id,
+                            ['qc_stage' => 'in_progress'],
+                            ['qc_stage' => 'passed']
+                        );
+                    }
 
                     $success = 'Status updated successfully!';
                 } catch(Throwable $e) {

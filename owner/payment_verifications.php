@@ -5,6 +5,7 @@ require_once '../config/automation_helpers.php';
 require_role('owner');
 
 $owner_id = $_SESSION['user']['id'];
+$owner_role = $_SESSION['user']['role'] ?? null;
 $shop_stmt = $pdo->prepare("SELECT * FROM shops WHERE owner_id = ?");
 $shop_stmt->execute([$owner_id]);
 $shop = $shop_stmt->fetch();
@@ -88,8 +89,8 @@ if(isset($_POST['action'], $_POST['payment_id'])) {
                         automation_log_audit_if_available(
                             $pdo,
                             $owner_id,
-                            'owner',
-                            'verify_payment',
+                            $owner_role,
+                            'payment_verified',
                             'payment',
                             $payment_id,
                             $previous_state,
@@ -127,8 +128,8 @@ if(isset($_POST['action'], $_POST['payment_id'])) {
                         automation_log_audit_if_available(
                             $pdo,
                             $owner_id,
-                            'owner',
-                            'reject_payment',
+                            $owner_role,
+                            'payment_rejected',
                             'payment',
                             $payment_id,
                             $previous_state,
@@ -191,8 +192,8 @@ if(isset($_POST['action'], $_POST['payment_id'])) {
                     automation_log_audit_if_available(
                             $pdo,
                             $owner_id,
-                            'owner',
-                            'refund_payment',
+                            $owner_role,
+                            'refund_processed',
                             'payment',
                             $payment_id,
                             $previous_state,

@@ -6,6 +6,7 @@ require_once '../config/automation_helpers.php';
 require_role('owner');
 
 $owner_id = $_SESSION['user']['id'];
+$owner_role = $_SESSION['user']['role'] ?? null;
 $shop_stmt = $pdo->prepare("SELECT * FROM shops WHERE owner_id = ?");
 $shop_stmt->execute([$owner_id]);
 $shop = $shop_stmt->fetch();
@@ -161,7 +162,7 @@ if(isset($_POST['save_fulfillment'])) {
                 'notes' => $final_notes,
             ],
             $owner_id,
-            'owner'
+            $owner_role
         );
 
         if(!$saved) {

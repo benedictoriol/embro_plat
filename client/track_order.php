@@ -161,11 +161,11 @@ if($_SERVER['REQUEST_METHOD'] === 'POST' && $action !== '') {
                     'Order #' . $order['order_number'] . ' was cancelled by the client.'
                 );
             }
-            log_audit(
+            automation_log_audit_if_available(
                 $pdo,
                 $client_id,
                 $_SESSION['user']['role'] ?? null,
-                'cancel_order',
+                'order_cancelled',
                 'orders',
                 $order_id,
                 ['status' => $order['status'] ?? null],
@@ -256,7 +256,7 @@ if($_SERVER['REQUEST_METHOD'] === 'POST' && $action !== '') {
                 $pdo,
                 $client_id,
                 $_SESSION['user']['role'] ?? null,
-                'approve_design',
+                'design_approved',
                 'orders',
                 $order_id,
                 ['design_approved' => $order['design_approved'] ?? null],
@@ -307,7 +307,7 @@ if($_SERVER['REQUEST_METHOD'] === 'POST' && $action !== '') {
                 $pdo,
                 $client_id,
                 $_SESSION['user']['role'] ?? null,
-                'request_design_revision',
+                'design_revision_requested',
                 'orders',
                 $order_id,
                 [
