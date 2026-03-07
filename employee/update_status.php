@@ -421,7 +421,6 @@ if(isset($_POST['update_status'])) {
                             $target_status,
                             $staff_id,
                             null,
-                            false
                         );
                         if(!$status_updated) {
                             throw new RuntimeException($status_error ?: 'Failed to update order status.');

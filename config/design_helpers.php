@@ -51,20 +51,29 @@ function get_uploaded_image_dimensions(string $absolutePath): array {
     }
 
     if (class_exists('Imagick')) {
+        $imagick = null;
         try {
-            $imagick = new Imagick($absolutePath);
+            $imagickClass = 'Imagick';
+            $imagick = new $imagickClass($absolutePath);
             $result = normalize_image_dimension_data([
                 'width' => $imagick->getImageWidth(),
                 'height' => $imagick->getImageHeight(),
                 'mime' => $imagick->getImageMimeType(),
             ]);
-            $imagick->clear();
-            $imagick->destroy();
             if (!empty($result['width_px']) && !empty($result['height_px'])) {
                 return $result;
             }
-        } catch (Throwable $e) {
+        } catch (\Throwable $e) {
             // Fallback below.
+            } finally {
+            if (is_object($imagick)) {
+                if (method_exists($imagick, 'clear')) {
+                    $imagick->clear();
+                }
+                if (method_exists($imagick, 'destroy')) {
+                    $imagick->destroy();
+                }
+            }
         }
     }
 
@@ -76,7 +85,8 @@ function get_uploaded_image_dimensions(string $absolutePath): array {
                 'width' => imagesx($image),
                 'height' => imagesy($image),
             ]);
-            imagedestroy($image);
+            if (function_exists('imagedestroy')) {
+            }
             return $result;
         }
     }
