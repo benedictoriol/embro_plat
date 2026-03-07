@@ -6,7 +6,9 @@ require_once '../includes/media_manager.php';
 
 $error = '';
 $success = '';
-$type = isset($_GET['type']) ? $_GET['type'] : 'client';
+$publicRegistrationRoles = ['client', 'owner'];
+$requestedType = isset($_GET['type']) ? sanitize($_GET['type']) : 'client';
+$type = in_array($requestedType, $publicRegistrationRoles, true) ? $requestedType : 'client';
 $registrationsOpen = true;
 
 $settingsStmt = $pdo->prepare("SELECT setting_value FROM system_settings WHERE setting_key = 'new_registrations' LIMIT 1");
@@ -29,10 +31,11 @@ if($_SERVER['REQUEST_METHOD'] == 'POST') {
     $password = $_POST['password'];
     $confirm_password = $_POST['confirm_password'];
     $phone = sanitize($_POST['phone']);
-    $user_type = sanitize($_POST['type']);
-    $allowed = ['client', 'owner'];
-    if (!in_array($user_type, $allowed, true)) {
+    $requestedUserType = sanitize($_POST['type'] ?? $type);
+    if (!in_array($requestedUserType, $publicRegistrationRoles, true)) {
         $user_type = 'client';
+        } else {
+        $user_type = $requestedUserType;
     }
     
     // Validation
@@ -194,7 +197,7 @@ if($_SERVER['REQUEST_METHOD'] == 'POST') {
                     <?php else: ?>
                 <form method="POST" enctype="multipart/form-data">
                     <?php echo csrf_field(); ?>
-                    <input type="hidden" name="type" value="<?php echo $type; ?>">
+                    <input type="hidden" name="type" value="<?php echo htmlspecialchars($type); ?>">
                     
                     <div class="form-group">
                         <label class="form-label" for="fullname">Full Name *</label>
