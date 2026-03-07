@@ -157,6 +157,49 @@ function automation_log_audit_if_available(PDO $pdo, int $actor_user_id, ?string
     }
 }
 
+function automation_ensure_finished_goods_record(PDO $pdo, int $order_id, int $shop_id, ?int $storage_location_id = null, string $status = 'stored'): array {
+    if($order_id <= 0 || $shop_id <= 0) {
+        return [false, 'Invalid order or shop id.', null, false];
+    }
+
+    $existing_stmt = $pdo->prepare("SELECT id FROM finished_goods WHERE order_id = ? LIMIT 1");
+    $existing_stmt->execute([$order_id]);
+    $existing_id = $existing_stmt->fetchColumn();
+    if($existing_id) {
+        return [true, null, (int) $existing_id, false];
+    }
+
+    $resolved_location_id = null;
+    if($storage_location_id !== null && $storage_location_id > 0) {
+        $location_stmt = $pdo->prepare("SELECT id FROM storage_locations WHERE id = ? AND shop_id = ? LIMIT 1");
+        $location_stmt->execute([$storage_location_id, $shop_id]);
+        $resolved_location_id = $location_stmt->fetchColumn();
+    }
+
+    if(!$resolved_location_id) {
+        $fallback_location_stmt = $pdo->prepare("SELECT id FROM storage_locations WHERE shop_id = ? ORDER BY id ASC LIMIT 1");
+        $fallback_location_stmt->execute([$shop_id]);
+        $resolved_location_id = $fallback_location_stmt->fetchColumn() ?: null;
+    }
+
+    try {
+        $insert_stmt = $pdo->prepare("
+            INSERT INTO finished_goods (order_id, shop_id, storage_location_id, status, stored_at)
+            VALUES (?, ?, ?, ?, NOW())
+        ");
+        $insert_stmt->execute([
+            $order_id,
+            $shop_id,
+            $resolved_location_id,
+            $status,
+        ]);
+    } catch(Throwable $e) {
+        return [false, 'Failed to create finished goods record.', null, false];
+    }
+
+    return [true, null, (int) $pdo->lastInsertId(), true];
+}
+
 function automation_fulfillment_status_message(string $order_number, string $next_status, string $fulfillment_type): string {
     $channel = strtolower(trim($fulfillment_type)) === 'pickup' ? 'pickup' : 'delivery';
 

@@ -90,7 +90,7 @@ function is_design_image(?string $filename): bool {
 
 function fetch_order_info(PDO $pdo, int $staff_id, int $order_id): ?array {
     $order_info_stmt = $pdo->prepare("
-        SELECT o.id, o.status, o.progress, o.order_number, o.client_id, o.design_approved, s.shop_name, s.owner_id
+        SELECT o.id, o.shop_id, o.status, o.progress, o.order_number, o.client_id, o.design_approved, s.shop_name, s.owner_id
         FROM orders o
         JOIN shops s ON o.shop_id = s.id
         LEFT JOIN job_schedule js ON js.order_id = o.id AND js.staff_id = ?
@@ -438,6 +438,29 @@ if(isset($_POST['update_status'])) {
                         $complete_stmt->execute([$order_id]);
                     }
 
+                    $qc_finished_goods = null;
+                    if($selected_stage === 'ready_to_pickup') {
+                        [$fg_saved, $fg_error, $finished_goods_id, $fg_created] = automation_ensure_finished_goods_record(
+                            $pdo,
+                            $order_id,
+                            (int) ($order_info['shop_id'] ?? 0)
+                        );
+                        if(!$fg_saved) {
+                            throw new RuntimeException($fg_error ?: 'Failed to register QC approval.');
+                        }
+
+                        $qc_finished_goods = [
+                            'id' => $finished_goods_id,
+                            'created' => $fg_created,
+                        ];
+
+                        if($fg_created) {
+                            $owner_message = sprintf('Order #%s passed quality checking and is now logged in finished goods for fulfillment.', $order_info['order_number']);
+                            $client_message = sprintf('Order #%s passed quality checking and is being prepared for fulfillment.', $order_info['order_number']);
+                            automation_notify_order_parties($pdo, $order_id, 'info', $client_message, $owner_message);
+                        }
+                    }
+
                     record_order_status_history(
                         $pdo,
                         $order_id,
@@ -467,6 +490,7 @@ if(isset($_POST['update_status'])) {
                             'status' => $target_status,
                             'progress' => $next_progress,
                             'stage' => $selected_stage,
+                            'qc_finished_goods' => $qc_finished_goods,
                         ]
                     );
 
