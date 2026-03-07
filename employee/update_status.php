@@ -90,7 +90,7 @@ function is_design_image(?string $filename): bool {
 
 function fetch_order_info(PDO $pdo, int $staff_id, int $order_id): ?array {
     $order_info_stmt = $pdo->prepare("
-        SELECT o.status, o.progress, o.order_number, o.client_id, o.design_approved, s.shop_name, s.owner_id
+        SELECT o.id, o.status, o.progress, o.order_number, o.client_id, o.design_approved, s.shop_name, s.owner_id
         FROM orders o
         JOIN shops s ON o.shop_id = s.id
         LEFT JOIN job_schedule js ON js.order_id = o.id AND js.staff_id = ?
@@ -101,6 +101,10 @@ function fetch_order_info(PDO $pdo, int $staff_id, int $order_id): ?array {
     $order_info = $order_info_stmt->fetch();
 
     return $order_info ?: null;
+}
+
+function keep_progress_forward(int $current_progress, int $next_progress): int {
+    return max($current_progress, $next_progress);
 }
 
 if(!empty($jobs)) {
@@ -300,126 +304,162 @@ if(isset($_POST['update_status'])) {
     if(!$can_update_status) {
         $error = 'You do not have permission to update job status.';
     } else {
-    $order_id = (int) ($_POST['order_id'] ?? 0);
-     $selected_stage = $_POST['workflow_stage'] ?? '';
-    $progress = (int) ($_POST['progress'] ?? 0);
-    $status = $_POST['status'] ?? '';
-    $staff_notes = sanitize($_POST['staff_notes'] ?? '');
+        $order_id = (int) ($_POST['order_id'] ?? 0);
+        $selected_stage = $_POST['workflow_stage'] ?? '';
+        $staff_notes = sanitize($_POST['staff_notes'] ?? '');
 
-    if(isset($stage_options[$selected_stage])) {
-        $progress = (int) $stage_options[$selected_stage]['progress'];
-        $status = $stage_options[$selected_stage]['status'];
-        $staff_notes = trim($stage_options[$selected_stage]['label'] . ($staff_notes !== '' ? ': ' . $staff_notes : ''));
-    }
+    if(!isset($stage_options[$selected_stage])) {
+            $error = 'Invalid production stage selected.';
+        }
 
     $photo_check_stmt = $pdo->prepare("
-        SELECT COUNT(*)
-        FROM order_photos
-        WHERE order_id = ? AND staff_id = ?
-    ");
-    $photo_check_stmt->execute([$order_id, $staff_id]);
-    $photo_count = (int) $photo_check_stmt->fetchColumn();
+            SELECT COUNT(*)
+            FROM order_photos
+            WHERE order_id = ? AND staff_id = ?
+        ");
+        $photo_check_stmt->execute([$order_id, $staff_id]);
+        $photo_count = (int) $photo_check_stmt->fetchColumn();
 
-    $order_info = fetch_order_info($pdo, $staff_id, $order_id);
+        $order_info = fetch_order_info($pdo, $staff_id, $order_id);
+        $allowed_statuses = [STATUS_IN_PROGRESS, STATUS_COMPLETED];
 
-    $allowed_statuses = [STATUS_IN_PROGRESS, STATUS_COMPLETED];
-
-    if(!$order_info) {
-        $error = "Unable to update this order.";
-        if(isset($stage_options[$selected_stage])) {
-        $progress = (int) $stage_options[$selected_stage]['progress'];
-        $status = $stage_options[$selected_stage]['status'];
-        $staff_notes = trim($stage_options[$selected_stage]['label'] . ($staff_notes !== '' ? ': ' . $staff_notes : ''));
-    }
-    } elseif($photo_count === 0) {
-        $error = "Please upload a progress photo before updating the status.";
-    } elseif(!in_array($status, $allowed_statuses, true)) {
-        $error = "Invalid status selection.";
-    } else {
-        $order_state = $order_info;
-        $order_state['id'] = $order_id;
-        [$can_transition, $transition_error] = order_workflow_validate_order_status($pdo, $order_state, $status);
-        $design_approval_blocked = $status === STATUS_IN_PROGRESS
-            && $transition_error === 'Design proof approval is required before production can begin.';
-
-        if(!$can_transition && !$design_approval_blocked) {
-            $error = $transition_error ?: "Status transition not allowed from the current state.";
+    if(!isset($error) && !$order_info) {
+            $error = "Unable to update this order.";
+        } elseif(!isset($error) && $photo_count === 0) {
+            $error = "Please upload a progress photo before updating the status.";
         }
-    }
 
     if(!isset($error)) {
-        try {
-            $update_stmt = $pdo->prepare("
-                UPDATE orders 
-                SET progress = ?, status = ?, shop_notes = CONCAT(COALESCE(shop_notes, ''), '\n', ?), 
-                    updated_at = NOW() 
-                WHERE id = ? AND (assigned_to = ? OR EXISTS (
-                    SELECT 1 FROM job_schedule js WHERE js.order_id = orders.id AND js.staff_id = ?
-                ))
-            ");
-            $update_stmt->execute([$progress, $status, $staff_notes, $order_id, $staff_id, $staff_id]);
+            $target_status = $stage_options[$selected_stage]['status'];
+            $target_progress = (int) $stage_options[$selected_stage]['progress'];
+            $base_label = $stage_options[$selected_stage]['label'];
 
-            if($status === 'completed') {
-                $complete_stmt = $pdo->prepare("UPDATE orders SET completed_at = NOW() WHERE id = ?");
-                $complete_stmt->execute([$order_id]);
+            if(!in_array($target_status, $allowed_statuses, true)) {
+                $error = 'Invalid status selection.';
             }
+        }
 
-            if($order_info && $order_info['status'] !== $status) {
-                record_order_status_history(
-                    $pdo,
-                    $order_id,
-                    $status,
-                    (int) $progress,
-                    $staff_notes !== '' ? $staff_notes : null,
-                    $staff_id
-                );
-                $message = sprintf(
-                    'Order #%s status updated to %s by %s.',
-                    $order_info['order_number'],
-                    str_replace('_', ' ', $status),
-                    $order_info['shop_name']
-                );
-                create_notification($pdo, (int) $order_info['client_id'], (int) $order_id, 'order_status', $message);
-                if(!empty($order_info['owner_id'])) {
-                    create_notification($pdo, (int) $order_info['owner_id'], (int) $order_id, 'order_status', $message);
-                }
-
-                $status_label = ucfirst(str_replace('_', ' ', $status));
-                $notification_type = $status === 'completed' ? 'success' : 'info';
-                create_notification(
-                    $pdo,
-                    (int) $order_info['client_id'],
-                    $order_id,
-                    $notification_type,
-                    'Order #' . $order_info['order_number'] . ' has been updated to ' . strtolower($status_label) . '.'
-                );
-            }
-            
-
-           $success = "Status updated successfully!";
-        } catch(PDOException $e) {
-            $error = "Failed to update status: " . $e->getMessage();
-
-                log_audit(
-                $pdo,
-                $staff_id,
-                $staff_role,
-                'update_order_status',
-                'orders',
-                (int) $order_id,
-                [
-                    'status' => $order_info['status'] ?? null,
-                    'progress' => $order_info['progress'] ?? null,
+            if(!isset($error)) {
+            $stage_meta = [
+                'materials_ready' => [
+                    'history' => 'Materials ready.',
+                    'client_message' => sprintf('Materials are ready for order #%s.', $order_info['order_number']),
+                    'owner_message' => null,
+                    'notification_type' => 'order_status',
                 ],
-                [
-                    'status' => $status,
-                    'progress' => (int) $progress,
-                ]
-            );
+                'in_process_of_making' => [
+                    'history' => 'Production is in progress.',
+                    'client_message' => sprintf('Production is in progress for order #%s.', $order_info['order_number']),
+                    'owner_message' => null,
+                    'notification_type' => 'order_status',
+                ],
+                'order_complete' => [
+                    'history' => 'Order production completed.',
+                    'client_message' => sprintf('Order #%s production is completed.', $order_info['order_number']),
+                    'owner_message' => sprintf('Order #%s has been marked as production completed.', $order_info['order_number']),
+                    'notification_type' => 'success',
+                ],
+                'ready_to_pickup' => [
+                    'history' => 'Order is complete and queued for fulfillment pickup flow.',
+                    'client_message' => sprintf('Order #%s production is complete. Pickup scheduling will proceed in fulfillment.', $order_info['order_number']),
+                    'owner_message' => null,
+                    'notification_type' => 'info',
+                ],
+            ];
+
+            $order_before = [
+                'status' => $order_info['status'] ?? null,
+                'progress' => (int) ($order_info['progress'] ?? 0),
+            ];
+            $history_note = $stage_meta[$selected_stage]['history'];
+            $history_with_staff_note = trim($history_note . ($staff_notes !== '' ? ' ' . $staff_notes : ''));
+
+            $order_state = $order_info;
+            [$can_transition, $transition_error] = order_workflow_validate_order_status($pdo, $order_state, $target_status);
+            if(!$can_transition) {
+                $error = $transition_error ?: 'Status transition not allowed from the current state.';
+            }
+
+            if(!isset($error)) {
+                try {
+                    $current_progress = (int) ($order_info['progress'] ?? 0);
+                    $next_progress = keep_progress_forward($current_progress, $target_progress);
+
+                    if(($order_info['status'] ?? '') !== $target_status) {
+                        [$status_updated, $status_error] = automation_update_order_status(
+                            $pdo,
+                            $order_id,
+                            $target_status,
+                            $staff_id,
+                            null,
+                            false
+                        );
+                        if(!$status_updated) {
+                            throw new RuntimeException($status_error ?: 'Failed to update order status.');
+                        }
+                    }
+
+                    $progress_stmt = $pdo->prepare("
+                        UPDATE orders
+                        SET progress = ?, shop_notes = CONCAT(COALESCE(shop_notes, ''), '\n', ?), updated_at = NOW()
+                        WHERE id = ? AND (assigned_to = ? OR EXISTS (
+                            SELECT 1 FROM job_schedule js WHERE js.order_id = orders.id AND js.staff_id = ?
+                        ))
+                    ");
+                    $progress_stmt->execute([
+                        $next_progress,
+                        trim($base_label . ($staff_notes !== '' ? ': ' . $staff_notes : '')),
+                        $order_id,
+                        $staff_id,
+                        $staff_id,
+                    ]);
+
+                    if($target_status === STATUS_COMPLETED) {
+                        $complete_stmt = $pdo->prepare("UPDATE orders SET completed_at = COALESCE(completed_at, NOW()) WHERE id = ?");
+                        $complete_stmt->execute([$order_id]);
+                    }
+
+                    record_order_status_history(
+                        $pdo,
+                        $order_id,
+                        $target_status,
+                        $next_progress,
+                        $history_with_staff_note !== '' ? $history_with_staff_note : null,
+                        $staff_id
+                    );
+
+                    automation_notify_order_parties(
+                        $pdo,
+                        $order_id,
+                        $stage_meta[$selected_stage]['notification_type'],
+                        $stage_meta[$selected_stage]['client_message'],
+                        $stage_meta[$selected_stage]['owner_message']
+                    );
+
+                    automation_log_audit_if_available(
+                        $pdo,
+                        $staff_id,
+                        $staff_role,
+                        'update_order_status',
+                        'orders',
+                        $order_id,
+                        $order_before,
+                        [
+                            'status' => $target_status,
+                            'progress' => $next_progress,
+                            'stage' => $selected_stage,
+                        ]
+                    );
+
+                    $success = 'Status updated successfully!';
+                } catch(Throwable $e) {
+                    $error = 'Failed to update status: ' . $e->getMessage();
+                }
+            }
         }
     }
-    }
 }
+
 ?>
 <!DOCTYPE html>
 <html lang="en">

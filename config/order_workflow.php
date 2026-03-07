@@ -62,7 +62,11 @@ function order_workflow_validate_order_status(PDO $pdo, array $order, string $ne
         return [false, 'Status transition not allowed from the current state.'];
     }
 
-    if($next_status === STATUS_IN_PROGRESS && !order_workflow_is_design_approved($pdo, (int) $order['id'])) {
+    if(
+        $next_status === STATUS_IN_PROGRESS
+        && $current_status !== STATUS_IN_PROGRESS
+        && !order_workflow_is_design_approved($pdo, (int) $order['id'])
+    ) {
         return [false, 'Design proof approval is required before production can begin.'];
     }
 
