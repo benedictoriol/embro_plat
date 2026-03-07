@@ -29,6 +29,27 @@ function record_order_status_history(
     $stmt->execute([$order_id, $staff_id, $status, $progress, $notes]);
 }
 
+function record_order_status_history_once(
+    PDO $pdo,
+    int $order_id,
+    string $status,
+    int $progress = 0,
+    ?string $notes = null,
+    ?int $staff_id = null
+): void {
+    $latest_stmt = $pdo->prepare(
+        "SELECT status FROM order_status_history WHERE order_id = ? ORDER BY id DESC LIMIT 1"
+    );
+    $latest_stmt->execute([$order_id]);
+    $latest_status = $latest_stmt->fetchColumn();
+
+    if($latest_status === $status) {
+        return;
+    }
+
+    record_order_status_history($pdo, $order_id, $status, $progress, $notes, $staff_id);
+}
+
 function order_display_progress(array $order, ?string $fulfillment_status = null): int {
     return order_workflow_display_progress(
         (string) ($order['status'] ?? STATUS_PENDING),

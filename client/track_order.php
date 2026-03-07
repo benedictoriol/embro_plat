@@ -142,7 +142,8 @@ if($_SERVER['REQUEST_METHOD'] === 'POST' && $action !== '') {
                 WHERE id = ? AND client_id = ?
             ");
             $cancel_stmt->execute([$reason, $order_id, $client_id]);
-            record_order_status_history($pdo, $order_id, STATUS_CANCELLED, (int) $order['progress'], $reason);
+            record_order_status_history_once($pdo, $order_id, STATUS_CANCELLED, (int) $order['progress'], $reason);
+            automation_sync_invoice_for_order($pdo, $order_id);
             $success = 'Your order has been cancelled.';
             create_notification(
                 $pdo,
@@ -172,6 +173,15 @@ if($_SERVER['REQUEST_METHOD'] === 'POST' && $action !== '') {
             );
             
             if(($order['payment_status'] ?? 'unpaid') === 'paid') {
+                $pending_refund_stmt = $pdo->prepare("
+                    SELECT id FROM payment_refunds
+                    WHERE order_id = ? AND status = 'pending'
+                    ORDER BY id DESC
+                    LIMIT 1
+                ");
+                $pending_refund_stmt->execute([$order_id]);
+                $existing_pending_refund_id = $pending_refund_stmt->fetchColumn();
+
                 $refund_stmt = $pdo->prepare("
                     SELECT id, amount FROM payments
                     WHERE order_id = ? AND status = 'verified'
@@ -182,28 +192,26 @@ if($_SERVER['REQUEST_METHOD'] === 'POST' && $action !== '') {
                 $payment = $refund_stmt->fetch();
                 $refund_amount = (float) ($payment['amount'] ?? $order['price'] ?? 0);
 
-                $refund_insert = $pdo->prepare("
-                    INSERT INTO payment_refunds (order_id, payment_id, amount, reason, requested_by, status, requested_at)
-                    VALUES (?, ?, ?, ?, ?, 'pending', NOW())
-                ");
-                $refund_insert->execute([
-                    $order_id,
-                    $payment['id'] ?? null,
-                    $refund_amount,
-                    $reason,
-                    $client_id
-                ]);
+                if(!$existing_pending_refund_id) {
+                    $refund_insert = $pdo->prepare("
+                        INSERT INTO payment_refunds (order_id, payment_id, amount, reason, requested_by, status, requested_at)
+                        VALUES (?, ?, ?, ?, ?, 'pending', NOW())
+                    ");
+                    $refund_insert->execute([
+                        $order_id,
+                        $payment['id'] ?? null,
+                        $refund_amount,
+                        $reason,
+                        $client_id
+                    ]);
+                }
 
                 $refund_order_stmt = $pdo->prepare("
                     UPDATE orders SET payment_status = 'refund_pending', updated_at = NOW()
                     WHERE id = ? AND client_id = ?
                 ");
                 $refund_order_stmt->execute([$order_id, $client_id]);
-
-                if($order['price'] !== null) {
-                    $invoice_status = determine_invoice_status(STATUS_CANCELLED, 'refund_pending');
-                    ensure_order_invoice($pdo, $order_id, $order['order_number'], (float) $order['price'], $invoice_status);
-                }
+                automation_sync_invoice_for_order($pdo, $order_id);
 
                 create_notification(
                     $pdo,
