@@ -336,6 +336,23 @@ function automation_upsert_order_fulfillment(PDO $pdo, array $order, array $payl
             );
             $progress_stmt = $pdo->prepare("UPDATE orders SET progress = ?, updated_at = NOW() WHERE id = ?");
             $progress_stmt->execute([$progress, $order_id]);
+            
+            $entered_reviewable_fulfillment = !in_array($current_status, [FULFILLMENT_DELIVERED, FULFILLMENT_CLAIMED], true);
+            $order_is_completed = (($order['status'] ?? null) === STATUS_COMPLETED);
+
+            if($entered_reviewable_fulfillment && $order_is_completed && !empty($order['client_id'])) {
+                $review_message = sprintf(
+                    'Your order #%s is complete. You can now rate this shop.',
+                    (string) ($order['order_number'] ?? $order_id)
+                );
+                create_notification_once_for_order(
+                    $pdo,
+                    (int) $order['client_id'],
+                    $order_id,
+                    'rating_request',
+                    $review_message
+                );
+            }
         }
 
         automation_log_audit_if_available(

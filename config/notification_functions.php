@@ -44,7 +44,28 @@ function create_notification(PDO $pdo, int $user_id, ?int $order_id, string $typ
 
     $stmt->execute([$user_id, $order_id, $type, $message]);
 }
+
+function has_notification_for_order(PDO $pdo, int $user_id, int $order_id, string $type): bool {
+    $type = normalize_notification_type($type);
+
+    $stmt = $pdo->prepare(" 
+        SELECT 1
+        FROM notifications
+        WHERE user_id = ?
+          AND order_id = ?
+          AND type = ?
+        LIMIT 1
+    ");
+    $stmt->execute([$user_id, $order_id, $type]);
+
+    return (bool) $stmt->fetchColumn();
+}
+
+function create_notification_once_for_order(PDO $pdo, int $user_id, int $order_id, string $type, string $message): void {
+    if(has_notification_for_order($pdo, $user_id, $order_id, $type)) {
+        return;
+    }
+
+    create_notification($pdo, $user_id, $order_id, $type, $message);
+}
 ?>
-
-
-

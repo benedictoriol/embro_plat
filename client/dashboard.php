@@ -28,7 +28,7 @@ $pending_ratings_count_stmt = $pdo->prepare("
           SELECT 1
           FROM order_fulfillments f
           WHERE f.order_id = o.id
-            AND f.status = 'claimed'
+            AND f.status IN ('delivered', 'claimed')
       )
 ");
 $pending_ratings_count_stmt->execute([$client_id]);
@@ -45,7 +45,7 @@ $pending_ratings_stmt = $pdo->prepare("
           SELECT 1
           FROM order_fulfillments f
           WHERE f.order_id = o.id
-            AND f.status = 'claimed'
+            AND f.status IN ('delivered', 'claimed')
       )
     ORDER BY o.completed_at DESC, o.created_at DESC
     LIMIT 3

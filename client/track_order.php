@@ -468,7 +468,7 @@ if(!empty($all_orders)) {
     foreach($fulfillments as $fulfillment) {
         if(!isset($fulfillment_by_order[$fulfillment['order_id']])) {
             $fulfillment_by_order[$fulfillment['order_id']] = $fulfillment;
-            if(($fulfillment['status'] ?? null) === FULFILLMENT_CLAIMED) {
+            if(in_array(($fulfillment['status'] ?? null), [FULFILLMENT_DELIVERED, FULFILLMENT_CLAIMED], true)) {
                 $claimed_fulfillment_by_order[$fulfillment['order_id']] = true;
             }
         }
