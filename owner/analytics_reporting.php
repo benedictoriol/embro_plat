@@ -18,31 +18,59 @@ $completion_rate = $total_orders > 0 ? ($overview['completed_orders'] / $total_o
 
 $kpis = [
     [
-        'label' => 'Total revenue',
+        'label' => 'Total orders',
+        'value' => number_format($overview['total_orders']),
+        'note' => 'All orders currently on record.',
+        'icon' => 'fas fa-receipt',
+        'tone' => 'primary',
+    ],
+    [
+        'label' => 'Completed orders',
+        'value' => number_format($overview['completed_orders']),
+        'note' => 'Successfully finished jobs.',
+        'icon' => 'fas fa-clipboard-check',
+        'tone' => 'success',
+    ],
+    [
+        'label' => 'Cancelled orders',
+        'value' => number_format($overview['cancelled_orders']),
+        'note' => 'Orders cancelled by either party.',
+        'icon' => 'fas fa-ban',
+        'tone' => 'danger',
+    ],
+    [
+        'label' => 'Paid orders',
+        'value' => number_format($overview['paid_orders']),
+        'note' => 'Orders with verified payments.',
+        'icon' => 'fas fa-wallet',
+        'tone' => 'info',
+    ],
+    [
+        'label' => 'Total earnings',
         'value' => '₱' . number_format($overview['total_revenue'], 2),
-        'note' => 'Paid orders for your shop.',
+        'note' => 'Verified payment total from payments.',
         'icon' => 'fas fa-peso-sign',
+        'tone' => 'warning',
+    ],
+    [
+        'label' => 'Average rating',
+        'value' => number_format($overview['average_rating'], 1) . '/5',
+        'note' => number_format($overview['rating_count']) . ' approved review(s).',
+        'icon' => 'fas fa-star',
         'tone' => 'success',
     ],
     [
         'label' => 'Completion rate',
         'value' => number_format($completion_rate, 1) . '%',
-        'note' => 'Orders completed successfully.',
+        'note' => 'Share of orders marked completed.',
         'icon' => 'fas fa-clock',
         'tone' => 'primary',
-    ],
-    [
-        'label' => 'Active orders',
-        'value' => number_format($overview['active_orders']),
-        'note' => 'Accepted or in-progress jobs.',
-        'icon' => 'fas fa-clipboard-list',
-        'tone' => 'info',
     ],
     [
         'label' => 'Active staff',
         'value' => number_format($staff_count),
         'note' => 'Currently assigned to your shop.',
-        'icon' => 'fas fa-bell',
+        'icon' => 'fas fa-users',
         'tone' => 'warning',
     ],
 ];
@@ -66,6 +94,18 @@ $kpis = [
 
         .kpi-card {
             grid-column: span 3;
+        }
+
+        @media (max-width: 992px) {
+            .kpi-card {
+                grid-column: span 6;
+            }
+        }
+
+        @media (max-width: 576px) {
+            .kpi-card {
+                grid-column: span 12;
+            }
         }
 
         .empty-state-card {
