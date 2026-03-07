@@ -55,7 +55,7 @@ function automation_update_order_status(PDO $pdo, int $order_id, string $next_st
 }
 
 function automation_notify_order_parties(PDO $pdo, int $order_id, string $type, string $client_message, ?string $owner_message = null, ?int $extra_user_id = null, ?string $extra_message = null): void {
-    if($order_id <= 0 || $client_message === '') {
+    if($order_id <= 0 || ($client_message === '' && $owner_message === null && $extra_message === null)) {
         return;
     }
 
@@ -320,7 +320,12 @@ function automation_upsert_order_fulfillment(PDO $pdo, array $order, array $payl
                 $next_status,
                 $fulfillment_type
             );
-            create_notification($pdo, (int) $order['client_id'], $order_id, 'info', $message);
+            $owner_message = sprintf(
+                'Fulfillment update for order #%s: %s.',
+                (string) ($order['order_number'] ?? $order_id),
+                strtolower(str_replace('_', ' ', $next_status))
+            );
+            automation_notify_order_parties($pdo, $order_id, 'order_status', $message, $owner_message);
         }
 
         if(in_array($next_status, [FULFILLMENT_DELIVERED, FULFILLMENT_CLAIMED], true)) {

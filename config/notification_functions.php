@@ -12,8 +12,19 @@
  * @param string $message
  * @return void
  */
+function normalize_notification_type(string $type): string {
+    $normalized = trim(strtolower($type));
+
+    return match($normalized) {
+        'info' => 'order_status',
+        default => $normalized,
+    };
+}
+
 function create_notification(PDO $pdo, int $user_id, ?int $order_id, string $type, string $message): void {
-    $preference_stmt = $pdo->prepare("
+    $type = normalize_notification_type($type);
+
+    $preference_stmt = $pdo->prepare(" 
         SELECT enabled
         FROM notification_preferences
         WHERE user_id = ? AND event_key = ? AND channel = 'in_app'

@@ -77,13 +77,6 @@ automation_notify_order_parties(
     sprintf('Your order #%s has been accepted by %s.', $order['order_number'], $order['shop_name'])
 );
 
-automation_notify_order_parties(
-    $pdo,
-    $order_id,
-    'success',
-    'Your order #' . $order['order_number'] . ' has been accepted and will be scheduled shortly.'
-);
-
 automation_log_audit_if_available(
     $pdo,
     $owner_id,

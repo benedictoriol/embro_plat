@@ -200,14 +200,11 @@ if(isset($_POST['upload_proof'])) {
                 'A new design proof is ready for order #%s.',
                 $order_info['order_number']
             );
-            create_notification($pdo, (int) $order_info['client_id'], $order_id, 'design', $message);
-            if(!empty($order_info['owner_id'])) {
-                $owner_message = sprintf(
-                    'A new design proof was uploaded for order #%s.',
-                    $order_info['order_number']
-                );
-                create_notification($pdo, (int) $order_info['owner_id'], $order_id, 'design', $owner_message);
-            }
+            $owner_message = sprintf(
+                'A new design proof was uploaded for order #%s.',
+                $order_info['order_number']
+            );
+            automation_notify_order_parties($pdo, $order_id, 'design', $message, $owner_message);
 
             automation_log_audit_if_available(
                 $pdo,
@@ -266,12 +263,8 @@ if(isset($_POST['escalate_issue'])) {
             $order_info['order_number'],
             strtolower($label)
         );
-        if(!empty($order_info['owner_id'])) {
-            create_notification($pdo, (int) $order_info['owner_id'], (int) $order_id, 'warning', $message);
-        }
-        if($escalation_type === 'needs_clarification') {
-            create_notification($pdo, (int) $order_info['client_id'], (int) $order_id, 'warning', $message);
-        }
+        $client_message = $escalation_type === 'needs_clarification' ? $message : '';
+        automation_notify_order_parties($pdo, $order_id, 'warning', $client_message, $message);
 
          $success = $label . " request sent successfully.";
         }
@@ -380,9 +373,9 @@ if(isset($_POST['update_status'])) {
                 ],
                 'ready_to_pickup' => [
                     'history' => 'Order is complete and queued for fulfillment pickup flow.',
-                    'client_message' => sprintf('Order #%s production is complete. Pickup scheduling will proceed in fulfillment.', $order_info['order_number']),
-                    'owner_message' => null,
-                    'notification_type' => 'info',
+                    'client_message' => sprintf('Order #%s passed QC and is ready for fulfillment scheduling.', $order_info['order_number']),
+                    'owner_message' => sprintf('Order #%s passed QC and is ready for fulfillment scheduling.', $order_info['order_number']),
+                    'notification_type' => 'success',
                 ],
             ];
 
@@ -455,9 +448,7 @@ if(isset($_POST['update_status'])) {
                         ];
 
                         if($fg_created) {
-                            $owner_message = sprintf('Order #%s passed quality checking and is now logged in finished goods for fulfillment.', $order_info['order_number']);
-                            $client_message = sprintf('Order #%s passed quality checking and is being prepared for fulfillment.', $order_info['order_number']);
-                            automation_notify_order_parties($pdo, $order_id, 'info', $client_message, $owner_message);
+                            // Finished-goods registration completed; stage notification below will notify parties.
                         }
                     }
 
