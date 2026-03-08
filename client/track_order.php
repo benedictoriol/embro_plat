@@ -583,11 +583,13 @@ function status_pill($status) {
         'pending' => 'status-pending',
         'accepted' => 'status-accepted',
         'in_progress' => 'status-in_progress',
+        'digitizing' => 'status-digitizing',
         'completed' => 'status-completed',
         'cancelled' => 'status-cancelled'
     ];
     $class = $map[$status] ?? 'status-pending';
-    return '<span class="status-pill ' . $class . '">' . ucfirst(str_replace('_', ' ', $status)) . '</span>';
+    $label = order_current_stage_label(['status' => (string) $status], null);
+    return '<span class="status-pill ' . $class . '">' . htmlspecialchars($label, ENT_QUOTES, 'UTF-8') . '</span>';
 }
 
 function payment_status_pill($status) {
@@ -694,6 +696,7 @@ function order_overview_label(array $order, array $fulfillment_by_order, array $
         .status-pending { background: #fef9c3; color: #92400e; }
         .status-accepted { background: #e0f2fe; color: #0369a1; }
         .status-in_progress { background: #e0e7ff; color: #3730a3; }
+        .status-digitizing { background: #ede9fe; color: #6d28d9; }
         .status-completed { background: #dcfce7; color: #166534; }
         .status-cancelled { background: #fee2e2; color: #991b1b; }
         .payment-unpaid { background: #fef3c7; color: #92400e; }
@@ -894,9 +897,11 @@ function order_overview_label(array $order, array $fulfillment_by_order, array $
                 <?php $quote_details = !empty($order['quote_details']) ? json_decode($order['quote_details'], true) : null; ?>
                 <?php $fulfillment = $fulfillment_by_order[$order['id']] ?? null; ?>
                 <?php $fulfillment_status = $fulfillment['status'] ?? null; ?>
-                <?php $display_progress = order_display_progress($order, $fulfillment_status); ?>
-                <?php $current_stage_label = order_current_stage_label($order, $fulfillment_status); ?>
-                <?php $status_history = ensure_status_history_with_fallback($status_history_by_order[$order['id']] ?? [], $order, 'Current order status.'); ?>
+                <?php $status_history_raw = $status_history_by_order[$order['id']] ?? []; ?>
+                <?php $status_history = ensure_status_history_with_fallback($status_history_raw, $order, 'Current order status.'); ?>
+                <?php $workflow_snapshot = order_workflow_snapshot($order, $status_history_raw, $fulfillment_status); ?>
+                <?php $display_progress = (int) ($workflow_snapshot['display_progress'] ?? 0); ?>
+                <?php $current_stage_label = (string) ($workflow_snapshot['stage_label'] ?? 'Order placed'); ?>
                 <div class="order-card">
                    <div class="order-card-header" data-toggle-order="order-detail-<?php echo (int) $order['id']; ?>">
                         <div>

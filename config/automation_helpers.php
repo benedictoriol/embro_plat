@@ -7,21 +7,7 @@ require_once __DIR__ . '/notification_functions.php';
 require_once __DIR__ . '/assignment_helpers.php';
 
 function get_order_progress_for_status(string $status, ?string $fulfillment_status = null): int {
-    $normalized_status = strtolower(trim($status));
-    $normalized_fulfillment_status = $fulfillment_status !== null ? strtolower(trim($fulfillment_status)) : null;
-
-    if(in_array($normalized_fulfillment_status, [FULFILLMENT_DELIVERED, FULFILLMENT_CLAIMED], true)) {
-        return 100;
-    }
-
-    return match($normalized_status) {
-        STATUS_PENDING => 10,
-        STATUS_ACCEPTED => 25,
-        STATUS_DIGITIZING => 40,
-        STATUS_IN_PROGRESS => 65,
-        STATUS_COMPLETED => 90,
-        default => 0,
-    };
+    return order_workflow_display_progress($status, 0, $fulfillment_status);
 }
 
 function automation_update_order_status(PDO $pdo, int $order_id, string $next_status, ?int $staff_id = null, ?string $notes = null): array {    

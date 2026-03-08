@@ -83,7 +83,7 @@ function order_workflow_current_stage_label(string $order_status, ?string $fulfi
         STATUS_PENDING => 'Order placed',
         STATUS_ACCEPTED => 'Order accepted',
         STATUS_IN_PROGRESS => 'In production',
-        STATUS_DIGITIZING => 'Digitizing design',
+        STATUS_DIGITIZING => 'Design digitizing',
         STATUS_COMPLETED => 'Completed',
         STATUS_CANCELLED => 'Cancelled',
         default => ucfirst(str_replace('_', ' ', $normalized_status)),

@@ -62,6 +62,32 @@ function order_current_stage_label(array $order, ?string $fulfillment_status = n
     return order_workflow_current_stage_label((string) ($order['status'] ?? STATUS_PENDING), $fulfillment_status);
 }
 
+
+function order_workflow_snapshot(array $order, array $status_history = [], ?string $fulfillment_status = null): array {
+    $effective_status = (string) ($order['status'] ?? STATUS_PENDING);
+    $effective_progress = (int) ($order['progress'] ?? 0);
+
+    if(!empty($status_history)) {
+        $latest_entry = end($status_history);
+        if(is_array($latest_entry)) {
+            if(!empty($latest_entry['status'])) {
+                $effective_status = (string) $latest_entry['status'];
+            }
+            if(isset($latest_entry['progress']) && $latest_entry['progress'] !== null) {
+                $effective_progress = (int) $latest_entry['progress'];
+            }
+        }
+        reset($status_history);
+    }
+
+    return [
+        'status' => $effective_status,
+        'progress' => $effective_progress,
+        'display_progress' => order_workflow_display_progress($effective_status, $effective_progress, $fulfillment_status),
+        'stage_label' => order_workflow_current_stage_label($effective_status, $fulfillment_status),
+    ];
+}
+
 function ensure_status_history_with_fallback(array $status_history, array $order, ?string $fallback_note = null): array {
     if(!empty($status_history)) {
         return $status_history;
