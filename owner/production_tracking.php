@@ -2,11 +2,12 @@
 session_start();
 require_once '../config/db.php';
 require_once '../config/constants.php';
+require_once '../config/automation_helpers.php';
 require_role('owner');
 
 $owner_id = $_SESSION['user']['id'];
 $owner_role = $_SESSION['user']['role'] ?? null;
-$shop_stmt = $pdo->prepare("SELECT shop_name FROM shops WHERE owner_id = ?");
+$shop_stmt = $pdo->prepare("SELECT id, shop_name FROM shops WHERE owner_id = ?");
 $shop_stmt->execute([$owner_id]);
 $shop = $shop_stmt->fetch();
 
@@ -27,7 +28,7 @@ if(isset($_POST['upload_proof'])) {
         $error = "Please complete your service provider profile before uploading proofs.";
     } else {
         $order_stmt = $pdo->prepare("
-            SELECT o.order_number, o.client_id, o.status
+            SELECT o.order_number, o.client_id, o.status, o.quantity
             FROM orders o
             WHERE o.id = ? AND o.shop_id = ?
             LIMIT 1
@@ -79,7 +80,7 @@ if(isset($_POST['start_production'])) {
     $order_id = (int) ($_POST['order_id'] ?? 0);
 
     $order_stmt = $pdo->prepare("
-        SELECT o.order_number, o.client_id, o.status
+        SELECT o.order_number, o.client_id, o.status, o.quantity
         FROM orders o
         WHERE o.id = ? AND o.shop_id = ?
         LIMIT 1
@@ -99,6 +100,19 @@ if(isset($_POST['start_production'])) {
         [$can_transition, $transition_error] = order_workflow_validate_order_status($pdo, $order_state, STATUS_IN_PROGRESS);
         if(!$can_transition) {
             $error = $transition_error ?: "Status transition not allowed from the current state.";
+        }
+    }
+
+    if(!isset($error)) {
+        $order_qty = max(1, (int) ($order['quantity'] ?? 1));
+        [$thread_ok, $thread_error, $thread_log] = automation_consume_thread_inventory_on_production_start(
+            $pdo,
+            (int) ($shop['id'] ?? 0),
+            $order_id,
+            $order_qty
+        );
+        if(!$thread_ok) {
+            $error = $thread_error ?: 'Unable to consume thread inventory for this production run.';
         }
     }
 
@@ -131,6 +145,11 @@ if(isset($_POST['start_production'])) {
         );
 
         $success = 'Production has started for order #' . $order['order_number'] . '.';
+        if(is_array($thread_log) && !empty($thread_log['already_logged'])) {
+            $success .= ' Thread consumption was already logged earlier.';
+        } elseif(is_array($thread_log) && isset($thread_log['required_qty_m'])) {
+            $success .= ' Deducted ' . number_format((float) $thread_log['required_qty_m'], 2) . ' m of thread from inventory.';
+        }
     }
 }
 

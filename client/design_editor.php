@@ -2361,7 +2361,7 @@ function estimateStitchCountFromEditor() {
     const complexityFactor = Math.max(1, Math.min(2.5, 1 + (imageCount * 0.2) + (textCount * 0.08) + (state.elements.length * 0.03)));
     const stitchCount = Math.round((hoop.width * hoop.height * complexityFactor) / 3);
     const threadColorsEstimate = Math.max(1, Math.min(15, Math.round((complexityFactor * 2.5) + ((hoop.width * hoop.height) / 2800))));
-    const threadLengthEstimateM = Number((stitchCount * 0.004).toFixed(2));
+    const threadLengthEstimateM = Number((stitchCount * 0.003).toFixed(2));
 
     return {
         stitch_count: stitchCount,

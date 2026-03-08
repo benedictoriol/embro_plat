@@ -464,23 +464,18 @@ if(isset($_POST['update_status'])) {
                     $is_first_production_entry = ($order_before['status'] ?? '') !== STATUS_IN_PROGRESS
                         && $target_status === STATUS_IN_PROGRESS;
                     if($is_first_production_entry) {
-                        [$issue_logged, $issue_error, $issue_created] = automation_log_inventory_transaction_once(
+                        [$thread_ok, $thread_error, $thread_log] = automation_consume_thread_inventory_on_production_start(
                             $pdo,
                             (int) ($order_info['shop_id'] ?? 0),
                             $order_id,
-                            'order_production_start',
-                            'issue',
-                            (float) $order_qty
+                            $order_qty
                         );
 
-                        if($issue_error !== null) {
-                            throw new RuntimeException($issue_error);
+                        if(!$thread_ok) {
+                            throw new RuntimeException($thread_error ?: 'Unable to consume thread inventory for production start.');
                         }
 
-                        $production_inventory_log = [
-                            'logged' => $issue_logged,
-                            'created' => $issue_created,
-                        ];
+                        $production_inventory_log = $thread_log;
                         
                         $machineAssignment = auto_assign_order_to_machine(
                             $pdo,

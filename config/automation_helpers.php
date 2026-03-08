@@ -253,6 +253,143 @@ function automation_log_inventory_transaction_once(
     return [true, null, true];
 }
 
+function automation_estimate_thread_length_m(int $stitch_count): float {
+    $safe_stitches = max(0, $stitch_count);
+    if($safe_stitches <= 0) {
+        return 0.0;
+    }
+
+    $thread_length_mm = $safe_stitches * 3;
+    return round($thread_length_mm / 1000, 2);
+}
+
+function automation_resolve_order_thread_requirement(PDO $pdo, int $order_id, int $order_qty = 1): array {
+    $safe_order_id = max(0, $order_id);
+    $safe_qty = max(1, $order_qty);
+    if($safe_order_id <= 0) {
+        return [false, 'Invalid order id.', null];
+    }
+
+    $design_stmt = $pdo->prepare("SELECT id, stitch_count, estimated_thread_length FROM digitized_designs WHERE order_id = ? ORDER BY id DESC LIMIT 1");
+    $design_stmt->execute([$safe_order_id]);
+    $design = $design_stmt->fetch();
+
+    if(!$design) {
+        return [false, 'No digitized design found for this order.', null];
+    }
+
+    $stitch_count = max(0, (int) ($design['stitch_count'] ?? 0));
+    if($stitch_count <= 0) {
+        return [false, 'Missing stitch count for thread consumption estimate.', null];
+    }
+
+    $estimated_per_item_m = automation_estimate_thread_length_m($stitch_count);
+    if($estimated_per_item_m <= 0) {
+        return [false, 'Unable to estimate thread length for the order.', null];
+    }
+
+    if((float) ($design['estimated_thread_length'] ?? 0) <= 0) {
+        $update_stmt = $pdo->prepare("UPDATE digitized_designs SET estimated_thread_length = ? WHERE id = ?");
+        $update_stmt->execute([$estimated_per_item_m, (int) $design['id']]);
+    }
+
+    $total_required_m = round($estimated_per_item_m * $safe_qty, 2);
+
+    return [
+        true,
+        null,
+        [
+            'design_id' => (int) $design['id'],
+            'stitch_count' => $stitch_count,
+            'estimated_thread_length_per_item_m' => $estimated_per_item_m,
+            'estimated_thread_length_total_m' => $total_required_m,
+            'order_quantity' => $safe_qty,
+        ],
+    ];
+}
+
+function automation_consume_thread_inventory_on_production_start(PDO $pdo, int $shop_id, int $order_id, int $order_qty = 1): array {
+    $safe_shop_id = max(0, $shop_id);
+    $safe_order_id = max(0, $order_id);
+    if($safe_shop_id <= 0 || $safe_order_id <= 0) {
+        return [false, 'Invalid production consumption context.', null];
+    }
+
+    [$requirement_ok, $requirement_error, $requirement] = automation_resolve_order_thread_requirement($pdo, $safe_order_id, $order_qty);
+    if(!$requirement_ok) {
+        return [false, $requirement_error, null];
+    }
+
+    $required_qty = (float) ($requirement['estimated_thread_length_total_m'] ?? 0);
+    if($required_qty <= 0) {
+        return [false, 'Estimated thread requirement is zero.', null];
+    }
+
+    $material_stmt = $pdo->prepare("\n        SELECT id, name, category, current_stock\n        FROM raw_materials\n        WHERE shop_id = ?\n          AND status = 'active'\n          AND (LOWER(COALESCE(category, '')) LIKE '%thread%' OR LOWER(name) LIKE '%thread%')\n        ORDER BY id ASC\n        LIMIT 1\n    ");
+    $material_stmt->execute([$safe_shop_id]);
+    $material = $material_stmt->fetch();
+
+    if(!$material) {
+        return [false, 'No active thread material found in inventory.', null];
+    }
+
+    $existing_stmt = $pdo->prepare("\n        SELECT id\n        FROM inventory_transactions\n        WHERE shop_id = ? AND ref_type = 'thread_consumption' AND ref_id = ? AND type = 'issue'\n        LIMIT 1\n    ");
+    $existing_stmt->execute([$safe_shop_id, $safe_order_id]);
+    if($existing_stmt->fetchColumn()) {
+        return [true, null, ['already_logged' => true, 'required_qty_m' => $required_qty, 'material_id' => (int) $material['id']]];
+    }
+
+    try {
+        $pdo->beginTransaction();
+
+        $lock_stmt = $pdo->prepare("SELECT current_stock FROM raw_materials WHERE id = ? AND shop_id = ? FOR UPDATE");
+        $lock_stmt->execute([(int) $material['id'], $safe_shop_id]);
+        $locked_stock = $lock_stmt->fetchColumn();
+        if($locked_stock === false) {
+            $pdo->rollBack();
+            return [false, 'Unable to lock thread inventory record.', null];
+        }
+
+        $current_stock = (float) $locked_stock;
+        if($current_stock < $required_qty) {
+            $pdo->rollBack();
+            return [false, 'Insufficient thread stock. Required ' . number_format($required_qty, 2) . ' m, available ' . number_format($current_stock, 2) . ' m.', [
+                'required_qty_m' => $required_qty,
+                'available_qty_m' => $current_stock,
+                'material_id' => (int) $material['id'],
+            ]];
+        }
+
+        $update_stock_stmt = $pdo->prepare("UPDATE raw_materials SET current_stock = current_stock - ? WHERE id = ? AND shop_id = ?");
+        $update_stock_stmt->execute([$required_qty, (int) $material['id'], $safe_shop_id]);
+
+        $insert_stmt = $pdo->prepare("\n            INSERT INTO inventory_transactions (shop_id, material_id, type, qty, ref_type, ref_id)\n            VALUES (?, ?, 'issue', ?, 'thread_consumption', ?)\n        ");
+        $insert_stmt->execute([
+            $safe_shop_id,
+            (int) $material['id'],
+            -$required_qty,
+            $safe_order_id,
+        ]);
+
+        $pdo->commit();
+    } catch(Throwable $e) {
+        if($pdo->inTransaction()) {
+            $pdo->rollBack();
+        }
+        return [false, 'Failed to deduct thread inventory.', null];
+    }
+
+    return [
+        true,
+        null,
+        [
+            'already_logged' => false,
+            'required_qty_m' => $required_qty,
+            'material_id' => (int) $material['id'],
+        ],
+    ];
+}
+
 function automation_ensure_finished_goods_record(PDO $pdo, int $order_id, int $shop_id, ?int $storage_location_id = null, string $status = 'stored'): array {
     if($order_id <= 0 || $shop_id <= 0) {
         return [false, 'Invalid order or shop id.', null, false];

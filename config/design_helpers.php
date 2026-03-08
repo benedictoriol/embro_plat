@@ -191,7 +191,7 @@ function estimate_stitch_count(float $width_mm, float $height_mm, float $complex
 
     $stitchCount = (int) round(($designArea * $safeComplexity) / 3);
     $threadColorsEstimate = (int) max(1, min(15, round(($safeComplexity * 2.5) + ($designArea / 2800))));
-    $threadLengthEstimate = round($stitchCount * 0.004, 2);
+    $threadLengthEstimate = round($stitchCount * 0.003, 2);
 
     return [
         'stitch_count' => $stitchCount,
