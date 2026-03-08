@@ -1,17 +1,19 @@
 <?php
 session_start();
 require_once '../config/db.php';
+require_once '../config/constants.php';
+require_once '../config/automation_helpers.php';
 require_role(['owner', 'staff', 'employee']);
 require_staff_position(['qc_staff']);
 
 $user_id = (int) $_SESSION['user']['id'];
 $user_role = $_SESSION['user']['role'] ?? null;
 if ($user_role === 'owner') {
-    $shop_stmt = $pdo->prepare("SELECT shop_name FROM shops WHERE owner_id = ?");
+    $shop_stmt = $pdo->prepare("SELECT id, shop_name, owner_id FROM shops WHERE owner_id = ?");
     $shop_stmt->execute([$user_id]);
 } else {
-    $shop_stmt = $pdo->prepare("
-        SELECT s.shop_name
+    $shop_stmt = $pdo->prepare(" 
+        SELECT s.id, s.shop_name, s.owner_id
         FROM shop_staffs ss
         JOIN shops s ON s.id = ss.shop_id
         WHERE ss.user_id = ? AND ss.status = 'active'
@@ -21,6 +23,136 @@ if ($user_role === 'owner') {
     $shop_stmt->execute([$user_id]);
 }
 $shop = $shop_stmt->fetch();
+
+if (!$shop) {
+    die('No active shop found for this QC account.');
+}
+
+$shop_id = (int) ($shop['id'] ?? 0);
+$owner_id = (int) ($shop['owner_id'] ?? 0);
+$success = '';
+$error = '';
+
+if ($_SERVER['REQUEST_METHOD'] === 'POST') {
+    $action = $_POST['action'] ?? '';
+
+    if ($action === 'record_qc_result') {
+        $order_id = (int) ($_POST['order_id'] ?? 0);
+        $qc_result = strtolower(trim((string) ($_POST['qc_result'] ?? '')));
+        $notes = trim((string) ($_POST['notes'] ?? ''));
+
+        if ($order_id <= 0 || !in_array($qc_result, ['passed', 'failed'], true)) {
+            $error = 'Please select an order and a QC result.';
+        } else {
+            $order_stmt = $pdo->prepare(" 
+                SELECT id, order_number, status
+                FROM orders
+                WHERE id = ? AND shop_id = ?
+                LIMIT 1
+            ");
+            $order_stmt->execute([$order_id, $shop_id]);
+            $order = $order_stmt->fetch();
+
+            if (!$order) {
+                $error = 'Order not found for this shop.';
+            } elseif (($order['status'] ?? '') !== STATUS_COMPLETED) {
+                $error = 'Only completed orders can be quality checked.';
+            } elseif ($qc_result === 'passed') {
+                [$created_ok, $create_error, $finished_goods_id, $was_created] = automation_ensure_finished_goods_record(
+                    $pdo,
+                    $order_id,
+                    $shop_id,
+                    null,
+                    'stored'
+                );
+
+                if (!$created_ok) {
+                    $error = $create_error ?: 'Unable to save QC pass result.';
+                } else {
+                    $qc_notes = $notes !== '' ? $notes : 'QC passed.';
+                    record_order_status_history(
+                        $pdo,
+                        $order_id,
+                        STATUS_COMPLETED,
+                        get_order_progress_for_status(STATUS_COMPLETED),
+                        'QC PASS: ' . $qc_notes,
+                        $user_id
+                    );
+
+                    automation_notify_order_parties(
+                        $pdo,
+                        $order_id,
+                        'order_status',
+                        'Order #' . $order['order_number'] . ' passed quality checking and is being prepared for fulfillment.'
+                    );
+
+                    automation_log_audit_if_available(
+                        $pdo,
+                        $user_id,
+                        $user_role,
+                        $was_created ? 'qc_pass_create_finished_goods' : 'qc_pass_reuse_finished_goods',
+                        'orders',
+                        $order_id,
+                        ['qc_result' => null],
+                        [
+                            'qc_result' => 'passed',
+                            'finished_goods_id' => $finished_goods_id,
+                            'finished_goods_created' => $was_created,
+                        ]
+                    );
+
+                    $success = $was_created
+                        ? 'QC passed and finished goods record created. Fulfillment can now proceed.'
+                        : 'QC passed. Existing finished goods record retained for fulfillment readiness.';
+                }
+            } else {
+                $qc_notes = $notes !== '' ? $notes : 'QC failed. Rework required.';
+                record_order_status_history(
+                    $pdo,
+                    $order_id,
+                    STATUS_COMPLETED,
+                    get_order_progress_for_status(STATUS_COMPLETED),
+                    'QC FAIL: ' . $qc_notes,
+                    $user_id
+                );
+
+                if ($owner_id > 0) {
+                    create_notification(
+                        $pdo,
+                        $owner_id,
+                        $order_id,
+                        'order_status',
+                        'QC failed for order #' . $order['order_number'] . '. Review required before fulfillment.'
+                    );
+                }
+
+                automation_log_audit_if_available(
+                    $pdo,
+                    $user_id,
+                    $user_role,
+                    'qc_fail',
+                    'orders',
+                    $order_id,
+                    ['qc_result' => null],
+                    ['qc_result' => 'failed', 'notes' => $qc_notes]
+                );
+
+                $success = 'QC failed was recorded. No finished goods record was created.';
+            }
+        }
+    }
+}
+
+$orders_stmt = $pdo->prepare(" 
+    SELECT o.id, o.order_number, o.completed_at, u.fullname AS client_name, fg.id AS finished_goods_id
+    FROM orders o
+    JOIN users u ON u.id = o.client_id
+    LEFT JOIN finished_goods fg ON fg.order_id = o.id
+    WHERE o.shop_id = ? AND o.status = 'completed'
+    ORDER BY o.completed_at DESC, o.updated_at DESC
+");
+$orders_stmt->execute([$shop_id]);
+$completed_orders = $orders_stmt->fetchAll();
 
 $inspection_steps = [
     [
@@ -104,6 +236,10 @@ $automation = [
         }
 
         .overview-card {
+            grid-column: span 12;
+        }
+
+        .qc-form-card {
             grid-column: span 12;
         }
 
@@ -196,6 +332,13 @@ $automation = [
         </div>
 
         <div class="qc-grid">
+            <?php if ($success !== ''): ?>
+                <div class="alert alert-success"><?php echo htmlspecialchars($success); ?></div>
+            <?php endif; ?>
+            <?php if ($error !== ''): ?>
+                <div class="alert alert-danger"><?php echo htmlspecialchars($error); ?></div>
+            <?php endif; ?>
+
             <div class="card overview-card">
                 <div class="card-header">
                     <h3><i class="fas fa-bullseye text-primary"></i> Purpose</h3>
@@ -204,6 +347,48 @@ $automation = [
                     Ensures output meets quality standards, locking delivery actions until inspection criteria are
                     satisfied and recorded.
                 </p>
+            </div>
+
+            <div class="card qc-form-card">
+                <div class="card-header">
+                    <h3><i class="fas fa-square-check text-primary"></i> Record QC Result</h3>
+                    <p class="text-muted">Passing QC auto-creates a finished goods record so fulfillment can start.</p>
+                </div>
+                <form method="POST" class="d-flex flex-column gap-3">
+                    <?php echo csrf_field(); ?>
+                    <input type="hidden" name="action" value="record_qc_result">
+
+                    <div>
+                        <label for="order_id" class="form-label">Completed Order</label>
+                        <select id="order_id" name="order_id" class="form-control" required>
+                            <option value="">Select an order</option>
+                            <?php foreach ($completed_orders as $order): ?>
+                                <option value="<?php echo (int) $order['id']; ?>">
+                                    #<?php echo htmlspecialchars($order['order_number']); ?> - <?php echo htmlspecialchars($order['client_name']); ?>
+                                    <?php if (!empty($order['finished_goods_id'])): ?>
+                                        (finished goods ready)
+                                    <?php endif; ?>
+                                </option>
+                            <?php endforeach; ?>
+                        </select>
+                    </div>
+
+                    <div>
+                        <label for="qc_result" class="form-label">QC Decision</label>
+                        <select id="qc_result" name="qc_result" class="form-control" required>
+                            <option value="">Select result</option>
+                            <option value="passed">Passed</option>
+                            <option value="failed">Failed</option>
+                        </select>
+                    </div>
+
+                    <div>
+                        <label for="notes" class="form-label">QC Notes (optional)</label>
+                        <textarea id="notes" name="notes" rows="3" class="form-control" placeholder="Defects found, corrections done, packaging remarks..."></textarea>
+                    </div>
+
+                    <button type="submit" class="btn btn-primary"><i class="fas fa-save"></i> Save QC Decision</button>
+                </form>
             </div>
 
             <div class="card inspection-card">
