@@ -100,7 +100,7 @@ function is_design_image(?string $filename): bool {
 
 function fetch_order_info(PDO $pdo, int $staff_id, int $order_id): ?array {
     $order_info_stmt = $pdo->prepare("
-        SELECT o.id, o.shop_id, o.status, o.progress, o.order_number, o.client_id, o.design_approved, o.quantity, s.shop_name, s.owner_id
+        SELECT o.id, o.shop_id, o.status, o.progress, o.order_number, o.client_id, o.design_approved, o.quantity, o.service_type, s.shop_name, s.owner_id
         FROM orders o
         JOIN shops s ON o.shop_id = s.id
         LEFT JOIN job_schedule js ON js.order_id = o.id AND js.staff_id = ?
@@ -368,16 +368,37 @@ if(isset($_POST['update_status'])) {
             $target_status = $stage_options[$selected_stage]['status'];
             $target_progress = (int) $stage_options[$selected_stage]['progress'];
             $base_label = $stage_options[$selected_stage]['label'];
+            $current_status = (string) ($order_info['status'] ?? '');
+            $design_is_approved = order_workflow_is_design_approved($pdo, $order_id);
 
             if(!in_array($target_status, $allowed_statuses, true)) {
                 $error = 'Invalid status selection.';
+            } elseif(in_array($selected_stage, ['materials_ready', 'in_process_of_making'], true)) {
+                if(!$design_is_approved && $current_status !== STATUS_IN_PROGRESS) {
+                    $error = 'Design proof approval is required before production can begin.';
+                }
+            }
+
+            if(!isset($error) && $selected_stage === 'materials_ready') {
+                $can_start_materials = in_array($current_status, [STATUS_DIGITIZING, STATUS_IN_PROGRESS], true)
+                    || ($current_status === STATUS_ACCEPTED && $design_is_approved);
+                if(!$can_start_materials) {
+                    $error = 'Materials can be marked ready only after digitizing, or from accepted once the design is approved.';
+                } else {
+                    $target_status = STATUS_IN_PROGRESS;
+                }
+            }
+
+            if(!isset($error) && $selected_stage === 'in_process_of_making') {
+                $target_status = STATUS_IN_PROGRESS;
+                $target_progress = max($target_progress, 60);
             }
         }
 
             if(!isset($error)) {
             $stage_meta = [
                 'digitizing_started' => [
-                    'history' => 'Digitizing stage started.',
+                    'history' => 'Digitizing started.',
                     'client_message' => sprintf('Order #%s entered digitizing for stitch-file preparation.', $order_info['order_number']),
                     'owner_message' => sprintf('Order #%s is now in digitizing stage.', $order_info['order_number']),
                     'notification_type' => 'order_status',
@@ -426,16 +447,18 @@ if(isset($_POST['update_status'])) {
                     $current_progress = (int) ($order_info['progress'] ?? 0);
                     $next_progress = keep_progress_forward($current_progress, $target_progress);
 
-                    if(($order_info['status'] ?? '') !== $target_status) {
-                        [$status_updated, $status_error] = automation_update_order_status(
-                            $pdo,
-                            $order_id,
-                            $target_status,
-                            $staff_id,
-                            null,
-                        );
-                        if(!$status_updated) {
-                            throw new RuntimeException($status_error ?: 'Failed to update order status.');
+                    $status_changed = (($order_info['status'] ?? '') !== $target_status);
+                    if($status_changed) {
+                        $status_stmt = $pdo->prepare("
+                            UPDATE orders
+                            SET status = ?, updated_at = NOW()
+                            WHERE id = ? AND (assigned_to = ? OR EXISTS (
+                                SELECT 1 FROM job_schedule js WHERE js.order_id = orders.id AND js.staff_id = ?
+                            ))
+                        ");
+                        $status_stmt->execute([$target_status, $order_id, $staff_id, $staff_id]);
+                        if($status_stmt->rowCount() <= 0) {
+                            throw new RuntimeException('Failed to update order status.');
                         }
                     }
 
@@ -476,7 +499,7 @@ if(isset($_POST['update_status'])) {
                         }
 
                         $production_inventory_log = $thread_log;
-                        
+
                         $machineAssignment = auto_assign_order_to_machine(
                             $pdo,
                             (int) ($order_info['shop_id'] ?? 0),

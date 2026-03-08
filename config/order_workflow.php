@@ -6,6 +6,7 @@ function order_workflow_status_transitions(): array {
         STATUS_PENDING => [STATUS_ACCEPTED, STATUS_CANCELLED],
         STATUS_ACCEPTED => [STATUS_DIGITIZING, STATUS_IN_PROGRESS, STATUS_CANCELLED],
         STATUS_DIGITIZING => [STATUS_IN_PROGRESS, STATUS_CANCELLED],
+        STATUS_IN_PROGRESS => [STATUS_COMPLETED, STATUS_CANCELLED],
         STATUS_COMPLETED => [],
         STATUS_CANCELLED => [],
     ];
@@ -154,7 +155,7 @@ function order_workflow_validate_order_status(PDO $pdo, array $order, string $ne
     ) {
         return [false, 'Design proof approval is required before production can begin.'];
     }
-    
+
     if(
         $next_status === STATUS_IN_PROGRESS
         && $current_status === STATUS_ACCEPTED
