@@ -1937,6 +1937,47 @@ ALTER TABLE `shop_portfolio`
 ALTER TABLE `shop_staffs`
   ADD CONSTRAINT `shop_staffs_ibfk_1` FOREIGN KEY (`shop_id`) REFERENCES `shops` (`id`),
   ADD CONSTRAINT `shop_staffs_ibfk_2` FOREIGN KEY (`user_id`) REFERENCES `users` (`id`);
+  
+-- --------------------------------------------------------
+
+--
+-- Table structure for table `machines`
+--
+
+CREATE TABLE IF NOT EXISTS `machines` (
+  `id` int(11) NOT NULL AUTO_INCREMENT,
+  `shop_id` int(11) NOT NULL,
+  `machine_name` varchar(150) NOT NULL,
+  `max_stitches_per_hour` int(11) NOT NULL,
+  `status` varchar(50) NOT NULL DEFAULT 'active',
+  `created_at` timestamp NOT NULL DEFAULT current_timestamp(),
+  PRIMARY KEY (`id`),
+  KEY `idx_machines_shop` (`shop_id`),
+  KEY `idx_machines_status` (`status`),
+  CONSTRAINT `fk_machines_shop` FOREIGN KEY (`shop_id`) REFERENCES `shops` (`id`) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
+
+-- --------------------------------------------------------
+
+--
+-- Table structure for table `machine_jobs`
+--
+
+CREATE TABLE IF NOT EXISTS `machine_jobs` (
+  `id` int(11) NOT NULL AUTO_INCREMENT,
+  `machine_id` int(11) NOT NULL,
+  `order_id` int(11) NOT NULL,
+  `estimated_stitches` int(11) NOT NULL,
+  `scheduled_start` datetime NOT NULL,
+  `scheduled_end` datetime NOT NULL,
+  `status` varchar(50) NOT NULL DEFAULT 'scheduled',
+  PRIMARY KEY (`id`),
+  KEY `idx_machine_jobs_machine` (`machine_id`),
+  KEY `idx_machine_jobs_order` (`order_id`),
+  KEY `idx_machine_jobs_status` (`status`),
+  CONSTRAINT `fk_machine_jobs_machine` FOREIGN KEY (`machine_id`) REFERENCES `machines` (`id`) ON DELETE CASCADE,
+  CONSTRAINT `fk_machine_jobs_order` FOREIGN KEY (`order_id`) REFERENCES `orders` (`id`) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
 COMMIT;
 
 /*!40101 SET CHARACTER_SET_CLIENT=@OLD_CHARACTER_SET_CLIENT */;

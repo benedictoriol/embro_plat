@@ -2,6 +2,7 @@
 session_start();
 require_once '../config/db.php';
 require_once '../config/automation_helpers.php';
+require_once '../config/scheduling_helpers.php';
 require_once '../config/constants.php';
 require_once '../includes/media_manager.php';
 require_role(['staff','employee','hr']);
@@ -480,6 +481,17 @@ if(isset($_POST['update_status'])) {
                             'logged' => $issue_logged,
                             'created' => $issue_created,
                         ];
+                        
+                        $machineAssignment = auto_assign_order_to_machine(
+                            $pdo,
+                            (int) ($order_info['shop_id'] ?? 0),
+                            $order_id
+                        );
+
+                        if(!($machineAssignment['assigned'] ?? false)) {
+                            $success_note = $success_note ?? [];
+                            $success_note[] = $machineAssignment['message'] ?? 'Machine scheduling skipped.';
+                        }
                     }
 
                     $qc_finished_goods = null;
@@ -559,6 +571,9 @@ if(isset($_POST['update_status'])) {
                     }
 
                     $success = 'Status updated successfully!';
+                    if(!empty($success_note)) {
+                        $success .= ' ' . implode(' ', $success_note);
+                    }
                 } catch(Throwable $e) {
                     $error = 'Failed to update status: ' . $e->getMessage();
                 }

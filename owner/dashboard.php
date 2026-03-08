@@ -2,6 +2,7 @@
 session_start();
 
 require_once '../config/db.php';
+require_once '../config/scheduling_helpers.php';
 require_role('owner');
 
 $owner_id = $_SESSION['user']['id'];
@@ -18,6 +19,7 @@ if(!$shop) {
 }
 
 $shop_id = $shop['id'];
+ensure_machine_scheduling_tables($pdo);
 
 // Get shop statistics
 $stats_stmt = $pdo->prepare("
@@ -49,6 +51,28 @@ $recent_orders = $orders_stmt->fetchAll();
 $completion_rate = $stats['total_orders'] > 0
     ? ($stats['completed_orders'] / $stats['total_orders'] * 100)
     : 0;
+    
+$machine_schedule_stmt = $pdo->prepare("
+    SELECT
+        mj.id,
+        mj.order_id,
+        mj.estimated_stitches,
+        mj.scheduled_start,
+        mj.scheduled_end,
+        mj.status,
+        m.machine_name,
+        m.max_stitches_per_hour,
+        o.order_number,
+        TIMESTAMPDIFF(MINUTE, mj.scheduled_start, mj.scheduled_end) AS duration_minutes
+    FROM machine_jobs mj
+    JOIN machines m ON m.id = mj.machine_id
+    JOIN orders o ON o.id = mj.order_id
+    WHERE m.shop_id = ?
+    ORDER BY mj.scheduled_start ASC
+    LIMIT 8
+");
+$machine_schedule_stmt->execute([$shop_id]);
+$machine_schedule = $machine_schedule_stmt->fetchAll();
 ?>
 <!DOCTYPE html>
 <html lang="en">
@@ -276,7 +300,7 @@ $completion_rate = $stats['total_orders'] > 0
                                 <?php endforeach; ?>
                             </tbody>
                         </table>
-                    <</div>
+                    </div>
                 <?php else: ?>
                     <div class="text-center p-4">
                         <i class="fas fa-inbox fa-3x text-muted mb-3"></i>
@@ -286,6 +310,46 @@ $completion_rate = $stats['total_orders'] > 0
                 <?php endif; ?>
             </div>
 
+            <div class="card">
+                <h3>Machine Schedule</h3>
+                <?php if(!empty($machine_schedule)): ?>
+                    <div class="table-responsive">
+                        <table class="table">
+                            <thead>
+                                <tr>
+                                    <th>Machine</th>
+                                    <th>Order #</th>
+                                    <th>Estimated Stitches</th>
+                                    <th>Scheduled Window</th>
+                                    <th>Duration</th>
+                                    <th>Status</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                <?php foreach($machine_schedule as $schedule): ?>
+                                    <tr>
+                                        <td>
+                                            <strong><?php echo htmlspecialchars($schedule['machine_name']); ?></strong><br>
+                                            <small><?php echo number_format((int) $schedule['max_stitches_per_hour']); ?> stitches/hr</small>
+                                        </td>
+                                        <td>#<?php echo htmlspecialchars($schedule['order_number']); ?></td>
+                                        <td><?php echo number_format((int) $schedule['estimated_stitches']); ?></td>
+                                        <td>
+                                            <?php echo date('M d, Y h:i A', strtotime($schedule['scheduled_start'])); ?><br>
+                                            <small>to <?php echo date('M d, Y h:i A', strtotime($schedule['scheduled_end'])); ?></small>
+                                        </td>
+                                        <td><?php echo max(1, (int) round(((int) $schedule['duration_minutes']) / 60)); ?> hour(s)</td>
+                                        <td><?php echo ucfirst(str_replace('_', ' ', (string) $schedule['status'])); ?></td>
+                                    </tr>
+                                <?php endforeach; ?>
+                            </tbody>
+                        </table>
+                    </div>
+                <?php else: ?>
+                    <p class="text-muted mb-0">No machine schedule entries yet. Jobs will appear here once production starts.</p>
+                <?php endif; ?>
+            </div>
+            
             <div class="card">
                 <h3>Shop Performance & Ratings</h3>
                 <div class="stats-grid" style="margin-top: 0;">
