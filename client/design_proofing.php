@@ -4,6 +4,7 @@ require_once '../config/db.php';
 require_once '../config/constants.php';
 require_once '../includes/media_manager.php';
 require_once '../config/pricing_helpers.php';
+require_once '../config/design_helpers.php';
 require_role('client');
 
 $client_id = $_SESSION['user']['id'];
@@ -211,7 +212,7 @@ function sync_digitized_design_estimate(PDO $pdo, int $order_id, int $digitizer_
     ]);
 }
 
-function estimate_design_quote_from_image(?string $image_path, string $service_type, array $shop_pricing_settings, ?int $fallback_width = null, ?int $fallback_height = null, ?int $fallback_colors = null): array {
+function estimate_design_quote_from_image(?string $image_path, string $service_type, array $shop_pricing_settings, ?int $fallback_width = null, ?int $fallback_height = null, ?int $fallback_colors = null, int $quantity = 1): array {
     $width = max(0, (int) ($fallback_width ?? 0));
     $height = max(0, (int) ($fallback_height ?? 0));
     $color_count = max(0, (int) ($fallback_colors ?? 0));
@@ -220,66 +221,39 @@ function estimate_design_quote_from_image(?string $image_path, string $service_t
         $meta = get_uploaded_image_dimensions($image_path);
         $width = $width > 0 ? $width : (int) ($meta['width_px'] ?? 0);
         $height = $height > 0 ? $height : (int) ($meta['height_px'] ?? 0);
-
-        if($color_count <= 0 && function_exists('imagecreatefromstring')) {
-            $raw = @file_get_contents($image_path);
-            $img = $raw !== false ? @imagecreatefromstring($raw) : false;
-            if($img !== false) {
-                $img_width = imagesx($img);
-                $img_height = imagesy($img);
-                $sample_step_x = max(1, (int) floor($img_width / 120));
-                $sample_step_y = max(1, (int) floor($img_height / 120));
-                $samples = [];
-
-                for($y = 0; $y < $img_height; $y += $sample_step_y) {
-                    for($x = 0; $x < $img_width; $x += $sample_step_x) {
-                        $rgb = imagecolorat($img, $x, $y);
-                        $r = ($rgb >> 16) & 0xFF;
-                        $g = ($rgb >> 8) & 0xFF;
-                        $b = $rgb & 0xFF;
-                        $bucket = sprintf('%02x%02x%02x', (int) floor($r / 16), (int) floor($g / 16), (int) floor($b / 16));
-                        $samples[$bucket] = true;
-                    }
-                }
-
-                $color_count = count($samples);
-                imagedestroy($img);
-            }
-        }
     }
 
-    if($width <= 0 || $height <= 0) {
-        return [
-            'estimated_price' => null,
-            'width' => $width,
-            'height' => $height,
-            'color_count' => $color_count,
-            'price_components' => null,
-        ];
-    }
-
-    $area_sq_in = max(1, ($width / 300) * ($height / 300));
-    $width_in = max(1, $width / 300);
-    $height_in = max(1, $height / 300);
     $base_prices = is_array($shop_pricing_settings['base_prices'] ?? null) ? $shop_pricing_settings['base_prices'] : [];
-    $thread_color_pricing = is_array($shop_pricing_settings['thread_color_pricing'] ?? null) ? $shop_pricing_settings['thread_color_pricing'] : [];
-    $size_pricing = is_array($shop_pricing_settings['size_pricing'] ?? null) ? $shop_pricing_settings['size_pricing'] : [];
-
     $base_price = max(0, (float) ($base_prices[$service_type] ?? ($base_prices['Custom'] ?? 180)));
-    $size_charge = resolve_size_charge($width_in, $height_in, $size_pricing);
-    $color_charge = resolve_thread_color_charge($color_count, $thread_color_pricing);
-    $estimated_price = round(($base_price + $size_charge + $color_charge) / 5) * 5;
+    
+    $stitchInputs = resolve_stitch_pricing_inputs(null, null, $width, $height);
+    $stitchCount = (int) ($stitchInputs['stitch_count'] ?? 0);
+    $threadColors = $color_count > 0 ? $color_count : (int) ($stitchInputs['thread_colors'] ?? 0);
+
+    $pricing = calculate_embroidery_price(
+        $stitchCount,
+        $threadColors,
+        $base_price,
+        max(1, $quantity),
+        $service_type
+    );
 
     return [
-        'estimated_price' => (float) $estimated_price,
+        'estimated_price' => (float) ($pricing['total_price'] ?? 0),
         'width' => $width,
         'height' => $height,
-        'color_count' => $color_count,
+        'color_count' => $threadColors,
+        'pricing' => $pricing,
         'price_components' => [
-            'base_price' => $base_price,
-            'size_charge' => $size_charge,
-            'color_charge' => $color_charge,
-            'area_sq_in' => round($area_sq_in, 2),
+            'base_price' => (float) ($pricing['base_price'] ?? 0),
+            'stitch_count' => (int) ($pricing['stitch_count'] ?? 0),
+            'thread_colors' => (int) ($pricing['thread_colors'] ?? 0),
+            'stitch_rate' => (float) ($pricing['stitch_rate'] ?? 0),
+            'color_rate' => (float) ($pricing['color_rate'] ?? 0),
+            'item_type_adjustment' => (float) ($pricing['item_type_adjustment'] ?? 0),
+            'unit_price' => (float) ($pricing['unit_price'] ?? 0),
+            'quantity' => (int) ($pricing['quantity'] ?? 1),
+            'total_price' => (float) ($pricing['total_price'] ?? 0),
         ],
     ];
 }
@@ -421,6 +395,8 @@ if(isset($_POST['request_quote'])) {
             'owner_request_status' => 'pending_acceptance',
             'customize_order_id' => $customize_order_id > 0 ? $customize_order_id : null,
             'requested_at' => date('c'),
+            'system_suggested_price' => (float) ($design_estimate['estimated_price'] ?? 0),
+            'estimated_total' => (float) ($design_estimate['estimated_price'] ?? 0),
             'client_estimate' => [
                 'estimated_price' => $design_estimate['estimated_price'],
                 'width' => $design_estimate['width'],
@@ -461,7 +437,7 @@ if(isset($_POST['request_quote'])) {
             $service_type,
             $design_description,
             1,
-            null,
+            (float) ($design_estimate['estimated_price'] ?? 0),
             'Quote request submitted via Services page.',
             json_encode($quote_details),
             $uploaded_design_file,
@@ -818,6 +794,8 @@ foreach($request_history as &$request) {
     $request['design_file_is_image'] = is_design_image($request['design_file'] ?? null);
     $request['is_cap_service'] = is_cap_service_type($request['service_type'] ?? null);
     $request['client_stitch_estimate'] = is_array($quote_details['client_estimate']['stitch_estimate'] ?? null) ? $quote_details['client_estimate']['stitch_estimate'] : null;
+    $request['system_suggested_price'] = isset($quote_details['system_suggested_price']) ? (float) $quote_details['system_suggested_price'] : (isset($quote_details['estimated_total']) ? (float) $quote_details['estimated_total'] : null);
+    $request['system_suggested_breakdown'] = is_array($quote_details['auto_pricing']['pricing'] ?? null) ? $quote_details['auto_pricing']['pricing'] : [];
 }
 unset($request);
 ?>
@@ -1114,6 +1092,7 @@ unset($request);
                                 <?php endif; ?>
                             <?php endif; ?>
                             <p class="mb-1"><strong>Design request:</strong> <?php echo htmlspecialchars($request['design_description'] ?: 'No design details provided.'); ?></p>
+                            <p class="mb-1"><strong>Estimated Price:</strong> <?php echo $request['system_suggested_price'] !== null ? '₱' . number_format((float) $request['system_suggested_price'], 2) . ' (System Suggested Price)' : 'Calculating…'; ?></p>
                             <p class="mb-1"><strong>Quoted price:</strong> <?php echo $request['price'] !== null ? '₱' . number_format((float) $request['price'], 2) : 'Waiting for shop quotation'; ?></p>
                             <?php if(!empty($request['client_stitch_estimate'])): ?>
                                 <p class="mb-1"><strong>Estimated stitches:</strong> <?php echo number_format((int) ($request['client_stitch_estimate']['stitch_count'] ?? 0)); ?></p>

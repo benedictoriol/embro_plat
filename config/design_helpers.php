@@ -199,3 +199,46 @@ function estimate_stitch_count(float $width_mm, float $height_mm, float $complex
         'thread_length_estimate_m' => $threadLengthEstimate,
     ];
 }
+
+function resolve_stitch_pricing_inputs(?array $digitizedDesign = null, ?array $quoteDetails = null, ?int $fallbackWidthPx = null, ?int $fallbackHeightPx = null): array {
+    $stitchCount = 0;
+    $threadColors = 0;
+    $source = 'fallback';
+
+    if (is_array($digitizedDesign)) {
+        $stitchCount = max(0, (int) ($digitizedDesign['stitch_count'] ?? 0));
+        $threadColors = max(0, (int) ($digitizedDesign['thread_colors'] ?? 0));
+        if ($stitchCount > 0 || $threadColors > 0) {
+            return [
+                'stitch_count' => $stitchCount,
+                'thread_colors' => $threadColors,
+                'source' => 'digitized_designs',
+            ];
+        }
+    }
+
+    if (is_array($quoteDetails)) {
+        $clientEstimate = $quoteDetails['client_estimate']['stitch_estimate'] ?? null;
+        if (is_array($clientEstimate)) {
+            $stitchCount = max(0, (int) ($clientEstimate['stitch_count'] ?? 0));
+            $threadColors = max(0, (int) ($clientEstimate['thread_colors_estimate'] ?? 0));
+            if ($stitchCount > 0 || $threadColors > 0) {
+                return [
+                    'stitch_count' => $stitchCount,
+                    'thread_colors' => $threadColors,
+                    'source' => 'quote_details',
+                ];
+            }
+        }
+    }
+
+    $widthMm = px_to_mm_estimate(max(0, (int) ($fallbackWidthPx ?? 0)));
+    $heightMm = px_to_mm_estimate(max(0, (int) ($fallbackHeightPx ?? 0)));
+    $estimated = estimate_stitch_count($widthMm, $heightMm, 1.0);
+
+    return [
+        'stitch_count' => max(0, (int) ($estimated['stitch_count'] ?? 0)),
+        'thread_colors' => max(0, (int) ($estimated['thread_colors_estimate'] ?? 0)),
+        'source' => $widthMm > 0 && $heightMm > 0 ? 'dimension_estimate' : $source,
+    ];
+}

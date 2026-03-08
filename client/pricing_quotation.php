@@ -6,7 +6,8 @@ $target = 'design_proofing.php';
 if($query !== '') {
     $target .= '?' . $query;
 }
-        
 
-   header('Location: ' . $target);
+$_SESSION['pricing_redirect_notice'] = 'Estimated Price and System Suggested Price are now auto-generated from stitch and design data.';
+
+header('Location: ' . $target);
 exit;

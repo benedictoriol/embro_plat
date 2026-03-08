@@ -2,6 +2,8 @@
 session_start();
 
 require_once '../config/db.php';
+require_once '../config/pricing_helpers.php';
+require_once '../config/design_helpers.php';
 require_role('owner');
 
 $owner_id = (int) ($_SESSION['user']['id'] ?? 0);
@@ -32,6 +34,46 @@ if(isset($_GET['accepted']) && $_GET['accepted'] === '1') {
     $accept_success = 'Quotation request accepted. It now appears in official orders.';
 }
 
+function decode_order_quote_details(?string $raw): array {
+    if(!is_string($raw) || trim($raw) === '') {
+        return [];
+    }
+
+    $decoded = json_decode($raw, true);
+    return is_array($decoded) ? $decoded : [];
+}
+
+function build_system_suggested_price(array $order, ?array $digitizedDesign = null): array {
+    $details = decode_order_quote_details($order['quote_details'] ?? null);
+    $basePrice = 180.0;
+
+    if(isset($details['client_estimate']['price_components']['base_price'])) {
+        $basePrice = max(0.0, (float) $details['client_estimate']['price_components']['base_price']);
+    }
+
+    $quantity = max(1, (int) ($order['quantity'] ?? 1));
+    $stitchInputs = resolve_stitch_pricing_inputs(
+        $digitizedDesign,
+        $details,
+        isset($order['width_px']) ? (int) $order['width_px'] : null,
+        isset($order['height_px']) ? (int) $order['height_px'] : null
+    );
+
+    $pricing = calculate_embroidery_price(
+        (int) ($stitchInputs['stitch_count'] ?? 0),
+        (int) ($stitchInputs['thread_colors'] ?? 0),
+        $basePrice,
+        $quantity,
+        $order['service_type'] ?? null
+    );
+
+    return [
+        'pricing' => $pricing,
+        'source' => $stitchInputs['source'] ?? 'fallback',
+        'details' => $details,
+    ];
+}
+
 if(isset($_POST['send_quote_update'])) {
     $order_id = (int) ($_POST['order_id'] ?? 0);
     $approval_status = sanitize($_POST['approval_status'] ?? 'pending');
@@ -46,16 +88,18 @@ if(isset($_POST['send_quote_update'])) {
     $timeline_days = $timeline_days_input !== '' ? filter_var($timeline_days_input, FILTER_VALIDATE_INT) : false;
     $downpayment_percent = $downpayment_input !== '' ? filter_var($downpayment_input, FILTER_VALIDATE_FLOAT) : false;
 
-    $order_stmt = $pdo->prepare("SELECT id, status, client_id, order_number, price, payment_status, quote_details FROM orders WHERE id = ? AND shop_id = ?");
+    $order_stmt = $pdo->prepare("SELECT id, status, client_id, order_number, price, payment_status, quote_details, service_type, quantity, width_px, height_px FROM orders WHERE id = ? AND shop_id = ?");
     $order_stmt->execute([$order_id, $shop_id]);
     $order = $order_stmt->fetch(PDO::FETCH_ASSOC);
+
+    $digitized_stmt = $pdo->prepare("SELECT stitch_count, thread_colors FROM digitized_designs WHERE order_id = ? ORDER BY id DESC LIMIT 1");
+    $digitized_stmt->execute([$order_id]);
+    $digitized_design = $digitized_stmt->fetch(PDO::FETCH_ASSOC) ?: null;
 
     if(!$order) {
         $quote_error = 'Order not found for this shop.';
     } elseif(!in_array($approval_status, $allowed_approval_statuses, true)) {
         $quote_error = 'Please select a valid design approval status.';
-    } elseif($quote_amount === false || (float) $quote_amount <= 0) {
-        $quote_error = 'Please provide a valid quotation amount greater than zero.';
     } elseif($timeline_days === false || (int) $timeline_days <= 0) {
         $quote_error = 'Please enter a valid timeline in days.';
     } elseif($downpayment_percent === false || (float) $downpayment_percent < 0 || (float) $downpayment_percent > 100) {
@@ -63,14 +107,17 @@ if(isset($_POST['send_quote_update'])) {
     } elseif(mb_strlen(trim($owner_message)) < 10) {
         $quote_error = 'Please provide a short owner message (at least 10 characters).';
     } else {
-        $existing_quote_details = !empty($order['quote_details']) ? json_decode($order['quote_details'], true) : [];
-        if(!is_array($existing_quote_details)) {
-            $existing_quote_details = [];
-        }
+        $suggested = build_system_suggested_price($order, $digitized_design);
+        $existing_quote_details = $suggested['details'];
+        $system_suggested_total = (float) ($suggested['pricing']['total_price'] ?? 0);
+        $resolved_quote_amount = ($quote_amount !== false && (float) $quote_amount > 0) ? (float) $quote_amount : $system_suggested_total;
 
+        if($resolved_quote_amount <= 0) {
+            $quote_error = 'Unable to generate a valid estimate yet. Please provide manual quote amount.';
+        } else {
         $owner_quote_update = [
             'approval_status' => $approval_status,
-            'quoted_price' => (float) $quote_amount,
+            'quoted_price' => (float) $resolved_quote_amount,
             'timeline_days' => (int) $timeline_days,
             'downpayment_percent' => round((float) $downpayment_percent, 2),
             'scope_summary' => $scope_summary,
@@ -87,23 +134,31 @@ if(isset($_POST['send_quote_update'])) {
             'sender' => 'owner',
             'message' => $owner_message,
             'approval_status' => $approval_status,
-            'quoted_price' => (float) $quote_amount,
+            'quoted_price' => (float) $resolved_quote_amount,
             'timestamp' => date('c'),
         ];
 
         $existing_quote_details['owner_quote_update'] = $owner_quote_update;
         $existing_quote_details['owner_quote_conversation'] = array_slice($conversation_log, -8);
+        $existing_quote_details['system_suggested_price'] = $system_suggested_total;
+        $existing_quote_details['estimated_total'] = $system_suggested_total;
+        $existing_quote_details['auto_pricing'] = [
+            'label' => 'System Suggested Price',
+            'pricing' => $suggested['pricing'],
+            'source' => $suggested['source'],
+            'manual_override' => ($quote_amount !== false && (float) $quote_amount > 0),
+        ];
 
         $update_stmt = $pdo->prepare("UPDATE orders SET price = ?, quote_details = ?, updated_at = NOW() WHERE id = ? AND shop_id = ?");
         $update_stmt->execute([
-            (float) $quote_amount,
+            (float) $resolved_quote_amount,
             json_encode($existing_quote_details),
             $order_id,
             $shop_id,
         ]);
 
         $invoice_status = determine_invoice_status($order['status'], $order['payment_status'] ?? 'unpaid');
-        ensure_order_invoice($pdo, $order_id, $order['order_number'], (float) $quote_amount, $invoice_status);
+        ensure_order_invoice($pdo, $order_id, $order['order_number'], (float) $resolved_quote_amount, $invoice_status);
 
         $status_labels = [
             'pending' => 'Pending review',
@@ -121,7 +176,7 @@ if(isset($_POST['send_quote_update'])) {
                 'Quote update for order #%s: %s | Quote: ₱%s | Downpayment: %s%% | Timeline: %s day(s). Message: %s',
                 $order['order_number'],
                 $status_label,
-                number_format((float) $quote_amount, 2),
+                number_format((float) $resolved_quote_amount, 2),
                 number_format((float) $downpayment_percent, 2),
                 (int) $timeline_days,
                 $owner_message
@@ -130,6 +185,7 @@ if(isset($_POST['send_quote_update'])) {
 
         header('Location: quotation_requests.php?status=' . urlencode($status_filter) . '&quote_status=' . urlencode($quote_filter) . '&quote_updated=1');
         exit();
+        }
     }
 }
 
@@ -151,10 +207,12 @@ if($status_filter !== 'all') {
 
 $requests_sql = "
     SELECT o.id, o.order_number, o.service_type, o.design_description, o.design_file, o.status,
-           o.price, o.quote_details, o.created_at, o.updated_at, o.design_approved,
+           o.price, o.quote_details, o.created_at, o.updated_at, o.design_approved, o.quantity, o.width_px, o.height_px,
+           dd.stitch_count AS digitized_stitch_count, dd.thread_colors AS digitized_thread_colors,
            c.fullname AS client_name
     FROM orders o
     JOIN users c ON c.id = o.client_id
+    LEFT JOIN digitized_designs dd ON dd.id = (SELECT id FROM digitized_designs WHERE order_id = o.id ORDER BY id DESC LIMIT 1)
     WHERE " . implode(' AND ', $where_clauses) . "
     ORDER BY o.updated_at DESC, o.created_at DESC
 ";
@@ -226,13 +284,7 @@ $summary = [
 ];
 
 foreach($raw_requests as $row) {
-    $details = [];
-    if(!empty($row['quote_details'])) {
-        $decoded = json_decode($row['quote_details'], true);
-        if(is_array($decoded)) {
-            $details = $decoded;
-        }
-    }
+    $details = decode_order_quote_details($row['quote_details'] ?? null);
 
     $client_quote_status = $details['price_quote_status'] ?? 'waiting_owner';
     if($client_quote_status === '' || $client_quote_status === null) {
@@ -250,6 +302,16 @@ foreach($raw_requests as $row) {
     if($quote_filter !== 'all' && $effective_quote_status !== $quote_filter) {
         continue;
     }
+
+    $suggested = build_system_suggested_price(
+        $row,
+        [
+            'stitch_count' => (int) ($row['digitized_stitch_count'] ?? 0),
+            'thread_colors' => (int) ($row['digitized_thread_colors'] ?? 0),
+        ]
+    );
+    $row['system_suggested_pricing'] = $suggested['pricing'];
+    $row['system_suggested_source'] = $suggested['source'];
 
     $row['owner_request_status'] = $owner_request_status;
     $row['client_quote_status'] = $client_quote_status;
@@ -493,20 +555,25 @@ $quote_status_labels = [
                                             <form method="POST">
                                                 <?php echo csrf_field(); ?>
                                                 <input type="hidden" name="order_id" value="<?php echo (int) $request['id']; ?>">
+                                                <?php $system_pricing = $request['system_suggested_pricing'] ?? []; ?>
+                                                <div class="request-meta" style="margin-bottom: 0.5rem;">
+                                                    <strong>System Suggested Price:</strong> ₱<?php echo number_format((float) ($system_pricing['total_price'] ?? 0), 2); ?>
+                                                    <br><span>Estimated Price based on stitches (<?php echo number_format((int) ($system_pricing['stitch_count'] ?? 0)); ?>), thread colors (<?php echo (int) ($system_pricing['thread_colors'] ?? 0); ?>), quantity (<?php echo (int) ($system_pricing['quantity'] ?? 1); ?>), and item adjustment.</span>
+                                                </div>
                                                 <div class="quote-grid">
                                                     <select name="approval_status" class="form-control" required>
                                                         <option value="pending" <?php echo $owner_quote_status === 'pending' ? 'selected' : ''; ?>>Pending review</option>
                                                         <option value="approved_for_production" <?php echo $owner_quote_status === 'approved_for_production' ? 'selected' : ''; ?>>Approved for production</option>
                                                         <option value="needs_revision" <?php echo $owner_quote_status === 'needs_revision' ? 'selected' : ''; ?>>Needs revision</option>
                                                     </select>
-                                                    <input type="number" name="quote_amount" class="form-control" min="0.01" step="0.01" placeholder="Quote (₱)" value="<?php echo htmlspecialchars((string) ($owner_quote['quoted_price'] ?? ($request['price'] ?? ''))); ?>" required>
+                                                    <input type="number" name="quote_amount" class="form-control" min="0" step="0.01" placeholder="Manual override quote (optional)" value="<?php echo htmlspecialchars((string) ($owner_quote['quoted_price'] ?? '')); ?>">
                                                     <input type="number" name="downpayment_percent" class="form-control" min="0" max="100" step="0.01" placeholder="Downpayment %" value="<?php echo htmlspecialchars((string) ($owner_quote['downpayment_percent'] ?? '50')); ?>" required>
                                                     <input type="number" name="timeline_days" class="form-control" min="1" step="1" placeholder="Timeline days" value="<?php echo htmlspecialchars((string) ($owner_quote['timeline_days'] ?? '7')); ?>" required>
                                                 </div>
                                                 <input type="text" name="scope_summary" class="form-control mt-2" maxlength="180" placeholder="Scope summary (e.g., 2 logo placements, 3 thread colors)" value="<?php echo htmlspecialchars((string) ($owner_quote['scope_summary'] ?? '')); ?>">
                                                 <textarea name="owner_message" class="form-control mt-2" rows="2" maxlength="500" placeholder="Owner message to client (approval notes / quotation terms)" required><?php echo htmlspecialchars((string) ($owner_quote['owner_message'] ?? '')); ?></textarea>
                                                 <button type="submit" name="send_quote_update" class="btn btn-sm btn-primary mt-2">
-                                                    <i class="fas fa-paper-plane"></i> Send Format
+                                                    <i class="fas fa-paper-plane"></i> Send Quote (Auto by default)
                                                 </button>
                                             </form>
                                         </div>
