@@ -68,4 +68,23 @@ function create_notification_once_for_order(PDO $pdo, int $user_id, int $order_i
 
     create_notification($pdo, $user_id, $order_id, $type, $message);
 }
+
+function has_recent_notification_by_type_and_message(PDO $pdo, int $user_id, string $type, string $message, int $lookbackHours = 24): bool {
+    $type = normalize_notification_type($type);
+    $lookbackHours = max(1, $lookbackHours);
+
+    $stmt = $pdo->prepare(" 
+        SELECT 1
+        FROM notifications
+        WHERE user_id = ?
+          AND order_id IS NULL
+          AND type = ?
+          AND message = ?
+          AND created_at >= DATE_SUB(NOW(), INTERVAL ? HOUR)
+        LIMIT 1
+    ");
+    $stmt->execute([$user_id, $type, $message, $lookbackHours]);
+
+    return (bool) $stmt->fetchColumn();
+}
 ?>

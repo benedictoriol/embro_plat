@@ -121,6 +121,8 @@ $materials_stmt = $pdo->prepare("SELECT * FROM raw_materials WHERE shop_id = ? O
 $materials_stmt->execute([$shop_id]);
 $materials = $materials_stmt->fetchAll();
 
+$restock_automation = create_low_stock_supplier_drafts($pdo, $owner_id, $shop_id);
+
 $inventory_value = 0.0;
 $reorder_value = 0.0;
 $low_stock_materials = [];

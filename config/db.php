@@ -28,6 +28,7 @@ require_once __DIR__ . '/order_helpers.php';
 require_once __DIR__ . '/payment_helpers.php';
 require_once __DIR__ . '/design_helpers.php';
 require_once __DIR__ . '/queue_helpers.php';
+require_once __DIR__ . '/inventory_helpers.php';
 
 enforce_csrf_protection();
 
@@ -150,6 +151,7 @@ ensure_shop_staff_position_column($pdo);
 ensure_digitized_designs_table($pdo);
 ensure_production_queue_table($pdo);
 ensure_payments_payment_method_column($pdo);
+ensure_supplier_orders_table($pdo);
 function log_audit(PDO $pdo, ?int $actorId, ?string $actorRole, string $action, string $entityType, ?int $entityId, array $oldValues = [], array $newValues = []): void {
     $stmt = $pdo->prepare("
         INSERT INTO audit_logs (actor_id, actor_role, action, entity_type, entity_id, old_values, new_values, ip_address, user_agent)
