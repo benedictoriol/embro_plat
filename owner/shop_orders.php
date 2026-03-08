@@ -1,7 +1,6 @@
 <?php
 session_start();
 require_once '../config/db.php';
-require_once '../config/assignment_helpers.php';
 require_role('owner');
 
 $owner_id = $_SESSION['user']['id'];
@@ -17,31 +16,6 @@ if(!$shop) {
 $shop_id = $shop['id'];
 $allowed_filters = ['pending', 'accepted', 'in_progress', 'completed', 'return', 'cancelled'];
 $filter = isset($_GET['filter']) ? $_GET['filter'] : 'all';
-
-$active_staff_stmt = $pdo->prepare("
-    SELECT 
-        se.user_id, 
-        u.fullname, 
-        se.position,
-        se.availability_days,
-        se.availability_start,
-        se.availability_end,
-        se.max_active_orders,
-        (
-            SELECT COUNT(*) 
-            FROM orders o 
-            WHERE o.shop_id = se.shop_id 
-              AND o.assigned_to = se.user_id 
-              AND o.status IN ('pending', 'accepted', 'in_progress')
-        ) as active_orders
-    FROM shop_staffs se
-    JOIN users u ON se.user_id = u.id
-    WHERE se.shop_id = ? AND se.status = 'active'
-     AND se.staff_role IN ('staff', 'hr')
-    ORDER BY u.fullname ASC
-");
-$active_staff_stmt->execute([$shop_id]);
-$active_staff = $active_staff_stmt->fetchAll();
 
 if(isset($_POST['set_price'])) {
     $order_id = (int) ($_POST['order_id'] ?? 0);
@@ -87,82 +61,7 @@ if(isset($_POST['set_price'])) {
     }
 }
 
-if(isset($_POST['assign_order'])) {
-    $order_id = (int) $_POST['order_id'];
-    $staff_id = (int) $_POST['staff_id'];
 
-    $order_stmt = $pdo->prepare("SELECT id, status, assigned_to, scheduled_date FROM orders WHERE id = ? AND shop_id = ?");
-    $order_stmt->execute([$order_id, $shop_id]);
-    $order = $order_stmt->fetch();
-
-    if(!$order) {
-        $error = "Order not found for this shop.";
-    } elseif(in_array($order['status'], ['completed', 'cancelled'], true)) {
-        $error = "Completed or cancelled orders cannot be reassigned.";
-    } else {
-        if($staff_id > 0) {
-            $staff_stmt = $pdo->prepare("
-                SELECT 
-                    se.user_id,
-                    se.availability_days,
-                    se.availability_start,
-                    se.availability_end,
-                    se.max_active_orders,
-                    (
-                        SELECT COUNT(*) 
-                        FROM orders o 
-                        WHERE o.shop_id = se.shop_id 
-                          AND o.assigned_to = se.user_id 
-                          AND o.status IN ('pending', 'accepted', 'in_progress')
-                    ) as active_orders 
-                FROM shop_staffs se 
-                WHERE se.shop_id = ? AND se.user_id = ? AND se.status = 'active'
-                 AND se.staff_role IN ('staff', 'hr')
-            ");
-            $staff_stmt->execute([$shop_id, $staff_id]);
-            $staff = $staff_stmt->fetch();
-
-            if($staff) {
-                $availability_days = [];
-                if(!empty($staff['availability_days'])) {
-                    $decoded_days = json_decode($staff['availability_days'], true);
-                    if(is_array($decoded_days)) {
-                        $availability_days = array_map('intval', $decoded_days);
-                    }
-                }
-
-                $schedule_date = $order['scheduled_date'] ? date('Y-m-d', strtotime($order['scheduled_date'])) : date('Y-m-d');
-                $schedule_day = (int) date('N', strtotime($schedule_date));
-                $current_time = date('H:i:s');
-
-                $max_active_orders = (int) ($staff['max_active_orders'] ?? 0);
-                $active_orders = (int) ($staff['active_orders'] ?? 0);
-                $is_same_assignee = !empty($order['assigned_to']) && (int) $order['assigned_to'] === $staff_id;
-
-                if($max_active_orders > 0 && $active_orders >= $max_active_orders && !$is_same_assignee) {
-                    $error = "This staff member is already at their active order capacity.";
-                } elseif(!empty($availability_days) && !in_array($schedule_day, $availability_days, true)) {
-                    $error = "This staff member is not available on the scheduled day.";
-                } elseif($staff['availability_start'] && $staff['availability_end']
-                    && ($current_time < $staff['availability_start'] || $current_time > $staff['availability_end'])) {
-                    $error = "This staff member is outside their availability hours right now.";
-                } else {
-                    if(assign_order_to_staff($pdo, $order_id, $staff_id, $owner_id)) {
-                        $success = "Order assignment updated.";
-                    } else {
-                        $error = "Failed to assign this order to the selected staff member.";
-                    }
-                }
-            } else {
-                $error = "Selected staff is not active for this shop.";
-            }
-        } else {
-            $assign_stmt = $pdo->prepare("UPDATE orders SET assigned_to = NULL WHERE id = ? AND shop_id = ?");
-            $assign_stmt->execute([$order_id, $shop_id]);
-            $success = "Order unassigned.";
-        }
-    }
-}
 
 $query = "
     SELECT o.*, u.fullname as client_name, au.fullname as assigned_name 
@@ -251,14 +150,6 @@ function format_quote_details(?array $quote_details): array {
         .payment-rejected { background: #fee2e2; color: #991b1b; }
         .payment-refund_pending { background: #fef9c3; color: #92400e; }
         .payment-refunded { background: #e2e8f0; color: #475569; }
-        .assignment-form {
-            display: flex;
-            gap: 8px;
-            align-items: center;
-        }
-        .assignment-form select {
-            min-width: 160px;
-        }
     
     </style>
 </head>
@@ -279,11 +170,6 @@ function format_quote_details(?array $quote_details): array {
             <div class="alert alert-success"><?php echo $success; ?></div>
         <?php endif; ?>
 
-        <?php if(empty($active_staff)): ?>
-            <div class="alert alert-warning">
-                No active staff available. Add or reactivate staffs to assign orders.
-            </div>
-        <?php endif; ?>
 
         <div class="filter-tabs">
             <a href="shop_orders.php" class="<?php echo $filter === 'all' ? 'active' : ''; ?>">All</a>
@@ -370,33 +256,7 @@ function format_quote_details(?array $quote_details): array {
                                     <a href="view_order.php?id=<?php echo $order['id']; ?>" class="btn btn-sm btn-outline-primary mb-2">
                                         View
                                     </a>
-                                    <?php if(!in_array($order['status'], ['completed', 'cancelled'], true)): ?>
-                                        <form method="POST" class="assignment-form">
-                                            <?php echo csrf_field(); ?>
-                                            <input type="hidden" name="order_id" value="<?php echo $order['id']; ?>">
-                                            <select name="staff_id" class="form-control" <?php echo empty($active_staff) ? 'disabled' : ''; ?>>
-                                                <option value="">Unassigned</option>
-                                                <?php foreach($active_staff as $staff): ?>
-                                                    <?php
-                                                        $max_capacity = (int) ($staff['max_active_orders'] ?? 0);
-                                                        $active_orders = (int) ($staff['active_orders'] ?? 0);
-                                                        $at_capacity = $max_capacity > 0 && $active_orders >= $max_capacity;
-                                                        $capacity_label = $max_capacity > 0 ? ' (' . $active_orders . '/' . $max_capacity . ' active)' : '';
-                                                    ?>
-                                                    <option value="<?php echo $staff['user_id']; ?>"
-                                                        <?php echo ($order['assigned_to'] == $staff['user_id']) ? 'selected' : ''; ?>
-                                                        <?php echo $at_capacity && $order['assigned_to'] != $staff['user_id'] ? 'disabled' : ''; ?>>
-                                                        <?php echo htmlspecialchars($staff['fullname']) . $capacity_label; ?>
-                                                    </option>
-                                                <?php endforeach; ?>
-                                            </select>
-                                            <button type="submit" name="assign_order" class="btn btn-sm btn-outline-primary" <?php echo empty($active_staff) ? 'disabled' : ''; ?>>
-                                                Save
-                                            </button>
-                                        </form>
-                                    <?php else: ?>
-                                        <span class="text-muted">Assignment locked</span>
-                                    <?php endif; ?>
+                                    
                                 </td>
                             </tr>
                         <?php endforeach; ?>

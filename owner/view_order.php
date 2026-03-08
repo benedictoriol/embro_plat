@@ -117,6 +117,41 @@ foreach($active_staff as $staff_member) {
     $active_staff_map[(int) $staff_member['user_id']] = $staff_member;
 }
 
+$assignable_candidates = get_assignable_staff_for_order($pdo, $order_id);
+$system_suggested_assignee = $assignable_candidates[0] ?? null;
+
+if(isset($_POST['assign_order'])) {
+    $assign_order_id = (int) ($_POST['order_id'] ?? 0);
+    $staff_id = (int) ($_POST['staff_id'] ?? 0);
+
+    if($assign_order_id !== $order_id) {
+        $error = 'Unable to update a different order from this page.';
+    } elseif(in_array($order['status'], ['completed', 'cancelled'], true)) {
+        $error = 'Completed or cancelled orders cannot be reassigned.';
+    } elseif($staff_id > 0) {
+        if(assign_order_to_staff($pdo, $order_id, $staff_id, $owner_id)) {
+            $assigned_staff_stmt = $pdo->prepare("SELECT fullname FROM users WHERE id = ? LIMIT 1");
+            $assigned_staff_stmt->execute([$staff_id]);
+            $assigned_staff = $assigned_staff_stmt->fetch();
+
+            $order['assigned_to'] = $staff_id;
+            $order['assigned_name'] = $assigned_staff['fullname'] ?? null;
+            $success = 'Order assignment updated.';
+        } else {
+            $error = 'Failed to assign this order to the selected staff member.';
+        }
+    } else {
+        $assign_stmt = $pdo->prepare("UPDATE orders SET assigned_to = NULL, updated_at = NOW() WHERE id = ? AND shop_id = ?");
+        $assign_stmt->execute([$order_id, $shop['id']]);
+        $order['assigned_to'] = null;
+        $order['assigned_name'] = null;
+        $success = 'Order unassigned.';
+    }
+
+    $assignable_candidates = get_assignable_staff_for_order($pdo, $order_id);
+    $system_suggested_assignee = $assignable_candidates[0] ?? null;
+}
+
 
 if(isset($_POST['schedule_job'])) {
     $schedule_order_id = (int) ($_POST['order_id'] ?? 0);
@@ -452,6 +487,18 @@ $payment_hold = payment_hold_status($order['status'] ?? STATUS_PENDING, $payment
         .notice-success { background: #dcfce7; color: #166534; }
         .notice-error { background: #fee2e2; color: #991b1b; }
         .notice-warning { background: #fef9c3; color: #92400e; }
+        .assignment-box {
+            background: #f8fafc;
+            border: 1px solid #e2e8f0;
+            border-radius: 12px;
+            padding: 16px;
+            margin-bottom: 20px;
+        }
+        .assignment-form {
+            display: grid;
+            gap: 10px;
+            max-width: 420px;
+        }
     </style>
 </head>
 <body>
@@ -478,6 +525,46 @@ $payment_hold = payment_hold_status($order['status'] ?? STATUS_PENDING, $payment
                 <i class="fas fa-arrow-left"></i> Back to Orders
             </a>
             <?php if($order['status'] === 'pending'): ?>
+            <?php endif; ?>
+        </div>
+
+        <div class="assignment-box">
+            <h3 class="mb-2">Assignment</h3>
+            <p class="mb-1">
+                <strong>Current Assignee:</strong>
+                <?php if($order['assigned_name']): ?>
+                    <?php echo htmlspecialchars($order['assigned_name']); ?>
+                <?php else: ?>
+                    <span class="text-muted">Unassigned</span>
+                <?php endif; ?>
+            </p>
+            <p class="mb-3">
+                <strong>System Suggested Assignee:</strong>
+                <?php if($system_suggested_assignee): ?>
+                    <?php echo htmlspecialchars($system_suggested_assignee['fullname']); ?>
+                    <span class="text-muted">(<?php echo htmlspecialchars($system_suggested_assignee['position'] ?? 'staff'); ?>, <?php echo (int) ($system_suggested_assignee['active_workload'] ?? 0); ?> active jobs)</span>
+                <?php else: ?>
+                    <span class="text-muted">No recommendation available right now.</span>
+                <?php endif; ?>
+            </p>
+
+            <?php if(!in_array($order['status'], ['completed', 'cancelled'], true)): ?>
+                <form method="POST" class="assignment-form">
+                    <?php echo csrf_field(); ?>
+                    <input type="hidden" name="order_id" value="<?php echo (int) $order['id']; ?>">
+                    <label for="staff_id"><strong>Manual override / reassign</strong></label>
+                    <select id="staff_id" name="staff_id" class="form-control">
+                        <option value="0">Unassigned</option>
+                        <?php foreach($active_staff as $staff_member): ?>
+                            <option value="<?php echo (int) $staff_member['user_id']; ?>" <?php echo ((int) ($order['assigned_to'] ?? 0) === (int) $staff_member['user_id']) ? 'selected' : ''; ?>>
+                                <?php echo htmlspecialchars($staff_member['fullname']); ?>
+                            </option>
+                        <?php endforeach; ?>
+                    </select>
+                    <button type="submit" name="assign_order" class="btn btn-primary">Save Assignment</button>
+                </form>
+            <?php else: ?>
+                <p class="text-muted mb-0">Assignment is locked for completed or cancelled orders.</p>
             <?php endif; ?>
         </div>
 
