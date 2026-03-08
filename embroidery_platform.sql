@@ -157,6 +157,37 @@ CREATE TABLE `design_approvals` (
 
 -- --------------------------------------------------------
 
+
+-- --------------------------------------------------------
+
+--
+-- Table structure for table `digitized_designs`
+--
+
+CREATE TABLE IF NOT EXISTS `digitized_designs` (
+  `id` int(11) NOT NULL AUTO_INCREMENT,
+  `order_id` int(11) NOT NULL,
+  `digitizer_id` int(11) NOT NULL,
+  `stitch_file_path` varchar(255) DEFAULT NULL,
+  `stitch_count` int(11) DEFAULT NULL,
+  `thread_colors` int(11) DEFAULT NULL,
+  `estimated_thread_length` decimal(12,2) DEFAULT NULL,
+  `width_px` int(11) DEFAULT NULL,
+  `height_px` int(11) DEFAULT NULL,
+  `detected_width_mm` decimal(10,2) DEFAULT NULL,
+  `detected_height_mm` decimal(10,2) DEFAULT NULL,
+  `suggested_width_mm` decimal(10,2) DEFAULT NULL,
+  `suggested_height_mm` decimal(10,2) DEFAULT NULL,
+  `scale_ratio` decimal(10,4) DEFAULT NULL,
+  `created_at` timestamp NOT NULL DEFAULT current_timestamp(),
+  `approved_at` timestamp NULL DEFAULT NULL,
+  PRIMARY KEY (`id`),
+  KEY `idx_digitized_order_id` (`order_id`),
+  KEY `idx_digitized_digitizer_id` (`digitizer_id`),
+  CONSTRAINT `fk_digitized_designs_order` FOREIGN KEY (`order_id`) REFERENCES `orders` (`id`),
+  CONSTRAINT `fk_digitized_designs_digitizer` FOREIGN KEY (`digitizer_id`) REFERENCES `users` (`id`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
+
 --
 -- Table structure for table `design_projects`
 --
@@ -371,7 +402,7 @@ CREATE TABLE `orders` (
   `price` decimal(10,2) DEFAULT NULL,
   `client_notes` text DEFAULT NULL,
   `quote_details` longtext CHARACTER SET utf8mb4 COLLATE utf8mb4_bin DEFAULT NULL CHECK (json_valid(`quote_details`)),
-  `status` enum('pending','accepted','in_progress','completed','cancelled') DEFAULT 'pending',
+  `status` enum('pending','accepted','digitizing','in_progress','completed','cancelled') DEFAULT 'pending',
   `assigned_to` int(11) DEFAULT NULL,
   `progress` int(11) DEFAULT 0,
   `scheduled_date` date DEFAULT NULL,
@@ -465,7 +496,7 @@ CREATE TABLE `order_status_history` (
   `id` int(11) NOT NULL,
   `order_id` int(11) NOT NULL,
   `staff_id` int(11) DEFAULT NULL,
-  `status` enum('pending','accepted','in_progress','completed','cancelled') NOT NULL,
+  `status` enum('pending','accepted','digitizing','in_progress','completed','cancelled') NOT NULL,
   `progress` int(11) DEFAULT 0,
   `notes` text DEFAULT NULL,
   `created_at` timestamp NOT NULL DEFAULT current_timestamp()

@@ -48,7 +48,7 @@ $jobs_stmt = $pdo->prepare("
     JOIN shops s ON o.shop_id = s.id 
     LEFT JOIN job_schedule js ON js.order_id = o.id AND js.staff_id = ?
     WHERE (o.assigned_to = ? OR js.staff_id = ?)
-     AND o.status IN ('accepted', 'in_progress', 'completed')
+    AND o.status IN ('accepted', 'digitizing', 'in_progress', 'completed')
     ORDER BY schedule_date ASC, js.scheduled_time ASC
 ");
 $jobs_stmt->execute([$staff_id, $staff_id, $staff_id]);
@@ -62,6 +62,11 @@ $selected_order_id = (int) ($_GET['order_id'] ?? $_POST['order_id'] ?? 0);
 $selected_job = $selected_order_id > 0 ? ($jobs_by_id[$selected_order_id] ?? null) : null;
 
 $stage_options = [
+    'digitizing_started' => [
+        'label' => 'Digitizing Started',
+        'status' => STATUS_DIGITIZING,
+        'progress' => 40,
+    ],
     'materials_ready' => [
         'label' => 'Materials Ready',
         'status' => STATUS_IN_PROGRESS,
@@ -350,11 +355,11 @@ if(isset($_POST['update_status'])) {
         $photo_count = (int) $photo_check_stmt->fetchColumn();
 
         $order_info = fetch_order_info($pdo, $staff_id, $order_id);
-        $allowed_statuses = [STATUS_IN_PROGRESS, STATUS_COMPLETED];
+        $allowed_statuses = [STATUS_DIGITIZING, STATUS_IN_PROGRESS, STATUS_COMPLETED];
 
     if(!isset($error) && !$order_info) {
             $error = "Unable to update this order.";
-        } elseif(!isset($error) && $photo_count === 0) {
+        } elseif(!isset($error) && $photo_count === 0 && $selected_stage !== 'digitizing_started') {
             $error = "Please upload a progress photo before updating the status.";
         }
 
@@ -370,6 +375,12 @@ if(isset($_POST['update_status'])) {
 
             if(!isset($error)) {
             $stage_meta = [
+                'digitizing_started' => [
+                    'history' => 'Digitizing stage started.',
+                    'client_message' => sprintf('Order #%s entered digitizing for stitch-file preparation.', $order_info['order_number']),
+                    'owner_message' => sprintf('Order #%s is now in digitizing stage.', $order_info['order_number']),
+                    'notification_type' => 'order_status',
+                ],
                 'materials_ready' => [
                     'history' => 'Materials ready.',
                     'client_message' => sprintf('Materials are ready for order #%s.', $order_info['order_number']),
@@ -810,17 +821,17 @@ if(isset($_POST['update_status'])) {
                                     <option value="<?php echo htmlspecialchars($stage_key); ?>"><?php echo htmlspecialchars($stage['label']); ?></option>
                                 <?php endforeach; ?>
                             </select>
-                            <small class="text-muted">Choose: materials ready, in the process of making, order complete, or ready to pickup.</small>
+                            <small class="text-muted">Choose: digitizing started, materials ready, in the process of making, order complete, or ready to pickup.</small>
                         </div>
                         <div class="form-group">
                            <label>Add Notes (Optional)</label>
                             <textarea name="staff_notes" class="form-control" rows="3" placeholder="Add any notes about this update..."></textarea>
                         </div>
                          <?php if(!$has_photo): ?>
-                            <div class="alert alert-warning">Please upload a progress photo before updating this job.</div>
+                            <div class="alert alert-warning">Please upload a progress photo before most production updates. Digitizing start can be logged without a photo.</div>
                         <?php endif; ?>
                         <div class="text-right">
-                            <button type="submit" name="update_status" class="btn btn-primary" <?php echo $has_photo ? '' : 'disabled'; ?>>
+                            <button type="submit" name="update_status" class="btn btn-primary">
                                 <i class="fas fa-save"></i> Update Status
                             </button>
                         </div>

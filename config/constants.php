@@ -19,6 +19,7 @@ define('SESSION_TIMEOUT_SECONDS', 30 * 60);
 define('STATUS_PENDING', 'pending');
 define('STATUS_ACCEPTED', 'accepted');
 define('STATUS_REJECTED', 'rejected');
+define('STATUS_DIGITIZING', 'digitizing');
 define('STATUS_IN_PROGRESS', 'in_progress');
 define('STATUS_COMPLETED', 'completed');
 define('STATUS_CANCELLED', 'cancelled');

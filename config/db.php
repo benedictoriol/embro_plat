@@ -93,6 +93,34 @@ function ensure_orders_image_dimension_columns(PDO $pdo): void {
 }
 
 
+
+function ensure_digitized_designs_table(PDO $pdo): void {
+    $pdo->exec("
+        CREATE TABLE IF NOT EXISTS digitized_designs (
+            id INT(11) NOT NULL AUTO_INCREMENT PRIMARY KEY,
+            order_id INT(11) NOT NULL,
+            digitizer_id INT(11) NOT NULL,
+            stitch_file_path VARCHAR(255) DEFAULT NULL,
+            stitch_count INT(11) DEFAULT NULL,
+            thread_colors INT(11) DEFAULT NULL,
+            estimated_thread_length DECIMAL(12,2) DEFAULT NULL,
+            width_px INT(11) DEFAULT NULL,
+            height_px INT(11) DEFAULT NULL,
+            detected_width_mm DECIMAL(10,2) DEFAULT NULL,
+            detected_height_mm DECIMAL(10,2) DEFAULT NULL,
+            suggested_width_mm DECIMAL(10,2) DEFAULT NULL,
+            suggested_height_mm DECIMAL(10,2) DEFAULT NULL,
+            scale_ratio DECIMAL(10,4) DEFAULT NULL,
+            created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+            approved_at TIMESTAMP NULL DEFAULT NULL,
+            KEY idx_digitized_order_id (order_id),
+            KEY idx_digitized_digitizer_id (digitizer_id),
+            CONSTRAINT fk_digitized_designs_order FOREIGN KEY (order_id) REFERENCES orders(id),
+            CONSTRAINT fk_digitized_designs_digitizer FOREIGN KEY (digitizer_id) REFERENCES users(id)
+        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci
+    ");
+}
+
 function ensure_orders_cap_measurement_columns(PDO $pdo): void {
     if (!table_exists($pdo, 'orders')) {
         return;
@@ -118,6 +146,7 @@ ensure_orders_price_column($pdo);
 ensure_orders_image_dimension_columns($pdo);
 ensure_orders_cap_measurement_columns($pdo);
 ensure_shop_staff_position_column($pdo);
+ensure_digitized_designs_table($pdo);
 ensure_payments_payment_method_column($pdo);
 function log_audit(PDO $pdo, ?int $actorId, ?string $actorRole, string $action, string $entityType, ?int $entityId, array $oldValues = [], array $newValues = []): void {
     $stmt = $pdo->prepare("

@@ -4,8 +4,8 @@ require_once __DIR__ . '/constants.php';
 function order_workflow_status_transitions(): array {
     return [
         STATUS_PENDING => [STATUS_ACCEPTED, STATUS_CANCELLED],
-        STATUS_ACCEPTED => [STATUS_IN_PROGRESS, STATUS_CANCELLED],
-        STATUS_IN_PROGRESS => [STATUS_COMPLETED, STATUS_CANCELLED],
+        STATUS_ACCEPTED => [STATUS_DIGITIZING, STATUS_IN_PROGRESS, STATUS_CANCELLED],
+        STATUS_DIGITIZING => [STATUS_IN_PROGRESS, STATUS_CANCELLED],
         STATUS_COMPLETED => [],
         STATUS_CANCELLED => [],
     ];
@@ -47,6 +47,7 @@ function order_workflow_display_progress(string $order_status, int $current_prog
         STATUS_COMPLETED => 90,
         STATUS_IN_PROGRESS => max($safe_progress, 65),
         STATUS_ACCEPTED => max($safe_progress, 25),
+        STATUS_DIGITIZING => max($safe_progress, 40),
         STATUS_PENDING => max($safe_progress, 10),
         STATUS_CANCELLED => $safe_progress,
         default => $safe_progress,
@@ -81,6 +82,7 @@ function order_workflow_current_stage_label(string $order_status, ?string $fulfi
         STATUS_PENDING => 'Order placed',
         STATUS_ACCEPTED => 'Order accepted',
         STATUS_IN_PROGRESS => 'In production',
+        STATUS_DIGITIZING => 'Digitizing design',
         STATUS_COMPLETED => 'Completed',
         STATUS_CANCELLED => 'Cancelled',
         default => ucfirst(str_replace('_', ' ', $normalized_status)),
@@ -125,6 +127,16 @@ function order_workflow_is_design_approved(PDO $pdo, int $order_id): bool {
     return (int) $approval['design_approved'] === 1 || ($approval['status'] ?? '') === 'approved';
 }
 
+
+function order_workflow_requires_digitizing(array $order): bool {
+    $service_type = strtolower(trim((string) ($order['service_type'] ?? '')));
+    if($service_type === '') {
+        return false;
+    }
+
+    return str_contains($service_type, 'embroider');
+}
+
 function order_workflow_validate_order_status(PDO $pdo, array $order, string $next_status): array {
     $current_status = $order['status'] ?? '';
     if($current_status === '') {
@@ -141,6 +153,14 @@ function order_workflow_validate_order_status(PDO $pdo, array $order, string $ne
         && !order_workflow_is_design_approved($pdo, (int) $order['id'])
     ) {
         return [false, 'Design proof approval is required before production can begin.'];
+    }
+    
+    if(
+        $next_status === STATUS_IN_PROGRESS
+        && $current_status === STATUS_ACCEPTED
+        && order_workflow_requires_digitizing($order)
+    ) {
+        return [false, 'Digitizing stage must be completed before production begins.'];
     }
 
     return [true, null];

@@ -16,7 +16,7 @@ function get_order_progress_for_status(string $status, ?string $fulfillment_stat
     return match($normalized_status) {
         STATUS_PENDING => 10,
         STATUS_ACCEPTED => 25,
-        'digitizing' => 40,
+        STATUS_DIGITIZING => 40,
         STATUS_IN_PROGRESS => 65,
         STATUS_COMPLETED => 90,
         default => 0,
