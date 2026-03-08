@@ -2,6 +2,7 @@
 session_start();
 require_once '../config/db.php';
 require_once '../config/constants.php';
+require_once '../config/design_helpers.php';
 require_once '../includes/media_manager.php';
 require_role('client');
 
@@ -146,6 +147,58 @@ function calculate_average_base_price(array $pricing_settings): float {
     }
 
     return array_sum($values) / count($values);
+}
+
+function resolve_dimension_override(?string $value): ?float {
+    if (!is_string($value)) {
+        return null;
+    }
+
+    $trimmed = trim($value);
+    if ($trimmed === '') {
+        return null;
+    }
+
+    if (!is_numeric($trimmed)) {
+        return null;
+    }
+
+    $numeric = (float) $trimmed;
+    return $numeric > 0 ? round($numeric, 2) : null;
+}
+
+
+function parse_dimension_pair_to_mm(?string $raw): ?array {
+    if (!is_string($raw)) {
+        return null;
+    }
+
+    $clean = strtolower(trim($raw));
+    if ($clean === '') {
+        return null;
+    }
+
+    if (!preg_match('/([0-9]+(?:\.[0-9]+)?)\s*[x×]\s*([0-9]+(?:\.[0-9]+)?)/', $clean, $matches)) {
+        return null;
+    }
+
+    $width = (float) $matches[1];
+    $height = (float) $matches[2];
+    if ($width <= 0 || $height <= 0) {
+        return null;
+    }
+
+    $factor = 1.0;
+    if (str_contains($clean, 'cm')) {
+        $factor = 10.0;
+    } elseif (preg_match('/\bin(ch|ches)?\b/', $clean) === 1) {
+        $factor = 25.4;
+    }
+
+    return [
+        'width_mm' => round($width * $factor, 2),
+        'height_mm' => round($height * $factor, 2),
+    ];
 }
 
 // Get available shops
@@ -367,6 +420,10 @@ if(isset($_POST['place_order'])) {
     $sample_canvas_type = sanitize($_POST['sample_canvas_type'] ?? '');
     $sample_embroidery_detail = sanitize($_POST['sample_embroidery_detail'] ?? '');
     $sample_size_selection = sanitize($_POST['sample_size_selection'] ?? '');
+    $computed_width_mm = resolve_dimension_override($_POST['computed_width_mm'] ?? null);
+    $computed_height_mm = resolve_dimension_override($_POST['computed_height_mm'] ?? null);
+    $override_width_mm = resolve_dimension_override($_POST['override_width_mm'] ?? null);
+    $override_height_mm = resolve_dimension_override($_POST['override_height_mm'] ?? null);
     $rush_requested = ($_POST['rush_service'] ?? '') === '1';
     
     // Generate order number
@@ -460,6 +517,63 @@ if(isset($_POST['place_order'])) {
         }
 
 
+        $resolved_dimension_source = 'computed';
+        $resolved_width_mm = $computed_width_mm;
+        $resolved_height_mm = $computed_height_mm;
+
+        if (($override_width_mm !== null && $override_height_mm === null) || ($override_width_mm === null && $override_height_mm !== null)) {
+            throw new RuntimeException('Please provide both override width and override height, or leave both blank.');
+        }
+
+        if ($override_width_mm !== null && $override_height_mm !== null) {
+            $resolved_width_mm = $override_width_mm;
+            $resolved_height_mm = $override_height_mm;
+            $resolved_dimension_source = 'override';
+        }
+
+        if ($resolved_width_mm === null || $resolved_height_mm === null) {
+            $fallbackSizeText = '';
+            if ($service_type === 'T-shirt Embroidery') {
+                $fallbackSizeText = $tshirt_fields['embroidery_size'];
+            } elseif ($service_type === 'Logo Embroidery') {
+                $fallbackSizeText = $logo_fields['logo_size_cm'];
+            } elseif ($service_type === 'Cap Embroidery') {
+                $fallbackSizeText = $cap_fields['cap_embroidery_size'];
+            } elseif ($service_type === 'Bag Embroidery') {
+                $fallbackSizeText = $bag_fields['bag_embroidery_size'];
+            }
+
+            $fallbackDimensions = parse_dimension_pair_to_mm($fallbackSizeText);
+            if (is_array($fallbackDimensions)) {
+                $resolved_width_mm = $resolved_width_mm ?? $fallbackDimensions['width_mm'];
+                $resolved_height_mm = $resolved_height_mm ?? $fallbackDimensions['height_mm'];
+            }
+        }
+
+        if ($service_type === 'Cap Embroidery' && $resolved_width_mm !== null && $resolved_height_mm !== null) {
+            if ($resolved_width_mm > (float) CAP_FRONT_WIDTH_MM || $resolved_height_mm > (float) CAP_FRONT_HEIGHT_MM) {
+                throw new RuntimeException('Override suggested dimensions exceed the cap embroidery area limit of ' . number_format((float) CAP_FRONT_WIDTH_MM, 0) . ' × ' . number_format((float) CAP_FRONT_HEIGHT_MM, 0) . ' mm.');
+            }
+        }
+
+        if ($resolved_width_mm !== null && $resolved_height_mm !== null) {
+            $resolvedSizeLabel = number_format($resolved_width_mm / 10, 2) . 'x' . number_format($resolved_height_mm / 10, 2) . ' cm';
+            if ($service_type === 'T-shirt Embroidery' && $tshirt_fields['embroidery_size'] === '') {
+                $tshirt_fields['embroidery_size'] = $resolvedSizeLabel;
+            }
+            if ($service_type === 'Logo Embroidery' && $logo_fields['logo_size_cm'] === '') {
+                $logo_fields['logo_size_cm'] = $resolvedSizeLabel;
+            }
+            if ($service_type === 'Cap Embroidery' && $cap_fields['cap_embroidery_size'] === '') {
+                $cap_fields['cap_embroidery_size'] = $resolvedSizeLabel;
+            }
+            if ($service_type === 'Bag Embroidery' && $bag_fields['bag_embroidery_size'] === '') {
+                $bag_fields['bag_embroidery_size'] = $resolvedSizeLabel;
+            }
+        }
+
+
+
         if ($quantity <= 0 || $quantity > 1000) {
             throw new RuntimeException('Quantity must be between 1 and 1000.');
         }
@@ -518,6 +632,15 @@ if(isset($_POST['place_order'])) {
                 'embroidery_detail' => $sample_embroidery_detail,
                 'size_selection' => $sample_size_selection,
             ] : new stdClass(),
+            'dimensions' => [
+                'computed_width_mm' => $computed_width_mm,
+                'computed_height_mm' => $computed_height_mm,
+                'override_width_mm' => $override_width_mm,
+                'override_height_mm' => $override_height_mm,
+                'resolved_width_mm' => $resolved_width_mm,
+                'resolved_height_mm' => $resolved_height_mm,
+                'source' => $resolved_dimension_source,
+            ],
         ];
         $quote_details_json = json_encode($quote_details);
         $design_file = null;
@@ -1058,6 +1181,24 @@ if(isset($_POST['place_order'])) {
             <!-- Step 4: Design Details -->
             <div class="card mb-4">
                 <h3>Step 4: Design Details</h3>
+                <div class="card" style="background: #f8fafc; border: 1px dashed #cbd5e1; margin-bottom: 1rem;">
+                    <h4 class="mb-2"><i class="fas fa-ruler-combined"></i> Suggested dimensions</h4>
+                    <p class="small text-muted mb-2">Computed dimensions are used by default and passed to quotation/order logic.</p>
+                    <div id="suggestedDimensionDisplay" class="small" style="font-weight: 600;">Suggested dimensions: waiting for service selection.</div>
+                    <input type="hidden" name="computed_width_mm" id="computedWidthMmInput" value="">
+                    <input type="hidden" name="computed_height_mm" id="computedHeightMmInput" value="">
+                    <div class="row" style="display:grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 10px; margin-top: 10px;">
+                        <div class="form-group mb-0">
+                            <label for="overrideWidthMmInput">Override suggested dimensions (optional)</label>
+                            <input type="number" step="0.01" min="0" class="form-control" name="override_width_mm" id="overrideWidthMmInput" placeholder="Width (mm)">
+                        </div>
+                        <div class="form-group mb-0">
+                            <label for="overrideHeightMmInput" class="sr-only">Override height (mm)</label>
+                            <input type="number" step="0.01" min="0" class="form-control" name="override_height_mm" id="overrideHeightMmInput" placeholder="Height (mm)">
+                        </div>
+                    </div>
+                    <small class="text-muted" id="dimensionOverrideHint">Leave override fields empty to use computed dimensions.</small>
+                </div>
                 <div id="tshirtDetailSelections" class="form-group" style="display: none;">
                     <label>T-shirt Embroidery Preferences</label>
                     <p class="text-muted small">Choose options below for a clearer specification.</p>
@@ -1089,9 +1230,9 @@ if(isset($_POST['place_order'])) {
                     <div class="selection-group">
                         <span class="selection-label">Embroidery Size</span>
                         <div class="selection-buttons" data-target-input="embroiderySizeInput">
-                            <button type="button" class="selection-btn" data-value="Small (2-3 in)">Small (5x3 cm)</button>
-                            <button type="button" class="selection-btn" data-value="Medium (4-5 in)">Medium (5x5 cm)</button>
-                            <button type="button" class="selection-btn" data-value="Large (6-8 in)">Large (8x3 cm)</button>
+                            <button type="button" class="selection-btn" data-value="5x3 cm">Small (5x3 cm)</button>
+                            <button type="button" class="selection-btn" data-value="5x5 cm">Medium (5x5 cm)</button>
+                            <button type="button" class="selection-btn" data-value="8x3 cm">Large (8x3 cm)</button>
                         </div>
                         <input type="hidden" name="embroidery_size" id="embroiderySizeInput" value="">
                     </div>
@@ -1437,6 +1578,69 @@ if(isset($_POST['place_order'])) {
             });
         }
 
+        
+        function parseDimensionTextToMm(rawText) {
+            const text = String(rawText || '').toLowerCase();
+            const match = text.match(/([0-9]+(?:\.[0-9]+)?)\s*[x×]\s*([0-9]+(?:\.[0-9]+)?)/);
+            if (!match) {
+                return null;
+            }
+            const width = Number(match[1]);
+            const height = Number(match[2]);
+            if (!(width > 0 && height > 0)) {
+                return null;
+            }
+            let factor = 1;
+            if (text.includes('cm')) {
+                factor = 10;
+            } else if (text.includes('in')) {
+                factor = 25.4;
+            }
+            return {
+                width_mm: Number((width * factor).toFixed(2)),
+                height_mm: Number((height * factor).toFixed(2)),
+            };
+        }
+
+        function resolveSuggestedDimensions(service) {
+            const map = {
+                'T-shirt Embroidery': document.getElementById('embroiderySizeInput')?.value || '5x3 cm',
+                'Logo Embroidery': document.getElementById('logoSizeCmInput')?.value || '5x5 cm',
+                'Cap Embroidery': document.getElementById('capEmbroiderySizeInput')?.value || '5x3 cm',
+                'Bag Embroidery': document.getElementById('bagEmbroiderySizeInput')?.value || '5x5 cm',
+            };
+            return parseDimensionTextToMm(map[service] || '');
+        }
+
+        function updateComputedDimensions() {
+            const service = getSelectedService();
+            const computed = resolveSuggestedDimensions(service);
+            const widthInput = document.getElementById('computedWidthMmInput');
+            const heightInput = document.getElementById('computedHeightMmInput');
+            const display = document.getElementById('suggestedDimensionDisplay');
+            const hint = document.getElementById('dimensionOverrideHint');
+            if (!widthInput || !heightInput || !display) {
+                return;
+            }
+            if (!computed) {
+                widthInput.value = '';
+                heightInput.value = '';
+                display.textContent = 'Suggested dimensions: waiting for service selection.';
+                if (hint) {
+                    hint.textContent = 'Leave override fields empty to use computed dimensions.';
+                }
+                return;
+            }
+            widthInput.value = String(computed.width_mm);
+            heightInput.value = String(computed.height_mm);
+            display.textContent = `Suggested dimensions: ${computed.width_mm.toFixed(2)} × ${computed.height_mm.toFixed(2)} mm`;
+            if (hint) {
+                hint.textContent = service === 'Cap Embroidery'
+                    ? `Cap area limit: ${Number(<?php echo (float) CAP_FRONT_WIDTH_MM; ?>).toFixed(0)} × ${Number(<?php echo (float) CAP_FRONT_HEIGHT_MM; ?>).toFixed(0)} mm. Overrides must fit this area.`
+                    : 'Leave override fields empty to use computed dimensions.';
+            }
+        }
+
         function toggleDetailSelections() {
             if (isSampleOrder) {
                 return;
@@ -1751,6 +1955,7 @@ if(isset($_POST['place_order'])) {
              // Keep custom service input for true custom requests only
             document.querySelector('input[name="custom_service"]').value = '';
             toggleDetailSelections();
+            updateComputedDimensions();
             updateQuoteEstimate();
             updateSelectionSummary();
         }
@@ -1770,6 +1975,7 @@ if(isset($_POST['place_order'])) {
                     if (targetInput) {
                         targetInput.value = button.dataset.value;
                     }
+                    updateComputedDimensions();
                 });
             });
         });
@@ -1797,9 +2003,11 @@ if(isset($_POST['place_order'])) {
             updateSampleOrderSummary();
         });
         toggleDetailSelections();
+        updateComputedDimensions();
         if (!isSampleOrder) {
             document.querySelector('input[name="custom_service"]').addEventListener('input', () => {
                 toggleDetailSelections();
+                updateComputedDimensions();
                 updateQuoteEstimate();
                 updateSelectionSummary();
             });

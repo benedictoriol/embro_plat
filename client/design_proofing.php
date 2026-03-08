@@ -147,6 +147,21 @@ function resolve_thread_color_charge(int $color_count, array $thread_color_prici
     return $charge;
 }
 
+
+function resolve_optional_mm_value($value): ?float {
+    if (!is_scalar($value)) {
+        return null;
+    }
+
+    $normalized = trim((string) $value);
+    if ($normalized === '' || !is_numeric($normalized)) {
+        return null;
+    }
+
+    $numeric = (float) $normalized;
+    return $numeric > 0 ? round($numeric, 2) : null;
+}
+
 function resolve_size_charge(float $width_in, float $height_in, array $size_pricing): float {
     if($width_in <= 0 || $height_in <= 0 || empty($size_pricing)) {
         return 0.0;
@@ -282,6 +297,10 @@ if(isset($_POST['request_quote'])) {
     $uploaded_colors = (int) ($_POST['design_color_count'] ?? 0);
     $uploaded_estimate = (float) ($_POST['estimated_design_price'] ?? 0);
     $uploaded_complexity_factor = (float) ($_POST['design_complexity_factor'] ?? 1.0);
+    $computed_width_mm = resolve_optional_mm_value($_POST['computed_width_mm'] ?? null);
+    $computed_height_mm = resolve_optional_mm_value($_POST['computed_height_mm'] ?? null);
+    $override_width_mm = resolve_optional_mm_value($_POST['override_width_mm'] ?? null);
+    $override_height_mm = resolve_optional_mm_value($_POST['override_height_mm'] ?? null);
     $detected_width_mm = null;
     $detected_height_mm = null;
     $fits_cap_area = null;
@@ -384,6 +403,37 @@ if(isset($_POST['request_quote'])) {
             }
         }
 
+        if (($override_width_mm !== null && $override_height_mm === null) || ($override_width_mm === null && $override_height_mm !== null)) {
+            $error = 'Please provide both override width and height, or leave both empty.';
+        }
+
+        if ($error === '') {
+            if ($override_width_mm !== null && $override_height_mm !== null) {
+                $detected_width_mm = $override_width_mm;
+                $detected_height_mm = $override_height_mm;
+            } elseif ($detected_width_mm === null && $computed_width_mm !== null && $computed_height_mm !== null) {
+                $detected_width_mm = $computed_width_mm;
+                $detected_height_mm = $computed_height_mm;
+            }
+
+            if (is_cap_service_type($service_type) && $detected_width_mm !== null && $detected_height_mm !== null) {
+                $capFit = compute_cap_fit($detected_width_mm, $detected_height_mm);
+                $fits_cap_area = $capFit['fits_cap_area'] ? 1 : 0;
+                $suggested_width_mm = $capFit['suggested_width_mm'];
+                $suggested_height_mm = $capFit['suggested_height_mm'];
+                $scale_ratio = $capFit['scale_ratio'];
+                if (!$capFit['fits_cap_area']) {
+                    $error = 'Override suggested dimensions must fit the cap area limit of ' . number_format((float) CAP_FRONT_WIDTH_MM, 0) . ' × ' . number_format((float) CAP_FRONT_HEIGHT_MM, 0) . ' mm.';
+                }
+            }
+        }
+
+        if($error !== '') {
+            if ($uploaded_design_file) {
+                cleanup_media($pdo);
+            }
+        } else {
+
         $stitch_width_mm = $detected_width_mm !== null ? (float) $detected_width_mm : px_to_mm_estimate((int) $design_estimate['width']);
         $stitch_height_mm = $detected_height_mm !== null ? (float) $detected_height_mm : px_to_mm_estimate((int) $design_estimate['height']);
         $complexity_factor = resolve_stitch_complexity_factor($design_estimate['color_count'] ?? 0, null, $uploaded_complexity_factor > 0 ? $uploaded_complexity_factor : null);
@@ -422,6 +472,15 @@ if(isset($_POST['request_quote'])) {
                     'suggested_height_mm' => $suggested_height_mm,
                     'scale_ratio' => $scale_ratio,
                 ] : null,
+                'dimensions' => [
+                    'computed_width_mm' => $computed_width_mm,
+                    'computed_height_mm' => $computed_height_mm,
+                    'override_width_mm' => $override_width_mm,
+                    'override_height_mm' => $override_height_mm,
+                    'final_width_mm' => $detected_width_mm,
+                    'final_height_mm' => $detected_height_mm,
+                    'source' => ($override_width_mm !== null && $override_height_mm !== null) ? 'override' : 'computed',
+                ],
             ],
         ];
 
@@ -480,6 +539,7 @@ if(isset($_POST['request_quote'])) {
             $success = 'Request submitted! The selected shop will prepare your design proofing and price quotation shortly.';
         }
     }
+}
 }
 
 $selected_shop_id = (int) ($_POST['shop_id'] ?? ($selected_custom_order['shop_id'] ?? 0));
@@ -1013,6 +1073,8 @@ unset($request);
                         <input type="hidden" name="design_color_count" id="designColorCountInput" value="0">
                         <input type="hidden" name="estimated_design_price" id="estimatedDesignPriceInput" value="0">
                         <input type="hidden" name="design_complexity_factor" id="designComplexityFactorInput" value="1">
+                        <input type="hidden" name="computed_width_mm" id="computedWidthMmInput" value="">
+                        <input type="hidden" name="computed_height_mm" id="computedHeightMmInput" value="">
                         <small class="text-muted">Max <?php echo $max_upload_mb; ?>MB.</small>
                         <small class="text-muted" id="detectedDimensionLabel" style="display:block; margin-top:4px;">
                             <?php if(!empty($selected_custom_order['width_px']) && !empty($selected_custom_order['height_px'])): ?>
@@ -1022,6 +1084,20 @@ unset($request);
                             <?php endif; ?>
                         </small>
                         <small class="text-muted" style="display:block; margin-top:4px;">Cap embroidery limit: <?php echo number_format((float) CAP_FRONT_WIDTH_MM, 0); ?> × <?php echo number_format((float) CAP_FRONT_HEIGHT_MM, 0); ?> mm.</small>
+                        
+                        <div class="mt-2" style="padding:10px; border:1px dashed #cbd5e1; border-radius:10px; background:#f8fafc;">
+                            <div id="computedDimensionDisplay" class="small" style="font-weight:600;">Computed dimensions: waiting for upload.</div>
+                            <div class="row mt-2" style="display:grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap:10px;">
+                                <div class="form-group mb-0">
+                                    <label for="overrideWidthMmInput">Override suggested dimensions (optional)</label>
+                                    <input type="number" step="0.01" min="0" class="form-control" name="override_width_mm" id="overrideWidthMmInput" placeholder="Width (mm)">
+                                </div>
+                                <div class="form-group mb-0">
+                                    <label for="overrideHeightMmInput" class="sr-only">Override height (mm)</label>
+                                    <input type="number" step="0.01" min="0" class="form-control" name="override_height_mm" id="overrideHeightMmInput" placeholder="Height (mm)">
+                                </div>
+                            </div>
+                        </div>
                         <div class="upload-preview" id="uploadPreview" style="display:none;"></div>
                         <small class="text-muted" id="uploadEstimateLabel" style="display:none;"></small>
                     </div>
@@ -1179,6 +1255,12 @@ unset($request);
             if (designColorCountInput) designColorCountInput.value = '0';
             if (estimatedDesignPriceInput) estimatedDesignPriceInput.value = '0';
             if (designComplexityFactorInput) designComplexityFactorInput.value = '1';
+            const computedWidthMmInput = document.getElementById('computedWidthMmInput');
+            const computedHeightMmInput = document.getElementById('computedHeightMmInput');
+            const computedDimensionDisplay = document.getElementById('computedDimensionDisplay');
+            if (computedWidthMmInput) computedWidthMmInput.value = '';
+            if (computedHeightMmInput) computedHeightMmInput.value = '';
+            if (computedDimensionDisplay) computedDimensionDisplay.textContent = 'Computed dimensions: waiting for upload.';
             if (uploadEstimateLabel) {
                 uploadEstimateLabel.style.display = 'none';
                 uploadEstimateLabel.textContent = '';
@@ -1237,6 +1319,16 @@ unset($request);
 
                     if (designWidthInput) designWidthInput.value = String(width);
                     if (designHeightInput) designHeightInput.value = String(height);
+                    const computedWidthMmInput = document.getElementById('computedWidthMmInput');
+                    const computedHeightMmInput = document.getElementById('computedHeightMmInput');
+                    const computedDimensionDisplay = document.getElementById('computedDimensionDisplay');
+                    const computedWidthMm = Number(((width / 96) * 25.4).toFixed(2));
+                    const computedHeightMm = Number(((height / 96) * 25.4).toFixed(2));
+                    if (computedWidthMmInput) computedWidthMmInput.value = String(computedWidthMm);
+                    if (computedHeightMmInput) computedHeightMmInput.value = String(computedHeightMm);
+                    if (computedDimensionDisplay) {
+                        computedDimensionDisplay.textContent = `Computed dimensions: ${computedWidthMm.toFixed(2)} × ${computedHeightMm.toFixed(2)} mm`;
+                    }
                     if (designColorCountInput) designColorCountInput.value = String(colorCount);
                     if (estimatedDesignPriceInput) estimatedDesignPriceInput.value = String(estimate);
                     if (designComplexityFactorInput) designComplexityFactorInput.value = String(Math.max(1, Math.min(2.5, 1 + (colorCount * 0.03))).toFixed(2));
