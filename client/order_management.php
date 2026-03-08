@@ -9,11 +9,25 @@ $client_id = $_SESSION['user']['id'];
 $unread_notifications = fetch_unread_notification_count($pdo, $client_id);
 $error = '';
 $success = '';
+$max_revision_count = 2;
 
-if(isset($_POST['approve_digitized_design'])) {
+$action = sanitize($_POST['action'] ?? '');
+if(isset($_POST['approve_digitized_design']) && $action === '') {
+    $action = 'approve_design';
+}
+
+if($action === 'approve_design') {
     $order_id = (int) ($_POST['order_id'] ?? 0);
 
-    $approval_stmt = $pdo->prepare("\n        SELECT o.id, o.order_number, o.design_approved, o.shop_id, da.id AS approval_id, da.status AS approval_status\n        FROM orders o\n        LEFT JOIN design_approvals da ON da.order_id = o.id\n        WHERE o.id = ? AND o.client_id = ?\n        LIMIT 1\n    ");
+    $approval_stmt = $pdo->prepare("\n        SELECT o.id, o.order_number, o.design_approved, o.shop_id, o.status AS order_status,
+               o.assigned_to, s.owner_id,
+               da.id AS approval_id, da.status AS approval_status
+        FROM orders o
+        JOIN shops s ON s.id = o.shop_id
+        LEFT JOIN design_approvals da ON da.order_id = o.id
+        WHERE o.id = ? AND o.client_id = ?
+        LIMIT 1
+    ");
     $approval_stmt->execute([$order_id, $client_id]);
     $approval = $approval_stmt->fetch();
 
@@ -26,24 +40,41 @@ if(isset($_POST['approve_digitized_design'])) {
     } else {
         $pdo->beginTransaction();
         try {
-            $approve_stmt = $pdo->prepare("UPDATE design_approvals SET status = 'approved', approved_at = NOW(), updated_at = NOW() WHERE id = ?");
-            $approve_stmt->execute([(int) $approval['approval_id']]);
-
             $order_update = $pdo->prepare("UPDATE orders SET design_approved = 1, updated_at = NOW() WHERE id = ? AND client_id = ?");
             $order_update->execute([$order_id, $client_id]);
+
+            if(!empty($approval['approval_id'])) {
+                $approve_stmt = $pdo->prepare("UPDATE design_approvals SET status = 'approved', approved_at = NOW(), updated_at = NOW() WHERE id = ?");
+                $approve_stmt->execute([(int) $approval['approval_id']]);
+            }
 
             record_order_status_history(
                 $pdo,
                 $order_id,
-                (string) ($approval['status'] ?? STATUS_ACCEPTED),
-                get_order_progress_for_status((string) ($approval['status'] ?? STATUS_ACCEPTED)),
+                (string) ($approval['order_status'] ?? STATUS_ACCEPTED),
+                get_order_progress_for_status((string) ($approval['order_status'] ?? STATUS_ACCEPTED)),
                 'Client approved digitized design for production readiness.',
                 $client_id
             );
 
-            $client_message = sprintf('You approved the digitized design for order #%s.', $approval['order_number']);
-            $owner_message = sprintf('Client approved digitized design for order #%s.', $approval['order_number']);
-            automation_notify_order_parties($pdo, $order_id, 'design', $client_message, $owner_message);
+            $owner_message = sprintf('Client approved the design proof for order #%s.', $approval['order_number']);
+            if(!empty($approval['owner_id'])) {
+                create_notification($pdo, (int) $approval['owner_id'], $order_id, 'design', $owner_message);
+            }
+            if(!empty($approval['assigned_to'])) {
+                create_notification($pdo, (int) $approval['assigned_to'], $order_id, 'design', $owner_message);
+            }
+
+            automation_log_audit_if_available(
+                $pdo,
+                $client_id,
+                $_SESSION['user']['role'] ?? null,
+                'design_approved',
+                'orders',
+                $order_id,
+                ['design_approved' => $approval['design_approved'] ?? null],
+                ['design_approved' => 1]
+            );
 
             $pdo->commit();
             $success = 'Digitized design approved. Production can proceed when the shop updates the order status.';
@@ -52,6 +83,84 @@ if(isset($_POST['approve_digitized_design'])) {
                 $pdo->rollBack();
             }
             $error = 'Unable to approve digitized design right now.';
+        }
+    }
+    } elseif($action === 'request_revision') {
+    $order_id = (int) ($_POST['order_id'] ?? 0);
+    $notes = sanitize($_POST['revision_notes'] ?? '');
+
+    $revision_stmt = $pdo->prepare("\n        SELECT o.id, o.order_number, o.design_approved, o.revision_count, o.assigned_to,
+               s.owner_id, da.id AS approval_id
+        FROM orders o
+        JOIN shops s ON s.id = o.shop_id
+        LEFT JOIN design_approvals da ON da.order_id = o.id
+        WHERE o.id = ? AND o.client_id = ?
+        LIMIT 1
+    ");
+    $revision_stmt->execute([$order_id, $client_id]);
+    $order = $revision_stmt->fetch();
+
+    if(!$order) {
+        $error = 'Order not found.';
+    } elseif($notes === '') {
+        $error = 'Please add revision notes so the shop knows what to adjust.';
+    } elseif((int) ($order['revision_count'] ?? 0) >= $max_revision_count) {
+        $error = 'You have reached the maximum number of revision requests for this order.';
+    } else {
+        $pdo->beginTransaction();
+        try {
+            $update_order_stmt = $pdo->prepare("\n                UPDATE orders
+                SET revision_count = revision_count + 1,
+                    revision_notes = ?,
+                    revision_requested_at = NOW(),
+                    design_approved = 0,
+                    updated_at = NOW()
+                WHERE id = ? AND client_id = ?
+            ");
+            $update_order_stmt->execute([$notes, $order_id, $client_id]);
+
+            if(!empty($order['approval_id'])) {
+                $pending_status = order_workflow_design_pending_status($pdo);
+                $update_approval_stmt = $pdo->prepare("\n                    UPDATE design_approvals
+                    SET status = ?, approved_at = NULL, customer_notes = ?, updated_at = NOW()
+                    WHERE id = ?
+                ");
+                $update_approval_stmt->execute([$pending_status, $notes, (int) $order['approval_id']]);
+            }
+
+            $message = sprintf('Client requested a design revision for order #%s.', $order['order_number']);
+            if(!empty($order['owner_id'])) {
+                create_notification($pdo, (int) $order['owner_id'], $order_id, 'design', $message);
+            }
+            if(!empty($order['assigned_to'])) {
+                create_notification($pdo, (int) $order['assigned_to'], $order_id, 'design', $message);
+            }
+
+            automation_log_audit_if_available(
+                $pdo,
+                $client_id,
+                $_SESSION['user']['role'] ?? null,
+                'design_revision_requested',
+                'orders',
+                $order_id,
+                [
+                    'design_approved' => $order['design_approved'] ?? null,
+                    'revision_count' => $order['revision_count'] ?? null,
+                ],
+                [
+                    'design_approved' => 0,
+                    'revision_notes' => $notes,
+                    'revision_count' => ((int) ($order['revision_count'] ?? 0)) + 1,
+                ]
+            );
+
+            $pdo->commit();
+            $success = 'Revision request sent to the shop.';
+        } catch(Throwable $e) {
+            if($pdo->inTransaction()) {
+                $pdo->rollBack();
+            }
+            $error = 'Unable to submit your revision request right now.';
         }
     }
 }
@@ -158,8 +267,16 @@ $digitized_orders = $digitized_stmt->fetchAll();
                                         <?php else: ?>
                                             <form method="POST">
                                                 <?php echo csrf_field(); ?>
+                                                <input type="hidden" name="action" value="approve_design">
                                                 <input type="hidden" name="order_id" value="<?php echo (int) $order['order_id']; ?>">
                                                 <button type="submit" name="approve_digitized_design" class="btn btn-sm btn-primary">Approve design</button>
+                                            </form>
+                                            <form method="POST" class="mt-2">
+                                                <?php echo csrf_field(); ?>
+                                                <input type="hidden" name="action" value="request_revision">
+                                                <input type="hidden" name="order_id" value="<?php echo (int) $order['order_id']; ?>">
+                                                <textarea name="revision_notes" class="form-control" rows="2" placeholder="Request changes to this proof..." required></textarea>
+                                                <button type="submit" class="btn btn-sm btn-warning mt-2">Request revision</button>
                                             </form>
                                         <?php endif; ?>
                                     </td>
