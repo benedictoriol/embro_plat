@@ -1,6 +1,7 @@
 <?php
 session_start();
 require_once '../config/db.php';
+require_once '../config/assignment_helpers.php';
 require_role('owner');
 
 $owner_id = $_SESSION['user']['id'];
@@ -146,9 +147,11 @@ if(isset($_POST['assign_order'])) {
                     && ($current_time < $staff['availability_start'] || $current_time > $staff['availability_end'])) {
                     $error = "This staff member is outside their availability hours right now.";
                 } else {
-                    $assign_stmt = $pdo->prepare("UPDATE orders SET assigned_to = ? WHERE id = ? AND shop_id = ?");
-                    $assign_stmt->execute([$staff_id, $order_id, $shop_id]);
-                    $success = "Order assignment updated.";
+                    if(assign_order_to_staff($pdo, $order_id, $staff_id, $owner_id)) {
+                        $success = "Order assignment updated.";
+                    } else {
+                        $error = "Failed to assign this order to the selected staff member.";
+                    }
                 }
             } else {
                 $error = "Selected staff is not active for this shop.";

@@ -2,6 +2,7 @@
 session_start();
 require_once '../config/db.php';
 require_once '../config/constants.php';
+require_once '../config/assignment_helpers.php';
 require_role('owner');
 
 $owner_id = $_SESSION['user']['id'];
@@ -249,12 +250,17 @@ if(isset($_POST['schedule_job'])) {
                         ]);
                     }
 
-                    $update_order_stmt = $pdo->prepare("
+                    $assignment_saved = assign_order_to_staff($pdo, $schedule_order_id, $staff_id, $owner_id);
+                    if(!$assignment_saved) {
+                        throw new RuntimeException('Failed to assign order while scheduling.');
+                    }
+
+                    $update_order_schedule_stmt = $pdo->prepare("
                         UPDATE orders
-                        SET assigned_to = ?, scheduled_date = ?, updated_at = NOW()
+                        SET scheduled_date = ?, updated_at = NOW()
                         WHERE id = ? AND shop_id = ?
                     ");
-                    $update_order_stmt->execute([$staff_id, $scheduled_date, $schedule_order_id, $shop['id']]);
+                    $update_order_schedule_stmt->execute([$scheduled_date, $schedule_order_id, $shop['id']]);
 
                     if($max_active_orders > 0 && $scheduled_count + 1 === $max_active_orders) {
                         $warning = "Scheduling this job reaches the staff member's daily capacity.";

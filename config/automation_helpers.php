@@ -4,6 +4,7 @@ require_once __DIR__ . '/order_workflow.php';
 require_once __DIR__ . '/order_helpers.php';
 require_once __DIR__ . '/payment_helpers.php';
 require_once __DIR__ . '/notification_functions.php';
+require_once __DIR__ . '/assignment_helpers.php';
 
 function get_order_progress_for_status(string $status, ?string $fulfillment_status = null): int {
     $normalized_status = strtolower(trim($status));
@@ -59,6 +60,25 @@ function automation_update_order_status(PDO $pdo, int $order_id, string $next_st
         $update_stmt->execute([$next_status, $progress, $order_id]);
 
         record_order_status_history($pdo, $order_id, $next_status, $progress, $notes, $staff_id);
+        
+        if(in_array($next_status, [STATUS_ACCEPTED, STATUS_DIGITIZING, STATUS_IN_PROGRESS], true) && empty($order['assigned_to'])) {
+            $assigned_by = $staff_id;
+            if($assigned_by === null || $assigned_by <= 0) {
+                $owner_stmt = $pdo->prepare("SELECT owner_id FROM shops WHERE id = ? LIMIT 1");
+                $owner_stmt->execute([(int) ($order['shop_id'] ?? 0)]);
+                $assigned_by = (int) ($owner_stmt->fetchColumn() ?: 0);
+            }
+
+            $best_assignee = choose_best_staff_assignee($pdo, $order_id);
+            if($best_assignee && $assigned_by > 0) {
+                assign_order_to_staff(
+                    $pdo,
+                    $order_id,
+                    (int) $best_assignee['user_id'],
+                    $assigned_by
+                );
+            }
+        }
     } catch(PDOException $e) {
         return [false, 'Failed to update order status.'];
     }
