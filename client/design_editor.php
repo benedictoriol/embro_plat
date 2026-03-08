@@ -2341,6 +2341,38 @@ function buildDesignSummary() {
         .join(', ');
 }
 
+
+function resolveHoopDimensionsMm(hoopPreset) {
+    const map = {
+        XS: { width: 70, height: 50 },
+        S: { width: 85, height: 60 },
+        M: { width: 100, height: 70 },
+        L: { width: 120, height: 80 },
+        XL: { width: 140, height: 95 }
+    };
+
+    return map[hoopPreset] || map.M;
+}
+
+function estimateStitchCountFromEditor() {
+    const hoop = resolveHoopDimensionsMm(state.hoopPreset);
+    const imageCount = state.elements.filter((element) => element.type === 'image').length;
+    const textCount = state.elements.filter((element) => element.type === 'text').length;
+    const complexityFactor = Math.max(1, Math.min(2.5, 1 + (imageCount * 0.2) + (textCount * 0.08) + (state.elements.length * 0.03)));
+    const stitchCount = Math.round((hoop.width * hoop.height * complexityFactor) / 3);
+    const threadColorsEstimate = Math.max(1, Math.min(15, Math.round((complexityFactor * 2.5) + ((hoop.width * hoop.height) / 2800))));
+    const threadLengthEstimateM = Number((stitchCount * 0.004).toFixed(2));
+
+    return {
+        stitch_count: stitchCount,
+        thread_colors_estimate: threadColorsEstimate,
+        thread_length_estimate_m: threadLengthEstimateM,
+        complexity_factor: Number(complexityFactor.toFixed(2)),
+        width_mm: hoop.width,
+        height_mm: hoop.height
+    };
+}
+
 function estimateDesignBudget() {
     const baseCost = 450;
     const hoopCostMap = {
@@ -2369,6 +2401,7 @@ function estimateDesignBudget() {
 
 function buildEditorDraftPayload() {
     const estimate = estimateDesignBudget();
+    const stitchEstimate = estimateStitchCountFromEditor();
     return {
         source: 'design_editor',
         title: `Design concept ${new Date().toLocaleDateString()}`,
@@ -2381,9 +2414,11 @@ function buildEditorDraftPayload() {
             placement_method: state.placementMethod,
             hoop_preset: state.hoopPreset,
             thread_color: state.threadColor,
-            total_elements: state.elements.length
+            total_elements: state.elements.length,
+            stitch_formula: '(width_mm * height_mm * complexity_factor) / 3'
         },
         estimated_price: estimate.amount,
+        stitch_estimate: stitchEstimate,
         estimated_price_label: estimate.formatted,
         estimate_note: estimate.note,
         design_preview: canvas.toDataURL('image/png'),

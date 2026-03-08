@@ -174,3 +174,28 @@ function build_cap_measurements_from_pixels(?int $widthPx, ?int $heightPx, float
     $heightMm = px_to_mm_estimate($safeHeightPx, $dpi);
     return compute_cap_fit($widthMm, $heightMm);
 }
+
+function estimate_stitch_count(float $width_mm, float $height_mm, float $complexity_factor = 1.0): array {
+    $safeWidthMm = max(0.0, $width_mm);
+    $safeHeightMm = max(0.0, $height_mm);
+    $safeComplexity = max(0.1, $complexity_factor);
+    $designArea = $safeWidthMm * $safeHeightMm;
+
+    if ($designArea <= 0) {
+        return [
+            'stitch_count' => 0,
+            'thread_colors_estimate' => 0,
+            'thread_length_estimate_m' => 0.0,
+        ];
+    }
+
+    $stitchCount = (int) round(($designArea * $safeComplexity) / 3);
+    $threadColorsEstimate = (int) max(1, min(15, round(($safeComplexity * 2.5) + ($designArea / 2800))));
+    $threadLengthEstimate = round($stitchCount * 0.004, 2);
+
+    return [
+        'stitch_count' => $stitchCount,
+        'thread_colors_estimate' => $threadColorsEstimate,
+        'thread_length_estimate_m' => $threadLengthEstimate,
+    ];
+}

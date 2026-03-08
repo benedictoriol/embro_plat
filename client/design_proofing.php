@@ -3,6 +3,7 @@ session_start();
 require_once '../config/db.php';
 require_once '../config/constants.php';
 require_once '../includes/media_manager.php';
+require_once '../config/pricing_helpers.php';
 require_role('client');
 
 $client_id = $_SESSION['user']['id'];
@@ -169,6 +170,47 @@ function resolve_size_charge(float $width_in, float $height_in, array $size_pric
     return max(0.0, (float) ($largest_tier['price'] ?? 0));
 }
 
+
+function sync_digitized_design_estimate(PDO $pdo, int $order_id, int $digitizer_id, array $stitchEstimate, int $width_px = 0, int $height_px = 0, ?float $detected_width_mm = null, ?float $detected_height_mm = null, ?float $suggested_width_mm = null, ?float $suggested_height_mm = null, ?float $scale_ratio = null): void {
+    $existing_stmt = $pdo->prepare("SELECT id FROM digitized_designs WHERE order_id = ? ORDER BY id DESC LIMIT 1");
+    $existing_stmt->execute([$order_id]);
+    $existing_id = (int) ($existing_stmt->fetchColumn() ?: 0);
+
+    if ($existing_id > 0) {
+        $update_stmt = $pdo->prepare("UPDATE digitized_designs SET stitch_count = ?, thread_colors = ?, estimated_thread_length = ?, width_px = ?, height_px = ?, detected_width_mm = ?, detected_height_mm = ?, suggested_width_mm = ?, suggested_height_mm = ?, scale_ratio = ? WHERE id = ?");
+        $update_stmt->execute([
+            (int) ($stitchEstimate['stitch_count'] ?? 0),
+            (int) ($stitchEstimate['thread_colors_estimate'] ?? 0),
+            (float) ($stitchEstimate['thread_length_estimate_m'] ?? 0),
+            $width_px > 0 ? $width_px : null,
+            $height_px > 0 ? $height_px : null,
+            $detected_width_mm,
+            $detected_height_mm,
+            $suggested_width_mm,
+            $suggested_height_mm,
+            $scale_ratio,
+            $existing_id,
+        ]);
+        return;
+    }
+
+    $insert_stmt = $pdo->prepare("INSERT INTO digitized_designs (order_id, digitizer_id, stitch_count, thread_colors, estimated_thread_length, width_px, height_px, detected_width_mm, detected_height_mm, suggested_width_mm, suggested_height_mm, scale_ratio) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)");
+    $insert_stmt->execute([
+        $order_id,
+        $digitizer_id,
+        (int) ($stitchEstimate['stitch_count'] ?? 0),
+        (int) ($stitchEstimate['thread_colors_estimate'] ?? 0),
+        (float) ($stitchEstimate['thread_length_estimate_m'] ?? 0),
+        $width_px > 0 ? $width_px : null,
+        $height_px > 0 ? $height_px : null,
+        $detected_width_mm,
+        $detected_height_mm,
+        $suggested_width_mm,
+        $suggested_height_mm,
+        $scale_ratio,
+    ]);
+}
+
 function estimate_design_quote_from_image(?string $image_path, string $service_type, array $shop_pricing_settings, ?int $fallback_width = null, ?int $fallback_height = null, ?int $fallback_colors = null): array {
     $width = max(0, (int) ($fallback_width ?? 0));
     $height = max(0, (int) ($fallback_height ?? 0));
@@ -265,6 +307,7 @@ if(isset($_POST['request_quote'])) {
     $uploaded_height = 0;
     $uploaded_colors = (int) ($_POST['design_color_count'] ?? 0);
     $uploaded_estimate = (float) ($_POST['estimated_design_price'] ?? 0);
+    $uploaded_complexity_factor = (float) ($_POST['design_complexity_factor'] ?? 1.0);
     $detected_width_mm = null;
     $detected_height_mm = null;
     $fits_cap_area = null;
@@ -367,6 +410,11 @@ if(isset($_POST['request_quote'])) {
             }
         }
 
+        $stitch_width_mm = $detected_width_mm !== null ? (float) $detected_width_mm : px_to_mm_estimate((int) $design_estimate['width']);
+        $stitch_height_mm = $detected_height_mm !== null ? (float) $detected_height_mm : px_to_mm_estimate((int) $design_estimate['height']);
+        $complexity_factor = resolve_stitch_complexity_factor($design_estimate['color_count'] ?? 0, null, $uploaded_complexity_factor > 0 ? $uploaded_complexity_factor : null);
+        $stitch_estimate = estimate_stitch_count($stitch_width_mm, $stitch_height_mm, $complexity_factor);
+
         $order_number = 'ORD-' . date('Ymd') . '-' . strtoupper(substr(uniqid(), -6));
         $quote_details = [
             'requested_from_services' => true,
@@ -380,6 +428,14 @@ if(isset($_POST['request_quote'])) {
                 'color_count' => $design_estimate['color_count'],
                 'price_components' => $design_estimate['price_components'],
                 'source' => $uploaded_design_abs_path ? 'uploaded_design_file' : 'client_input',
+                'stitch_estimate' => [
+                    'stitch_count' => (int) ($stitch_estimate['stitch_count'] ?? 0),
+                    'thread_colors_estimate' => (int) ($stitch_estimate['thread_colors_estimate'] ?? 0),
+                    'thread_length_estimate_m' => (float) ($stitch_estimate['thread_length_estimate_m'] ?? 0),
+                    'complexity_factor' => $complexity_factor,
+                    'width_mm' => round($stitch_width_mm, 2),
+                    'height_mm' => round($stitch_height_mm, 2),
+                ],
                 'cap_measurement' => is_cap_service_type($service_type) ? [
                     'detected_width_mm' => $detected_width_mm,
                     'detected_height_mm' => $detected_height_mm,
@@ -420,6 +476,20 @@ if(isset($_POST['request_quote'])) {
         ]);
 
         $order_id = (int) $pdo->lastInsertId();
+        
+        sync_digitized_design_estimate(
+            $pdo,
+            $order_id,
+            $client_id,
+            $stitch_estimate,
+            (int) ($design_estimate['width'] ?? 0),
+            (int) ($design_estimate['height'] ?? 0),
+            $detected_width_mm,
+            $detected_height_mm,
+            $suggested_width_mm,
+            $suggested_height_mm,
+            $scale_ratio
+        );
         $message = 'New design proofing and quotation request #' . $order_number . ' from ' . ($_SESSION['user']['fullname'] ?? 'a client') . '.';
         if(!empty($shop['owner_id'])) {
             create_notification($pdo, (int) $shop['owner_id'], $order_id, 'order_status', $message);
@@ -747,6 +817,7 @@ foreach($request_history as &$request) {
     $request['design_file_url'] = proof_file_url($request['design_file'] ?? null);
     $request['design_file_is_image'] = is_design_image($request['design_file'] ?? null);
     $request['is_cap_service'] = is_cap_service_type($request['service_type'] ?? null);
+    $request['client_stitch_estimate'] = is_array($quote_details['client_estimate']['stitch_estimate'] ?? null) ? $quote_details['client_estimate']['stitch_estimate'] : null;
 }
 unset($request);
 ?>
@@ -963,6 +1034,7 @@ unset($request);
                         <input type="hidden" name="design_height" id="designHeightInput" value="0">
                         <input type="hidden" name="design_color_count" id="designColorCountInput" value="0">
                         <input type="hidden" name="estimated_design_price" id="estimatedDesignPriceInput" value="0">
+                        <input type="hidden" name="design_complexity_factor" id="designComplexityFactorInput" value="1">
                         <small class="text-muted">Max <?php echo $max_upload_mb; ?>MB.</small>
                         <small class="text-muted" id="detectedDimensionLabel" style="display:block; margin-top:4px;">
                             <?php if(!empty($selected_custom_order['width_px']) && !empty($selected_custom_order['height_px'])): ?>
@@ -1043,6 +1115,11 @@ unset($request);
                             <?php endif; ?>
                             <p class="mb-1"><strong>Design request:</strong> <?php echo htmlspecialchars($request['design_description'] ?: 'No design details provided.'); ?></p>
                             <p class="mb-1"><strong>Quoted price:</strong> <?php echo $request['price'] !== null ? '₱' . number_format((float) $request['price'], 2) : 'Waiting for shop quotation'; ?></p>
+                            <?php if(!empty($request['client_stitch_estimate'])): ?>
+                                <p class="mb-1"><strong>Estimated stitches:</strong> <?php echo number_format((int) ($request['client_stitch_estimate']['stitch_count'] ?? 0)); ?></p>
+                                <p class="mb-1"><strong>Estimated thread colors:</strong> <?php echo number_format((int) ($request['client_stitch_estimate']['thread_colors_estimate'] ?? 0)); ?></p>
+                                <p class="mb-1"><strong>Estimated thread length:</strong> <?php echo number_format((float) ($request['client_stitch_estimate']['thread_length_estimate_m'] ?? 0), 2); ?> m</p>
+                            <?php endif; ?>
 
                             <?php if(!empty($request['design_file_url'])): ?>
                                 <div class="request-design-preview">
@@ -1113,6 +1190,7 @@ unset($request);
         const designHeightInput = document.getElementById('designHeightInput');
         const designColorCountInput = document.getElementById('designColorCountInput');
         const estimatedDesignPriceInput = document.getElementById('estimatedDesignPriceInput');
+        const designComplexityFactorInput = document.getElementById('designComplexityFactorInput');
         const uploadEstimateLabel = document.getElementById('uploadEstimateLabel');
         let activePreviewUrl = null;
 
@@ -1121,6 +1199,7 @@ unset($request);
             if (designHeightInput) designHeightInput.value = '0';
             if (designColorCountInput) designColorCountInput.value = '0';
             if (estimatedDesignPriceInput) estimatedDesignPriceInput.value = '0';
+            if (designComplexityFactorInput) designComplexityFactorInput.value = '1';
             if (uploadEstimateLabel) {
                 uploadEstimateLabel.style.display = 'none';
                 uploadEstimateLabel.textContent = '';
@@ -1181,6 +1260,7 @@ unset($request);
                     if (designHeightInput) designHeightInput.value = String(height);
                     if (designColorCountInput) designColorCountInput.value = String(colorCount);
                     if (estimatedDesignPriceInput) estimatedDesignPriceInput.value = String(estimate);
+                    if (designComplexityFactorInput) designComplexityFactorInput.value = String(Math.max(1, Math.min(2.5, 1 + (colorCount * 0.03))).toFixed(2));
                     if (uploadEstimateLabel) {
                         uploadEstimateLabel.style.display = 'block';
                         uploadEstimateLabel.textContent = `Estimated starting price: ₱${estimate.toFixed(2)} (size: ${width}×${height}px, colors detected: ${colorCount}).`;
@@ -1292,11 +1372,21 @@ unset($request);
                 }
 
                 if (editorDraftEstimate && draft.estimated_price_label) {
-                    editorDraftEstimate.textContent = `Initial estimated budget: ₱${draft.estimated_price_label} (not the final price).`;
+                    const stitchLine = draft.stitch_estimate && draft.stitch_estimate.stitch_count
+                        ? ` • Stitches: ${Number(draft.stitch_estimate.stitch_count).toLocaleString()} • Thread: ${Number(draft.stitch_estimate.thread_length_estimate_m || 0).toFixed(2)} m`
+                        : '';
+                    editorDraftEstimate.textContent = `Initial estimated budget: ₱${draft.estimated_price_label} (not the final price).${stitchLine}`;
                 }
 
                 if (editorDraftMeta && draft.design_details) {
-                    editorDraftMeta.textContent = `Canvas: ${draft.design_details.canvas_type || '-'} (${draft.design_details.canvas_color || '-'}) • Placement: ${draft.design_details.placement_method || '-'} • Hoop: ${draft.design_details.hoop_preset || '-'} • Thread: ${draft.design_details.thread_color || '-'} • Elements: ${draft.design_details.total_elements || 0}`;
+                    const stitchMeta = draft.stitch_estimate
+                        ? ` • Complexity: ${Number(draft.stitch_estimate.complexity_factor || 1).toFixed(2)} • Size: ${Number(draft.stitch_estimate.width_mm || 0).toFixed(2)}×${Number(draft.stitch_estimate.height_mm || 0).toFixed(2)} mm`
+                        : '';
+                    editorDraftMeta.textContent = `Canvas: ${draft.design_details.canvas_type || '-'} (${draft.design_details.canvas_color || '-'}) • Placement: ${draft.design_details.placement_method || '-'} • Hoop: ${draft.design_details.hoop_preset || '-'} • Thread: ${draft.design_details.thread_color || '-'} • Elements: ${draft.design_details.total_elements || 0}${stitchMeta}`;
+                }
+
+                if (designComplexityFactorInput && draft.stitch_estimate && draft.stitch_estimate.complexity_factor) {
+                    designComplexityFactorInput.value = String(draft.stitch_estimate.complexity_factor);
                 }
 
                 localStorage.removeItem('embroider_proofing_quote_draft');
