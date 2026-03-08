@@ -77,6 +77,7 @@ if ($can_view_jobs) {
     ");
     $stats_stmt->execute([$staff_id, $staff_id, $staff_id, $staff_id, $staff_id, $staff_id, $staff_id, $staff_id, $staff_id]);
     $stats = $stats_stmt->fetch();
+    $production_queue = fetch_production_queue($pdo, (int) $shop_id);
 } else {
     $assigned_jobs = [];
     $today_schedule = [];
@@ -86,6 +87,7 @@ if ($can_view_jobs) {
         'today_tasks' => 0,
         'avg_rating' => 0,
     ];
+    $production_queue = [];
 }
 ?>
 <!DOCTYPE html>
@@ -354,6 +356,58 @@ if ($can_view_jobs) {
             </div>
         </div>
 
+        
+        <!-- Production Queue -->
+        <div class="card mt-4">
+            <h3><i class="fas fa-stream"></i> Production Queue</h3>
+            <?php if(!$can_view_jobs): ?>
+                <div class="text-center p-4">
+                    <i class="fas fa-lock fa-3x text-muted mb-3"></i>
+                    <h4>Queue Access Restricted</h4>
+                    <p class="text-muted">Your permissions do not allow queue access. Contact your shop owner.</p>
+                </div>
+            <?php elseif(!empty($production_queue)): ?>
+                <div style="overflow-x: auto;">
+                    <table class="table" style="width: 100%;">
+                        <thead>
+                            <tr>
+                                <th>Queue #</th>
+                                <th>Order</th>
+                                <th>Client</th>
+                                <th>Stage</th>
+                                <th>Priority</th>
+                                <th>Machine</th>
+                                <th>Est. Duration</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            <?php foreach($production_queue as $queue_item): ?>
+                                <tr>
+                                    <td><?php echo (int) $queue_item['queue_position']; ?></td>
+                                    <td>
+                                        <strong>#<?php echo htmlspecialchars($queue_item['order_number']); ?></strong><br>
+                                        <small class="text-muted"><?php echo htmlspecialchars($queue_item['service_type']); ?></small>
+                                    </td>
+                                    <td><?php echo htmlspecialchars($queue_item['client_name']); ?></td>
+                                    <td><span class="badge badge-info"><?php echo ucfirst(str_replace('_', ' ', $queue_item['status'])); ?></span></td>
+                                    <td><?php echo (int) $queue_item['priority']; ?></td>
+                                    <td><?php echo !empty($queue_item['scheduled_machine']) ? htmlspecialchars($queue_item['scheduled_machine']) : '<span class="text-muted">TBD</span>'; ?></td>
+                                    <td><?php echo !empty($queue_item['estimated_duration']) ? (int) $queue_item['estimated_duration'] . ' min' : '<span class="text-muted">N/A</span>'; ?></td>
+                                </tr>
+                            <?php endforeach; ?>
+                        </tbody>
+                    </table>
+                </div>
+                <p class="text-muted mb-0"><small>Queue order: priority DESC, created_at ASC. Completed and cancelled jobs are removed automatically.</small></p>
+            <?php else: ?>
+                <div class="text-center p-4">
+                    <i class="fas fa-inbox fa-3x text-muted mb-3"></i>
+                    <h4>No Active Production Queue</h4>
+                    <p class="text-muted">There are currently no orders in digitizing or production-prep stages.</p>
+                </div>
+            <?php endif; ?>
+        </div>
+        
         <!-- Recent Activity -->
         <div class="card mt-4">
             <h3><i class="fas fa-history"></i> Recent Activity</h3>
