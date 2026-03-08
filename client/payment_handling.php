@@ -7,6 +7,7 @@ $client_id = $_SESSION['user']['id'];
 $unread_notifications = fetch_unread_notification_count($pdo, $client_id);
 $downpayment_rate = 0.20;
 $payment_method_labels = payment_method_labels_map();
+$available_methods = available_payment_methods();
 
 $payments_stmt = $pdo->prepare("
     SELECT
@@ -26,7 +27,13 @@ $payments_stmt = $pdo->prepare("
     ORDER BY p.created_at DESC
 ");
 $payments_stmt->execute([$client_id]);
-$payments = $payments_stmt->fetchAll();
+$payments = array_map(
+    static function (array $payment): array {
+        $payment['status'] = normalize_gateway_payment_status((string) ($payment['status'] ?? 'pending'));
+        return $payment;
+    },
+    $payments_stmt->fetchAll()
+);
 
 $summary_stmt = $pdo->prepare("
     SELECT
@@ -188,18 +195,15 @@ function payment_badge_class($status)
                 <h3><i class="fas fa-wallet text-primary"></i> Available Payment Methods</h3>
             </div>
             <div class="methods-grid">
-                <div class="method-card">
-                   <h4 class="mb-1"><i class="fas fa-store"></i> Pick Up Pay</h4>
-                    <p class="text-muted mb-0">Pay directly at the shop upon pickup confirmation.</p>
-                </div>
-                <div class="method-card">
-                    <h4 class="mb-1"><i class="fas fa-truck"></i> Cash on Delivery (COD)</h4>
-                    <p class="text-muted mb-0">Settle your order in cash when it is delivered to your address.</p>
-                </div>
-                <div class="method-card">
-                    <h4 class="mb-1"><i class="fas fa-credit-card"></i> PayMongo</h4>
-                    <p class="text-muted mb-0">Use PayMongo-supported digital channels then submit your proof of payment.</p>
-                </div>
+                <?php foreach ($available_methods as $method): ?>
+                    <div class="method-card">
+                        <h4 class="mb-1">
+                            <i class="fas <?php echo htmlspecialchars($method['icon'] ?? 'fa-money-bill'); ?>"></i>
+                            <?php echo htmlspecialchars($method['label']); ?>
+                        </h4>
+                        <p class="text-muted mb-0"><?php echo htmlspecialchars($method['description']); ?></p>
+                    </div>
+                <?php endforeach; ?>
             </div>
         </div>
 

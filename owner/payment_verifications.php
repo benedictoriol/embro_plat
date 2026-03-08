@@ -18,6 +18,13 @@ if(!$shop) {
 $success = null;
 $error = null;
 
+
+function normalize_payment_record_status(array $payment): array {
+    $payment['gateway_status'] = (string) ($payment['status'] ?? 'pending');
+    $payment['status'] = normalize_gateway_payment_status((string) ($payment['status'] ?? 'pending'));
+    return $payment;
+}
+
 if(isset($_POST['action'], $_POST['payment_id'])) {
     $payment_id = (int) $_POST['payment_id'];
     $action = $_POST['action'];
@@ -33,6 +40,10 @@ if(isset($_POST['action'], $_POST['payment_id'])) {
         ");
         $payment_stmt->execute([$payment_id, $shop['id']]);
         $payment = $payment_stmt->fetch();
+
+        if ($payment) {
+            $payment = normalize_payment_record_status($payment);
+        }
 
         if(!$payment) {
             $error = 'Payment record not found.';
@@ -237,16 +248,18 @@ $query = "
 ";
 $params = [$shop['id']];
 
-if(in_array($filter, $allowed_filters, true)) {
-    $query .= " AND p.status = ?";
-    $params[] = $filter;
-}
-
 $query .= " ORDER BY p.created_at DESC";
 
 $payments_stmt = $pdo->prepare($query);
 $payments_stmt->execute($params);
-$payments = $payments_stmt->fetchAll();
+$payments = array_map('normalize_payment_record_status', $payments_stmt->fetchAll());
+
+if(in_array($filter, $allowed_filters, true)) {
+    $payments = array_values(array_filter(
+        $payments,
+        static fn(array $payment): bool => ($payment['status'] ?? 'pending') === $filter
+    ));
+}
 
 function payment_badge($status) {
     $map = [

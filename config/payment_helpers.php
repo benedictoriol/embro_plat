@@ -1,11 +1,12 @@
 <?php
 require_once __DIR__ . '/constants.php';
+require_once __DIR__ . '/payment_gateway.php';
 
 function available_payment_methods(): array {
     return [
-        ['code' => 'pickup_pay', 'label' => 'Pick Up Pay', 'description' => 'Settle your order when you pick it up from the shop.'],
-        ['code' => 'cod', 'label' => 'Cash on Delivery (COD)', 'description' => 'Pay in cash upon delivery.'],
-        ['code' => 'paymongo', 'label' => 'PayMongo', 'description' => 'Pay using supported PayMongo channels and upload proof for verification.'],
+        ['code' => 'pickup_pay', 'label' => 'Pick Up Pay', 'description' => 'Settle your order when you pick it up from the shop.', 'icon' => 'fa-store'],
+        ['code' => 'cod', 'label' => 'Cash on Delivery (COD)', 'description' => 'Pay in cash upon delivery.', 'icon' => 'fa-truck'],
+        payment_gateway_method_definition(),
     ];
 }
 
@@ -21,6 +22,13 @@ function payment_method_labels_map(): array {
     foreach (available_payment_methods() as $method) {
         $map[$method['code']] = $method['label'];
     }
+    
+    foreach (payment_gateway_legacy_method_aliases() as $legacy_code => $canonical_code) {
+        if (isset($map[$canonical_code])) {
+            $map[$legacy_code] = $map[$canonical_code];
+        }
+    }
+
     return $map;
 }
 function payment_status_transitions(): array {

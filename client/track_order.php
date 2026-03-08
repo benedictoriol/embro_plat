@@ -15,7 +15,7 @@ $payment_method_labels = payment_method_labels_map();
 if(isset($_POST['submit_payment'])) {
     $order_id = (int) ($_POST['order_id'] ?? 0);
     $proof_file = $_FILES['payment_proof'] ?? null;
-    $payment_method = sanitize($_POST['payment_method'] ?? '');
+    $payment_method = canonical_payment_method_code(sanitize($_POST['payment_method'] ?? ''));
 
     $order_stmt = $pdo->prepare("
         SELECT o.id, o.order_number, o.price, o.payment_status, o.status, o.shop_id, s.shop_name, s.owner_id
