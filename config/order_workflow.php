@@ -178,13 +178,28 @@ function order_workflow_has_qc_pass(PDO $pdo, int $order_id): bool {
     return (bool) $stmt->fetchColumn();
 }
 
-function order_workflow_validate_fulfillment_status(PDO $pdo, int $order_id, string $current_status, string $next_status): array {
-    if(!order_workflow_can_transition(order_workflow_fulfillment_transitions(), $current_status, $next_status)) {
+function order_workflow_validate_fulfillment_status(PDO $pdo, int $order_id, string $next_status, ?string $current_status = null): array {
+    $resolved_current_status = $current_status;
+
+    if($resolved_current_status === null) {
+        $fulfillment_stmt = $pdo->prepare("\n            SELECT status\n            FROM order_fulfillments\n            WHERE order_id = ?\n            ORDER BY id DESC\n            LIMIT 1\n        ");
+        $fulfillment_stmt->execute([$order_id]);
+        $resolved_current_status = $fulfillment_stmt->fetchColumn() ?: FULFILLMENT_PENDING;
+    }
+
+    $resolved_current_status = strtolower(trim((string) $resolved_current_status));
+    $normalized_next_status = strtolower(trim($next_status));
+
+    if($resolved_current_status === '') {
+        $resolved_current_status = FULFILLMENT_PENDING;
+    }
+
+    if(!order_workflow_can_transition(order_workflow_fulfillment_transitions(), $resolved_current_status, $normalized_next_status)) {
         return [false, 'Status transition is not allowed from the current state.'];
     }
 
     $requires_qc = in_array(
-        $next_status,
+        $normalized_next_status,
         [FULFILLMENT_READY_FOR_PICKUP, FULFILLMENT_OUT_FOR_DELIVERY, FULFILLMENT_DELIVERED, FULFILLMENT_CLAIMED],
         true
     );
@@ -192,7 +207,7 @@ function order_workflow_validate_fulfillment_status(PDO $pdo, int $order_id, str
         return [false, 'QC approval is required before delivery or pickup can begin.'];
     }
 
-    return [true, null];
+    return [true, null, $resolved_current_status];
 }
 
 function order_workflow_is_delivery_confirmed(PDO $pdo, int $order_id): bool {

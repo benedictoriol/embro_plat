@@ -439,22 +439,22 @@ function automation_upsert_order_fulfillment(PDO $pdo, array $order, array $payl
     }
 
     $fulfillment_type = (string) ($payload['fulfillment_type'] ?? 'pickup');
-    $next_status = (string) ($payload['status'] ?? FULFILLMENT_PENDING);
+    $next_status = strtolower(trim((string) ($payload['status'] ?? FULFILLMENT_PENDING)));
     $courier = $payload['courier'] ?? null;
     $tracking_number = $payload['tracking_number'] ?? null;
     $pickup_location = $payload['pickup_location'] ?? null;
     $notes = $payload['notes'] ?? null;
 
-    $existing_stmt = $pdo->prepare("SELECT * FROM order_fulfillments WHERE order_id = ? LIMIT 1");
+    $existing_stmt = $pdo->prepare("SELECT * FROM order_fulfillments WHERE order_id = ? ORDER BY id DESC LIMIT 1");
     $existing_stmt->execute([$order_id]);
     $existing = $existing_stmt->fetch();
 
-    $current_status = (string) ($existing['status'] ?? FULFILLMENT_PENDING);
+    $current_status = strtolower(trim((string) ($existing['status'] ?? FULFILLMENT_PENDING)));
     [$can_transition, $transition_error] = order_workflow_validate_fulfillment_status(
         $pdo,
         $order_id,
-        $current_status,
-        $next_status
+        $next_status,
+        $current_status
     );
     if(!$can_transition) {
         return [false, $transition_error ?: 'Status transition is not allowed from the current state.', null];
