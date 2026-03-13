@@ -1,0 +1,126 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Embroidery Designer Workspace</title>
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet" />
+<link href="./styles.css" rel="stylesheet" />
+  <script type="importmap">
+    {
+      "imports": {
+        "three": "https://unpkg.com/three@0.160.0/build/three.module.js",
+        "three/addons/": "https://unpkg.com/three@0.160.0/examples/jsm/"
+      }
+    }
+  </script>
+</head>
+<body>
+  <div class="container-fluid py-3 designer-shell">
+    <div class="row g-3 h-100">
+      <div class="col-12 col-xl-4">
+        <section class="card h-100">
+          <div class="card-header"><strong>1) 2D Design Editor</strong></div>
+          <div class="card-body d-flex flex-column gap-3">
+            <div>
+              <label for="designName" class="form-label">Design name</label>
+              <input id="designName" class="form-control" value="Untitled Design" />
+            </div>
+          <div class="d-flex gap-2 flex-wrap">
+              <label for="imageInput" class="visually-hidden">Upload image layer</label>
+              <button id="addTextBtn" class="btn btn-outline-primary">Add Text</button>
+              <input id="textColor" type="color" class="form-control form-control-color" value="#0f172a" title="Text color" />
+              <button id="deleteSelectedBtn" class="btn btn-outline-danger">Delete Selected</button>
+            </div>
+<canvas id="designCanvas" width="620" height="620"></canvas>
+            <small class="text-muted">Use Fabric.js object handles for move/resize/rotate. Text color updates selected text layers.</small>
+            <div class="d-flex gap-2">
+              <button id="syncTextureBtn" class="btn btn-primary">2) Sync Design to 3D Preview</button>
+              <button id="exportJsonBtn" class="btn btn-outline-secondary">Export JSON</button>
+            </div>
+          </div>
+        </section>
+      </div>
+
+            <div class="col-12 col-xl-5">
+        <section class="card h-100">
+          <div class="card-header d-flex justify-content-between align-items-center">
+            <strong>3) 3D Preview + Zone Placement</strong>
+            <span id="viewerStatus" class="badge text-bg-secondary">Idle</span>
+          </div>
+          <div class="card-body d-flex flex-column gap-3">
+            <div class="row g-2 align-items-end">
+              <div class="col-md-8">
+                <label for="modelUrl" class="form-label">Model URL</label>
+                <input id="modelUrl" class="form-control" value="tshirt.glb" />
+              </div>
+            <div class="col-md-4 d-grid">
+                <button id="loadModelBtn" class="btn btn-outline-primary">Load Model</button>
+              </div>
+            </div>
+<div>
+              <label for="placementZone" class="form-label">Placement Zone</label>
+              <select id="placementZone" class="form-select">
+                <option value="center_chest">Center Chest</option>
+                <option value="left_chest">Left Chest</option>
+                <option value="right_chest">Right Chest</option>
+                <option value="sleeve_left">Left Sleeve</option>
+                <option value="sleeve_right">Right Sleeve</option>
+                <option value="back_center">Back Center</option>
+              </select>
+            </div>
+            <div>
+              <label for="applicationMode" class="form-label">Application Mode</label>
+              <select id="applicationMode" class="form-select">
+                <option value="embroidery_preview">Embroidery-preview mode (decal on garment)</option>
+                <option value="patch">Patch mode (separate patch layer)</option>
+              </select>
+              <small class="text-muted">Switches how the design is rendered in 3D preview and persisted with the version.</small>
+            </div>
+            <div id="patchStylePanel" class="border rounded p-2 d-none">
+              <div class="row g-2">
+                <div class="col-6">
+                  <label for="patchBorderColor" class="form-label mb-1">Patch border</label>
+                  <input id="patchBorderColor" type="color" class="form-control form-control-color" value="#111827" />
+                </div>
+                <div class="col-6">
+                  <label for="patchThickness" class="form-label mb-1">Patch thickness</label>
+                  <input id="patchThickness" type="range" class="form-range" min="1" max="12" value="5" />
+                </div>
+              </div>
+            </div>
+            <div id="viewer"></div>
+            <small class="text-muted">Rotate and zoom with mouse/touch (OrbitControls). Selected zone changes texture anchor transform.</small>
+          </div>
+        </section>
+      </div>
+
+            <div class="col-12 col-xl-3">
+        <section class="card h-100">
+          <div class="card-header"><strong>4) Save / Load / Order Linkage</strong></div>
+          <div class="card-body d-flex flex-column gap-3">
+            <div>
+              <label for="orderId" class="form-label">Order ID (optional)</label>
+              <input id="orderId" type="number" min="1" class="form-control" placeholder="Order ID" />
+            </div>
+<div class="d-grid gap-2">
+              <button id="saveBtn" class="btn btn-success">Save Design + Placement</button>
+              <button id="loadLatestBtn" class="btn btn-outline-primary">Load Latest</button>
+              <button id="loadVersionsBtn" class="btn btn-outline-secondary">Refresh Versions</button>
+            </div>
+<div>
+              <label class="form-label">Saved Versions</label>
+              <div id="versionsList" class="list-group version-list"></div>
+            </div>
+            <textarea id="jsonOutput" class="form-control" rows="8" readonly></textarea>
+            <label for="jsonOutput" class="form-label">Design JSON output</label>
+          </div>
+        </section>
+      </div>
+    </div>
+  </div>
+
+  <script src="https://cdn.jsdelivr.net/npm/fabric@5.3.0/dist/fabric.min.js"></script>
+  <script type="module" src="./js/app.js"></script>
+</body>
+</html>

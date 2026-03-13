@@ -1,0 +1,7 @@
+html, body { height: 100%; }
+body { background: #f3f4f6; }
+.designer-shell { min-height: 100vh; }
+.card { box-shadow: 0 2px 10px rgba(15, 23, 42, 0.08); }
+#designCanvas { width: 100%; height: auto; border: 1px solid #d1d5db; border-radius: 8px; background: #fff; }
+#viewer { width: 100%; min-height: 520px; border-radius: 8px; overflow: hidden; border: 1px solid #d1d5db; background: #e5e7eb; }
+.version-list { max-height: 250px; overflow: auto; }
